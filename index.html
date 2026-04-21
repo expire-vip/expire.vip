@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expire.vip</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Identity Services (GIS) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        body { background-color: #f3f4f6; }
+        .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+        .hidden-auth { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container flex flex-col relative pb-20">
+        <!-- Header -->
+        <header class="bg-indigo-600 text-white p-5 shadow-md flex justify-between items-center rounded-b-2xl">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight">Expire.vip</h1>
+                <p id="syncStatus" class="text-indigo-200 text-xs mt-1">Not connected</p>
+            </div>
+            <!-- Logout Button (Hidden initially) -->
+            <button id="logoutBtn" class="hidden-auth bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded">Logout</button>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow p-5 relative">
+            
+            <!-- Login Screen -->
+            <div id="loginScreen" class="absolute inset-0 bg-white z-10 flex flex-col items-center justify-center p-6 text-center rounded-b-2xl">
+                <div class="mb-8">
+                    <span class="text-6xl mb-4 block">☁️</span>
+                    <h2 class="text-2xl font-bold text-gray-800">Sync & Save</h2>
+                    <p class="text-gray-500 mt-2">Log in with Google to sync your expiring items across all devices and automatically add reminders to your calendar.</p>
+                </div>
+                <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-200 flex justify-center items-center gap-3">
+                    <svg class="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                    <span>Connect with Google</span>
+                </button>
+            </div>
+
+            <!-- Dashboard App (Hidden initially) -->
+            <div id="appScreen" class="hidden-auth">
+                <!-- Add Item Form -->
+                <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 mb-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Add New Item</h2>
+                    <form id="expiryForm" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
+                            <input type="text" id="itemName" placeholder="e.g., Passport, RCA, License" required
+                                class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                            <select id="itemCategory" class="w-full border border-gray-300 rounded-lg p-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="Document">📄 Document</option>
+                                <option value="Vehicle">🚗 Vehicle</option>
+                                <option value="Subscription">💳 Subscription</option>
+                                <option value="Other">📌 Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Expiration Date</label>
+                            <input type="date" id="expiryDate" required
+                                class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-200">
+                            Save & Sync to Calendar
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Saved Items List -->
+                <div>
+                    <h2 class="text-lg font-semibold text-gray-800 mb-3">Your Tracked Items</h2>
+                    <div id="itemsList" class="space-y-3">
+                        <!-- Items injected here -->
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="p-5 mt-auto border-t border-gray-100 bg-gray-50 text-center">
+            <p class="text-xs text-gray-500 mb-3">Found this useful?</p>
+            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2 px-4 rounded-lg transition duration-200">
+                ⭐ Support this project by sharing with a friend
+            </a>
+        </footer>
+    </div>
+
+    <!-- Main Logic -->
+    <script>
+        // --- Configuration ---
+        const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
+        
+        let tokenClient;
+        let accessToken = null;
+        let driveFileId = null;
+        let expiryItems =[];
+
+        // DOM Elements
+        const loginScreen = document.getElementById('loginScreen');
+        const appScreen = document.getElementById('appScreen');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const syncStatus = document.getElementById('syncStatus');
+        const itemsList = document.getElementById('itemsList');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // Prevent past dates
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById('expiryDate').min = todayStr;
+
+        // --- Google Authentication Setup ---
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (response) => {
+                    if (response.error !== undefined) {
+                        alert('Login failed. Please try again.');
+                        return;
+                    }
+                    accessToken = response.access_token;
+                    loginScreen.style.display = 'none';
+                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
+                    initAppData();
+                },
+            });
+        };
+
+        loginBtn.onclick = () => {
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        };
+
+        logoutBtn.onclick = () => {
+            if (accessToken) {
+                google.accounts.oauth2.revoke(accessToken, () => {
+                    accessToken = null;
+                    driveFileId = null;
+                    expiryItems =[];
+                    loginScreen.style.display = 'flex';
+                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                    syncStatus.innerText = "Not connected";
+                });
+            }
+        };
+
+        // --- Google Drive AppData Sync ---
+        async function initAppData() {
+            updateStatus("Syncing cloud data...");
+            try {
+                // 1. Search for the config file in the hidden appDataFolder
+                const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                const searchData = await searchRes.json();
+
+                if (searchData.files && searchData.files.length > 0) {
+                    // File exists, download contents
+                    driveFileId = searchData.files[0].id;
+                    const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    expiryItems = await fileRes.json();
+                } else {
+                    // File doesn't exist, create metadata first
+                    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: 'expire_data.json', parents:['appDataFolder'] })
+                    });
+                    const fileMeta = await createRes.json();
+                    driveFileId = fileMeta.id;
+                    // Upload empty array
+                    await syncToCloud();
+                }
+                updateStatus("✅ Cloud Synced");
+                renderItems();
+            } catch (error) {
+                console.error(error);
+                updateStatus("❌ Sync Error");
+                alert("Failed to load data from Google Drive.");
+            }
+        }
+
+        async function syncToCloud() {
+            if (!driveFileId || !accessToken) return;
+            updateStatus("Saving to cloud...");
+            await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(expiryItems)
+            });
+            updateStatus("✅ Cloud Synced");
+        }
+
+        // --- Google Calendar API ---
+        async function addCalendarEvent(name, dateStr) {
+            // Google Calendar requires end date to be the next day for all-day events
+            let [y, m, d] = dateStr.split('-');
+            let endDate = new Date(y, m - 1, d);
+            endDate.setDate(endDate.getDate() + 1);
+            let endStr = endDate.toISOString().split('T')[0];
+
+            const eventBody = {
+                summary: `🔴 EXPIRING: ${name}`,
+                description: `Your ${name} is expiring today! Tracked via Expire.vip`,
+                start: { date: dateStr },
+                end: { date: endStr },
+                reminders: {
+                    useDefault: false,
+                    // Send a popup/notification 30 days before (30 days * 24 hours * 60 mins)
+                    overrides:[{ method: 'popup', minutes: 43200 }]
+                }
+            };
+
+            const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(eventBody)
+            });
+            const data = await res.json();
+            return data.id; // Returns the generated Event ID
+        }
+
+        async function removeCalendarEvent(eventId) {
+            if (!eventId) return;
+            await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+        }
+
+        // --- App Logic ---
+        document.getElementById('expiryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Disable button to prevent double submission
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Processing...";
+
+            const name = document.getElementById('itemName').value;
+            const category = document.getElementById('itemCategory').value;
+            const date = document.getElementById('expiryDate').value;
+
+            try {
+                // 1. Create Google Calendar Event
+                const calEventId = await addCalendarEvent(name, date);
+
+                // 2. Add to Local Array
+                const newItem = {
+                    id: Date.now().toString(),
+                    name: name,
+                    category: category,
+                    date: date,
+                    eventId: calEventId // Save this so we can delete it later!
+                };
+                expiryItems.push(newItem);
+
+                // 3. Sync Array to Google Drive
+                await syncToCloud();
+
+                // 4. Update UI
+                this.reset();
+                document.getElementById('expiryDate').min = todayStr;
+                renderItems();
+            } catch (err) {
+                console.error(err);
+                alert("Failed to add to calendar. Please try again.");
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = "Save & Sync to Calendar";
+            }
+        });
+
+        async function deleteItem(id, eventId) {
+            if(confirm("Delete this item and remove the calendar reminder?")) {
+                updateStatus("Deleting...");
+                
+                // 1. Remove from Google Calendar
+                try {
+                    await removeCalendarEvent(eventId);
+                } catch(e) { console.warn("Calendar event already gone or error", e); }
+
+                // 2. Remove from Array & Sync
+                expiryItems = expiryItems.filter(item => item.id !== id);
+                await syncToCloud();
+                
+                // 3. Update UI
+                renderItems();
+            }
+        }
+
+        // --- UI Rendering ---
+        function updateStatus(text) {
+            syncStatus.innerText = text;
+        }
+
+        function renderItems() {
+            if (expiryItems.length === 0) {
+                itemsList.innerHTML = `<p class="text-gray-400 text-sm text-center py-4">No items tracked yet. Add one above!</p>`;
+                return;
+            }
+
+            // Sort closest to expire first
+            expiryItems.sort((a, b) => new Date(a.date) - new Date(b.date));
+            itemsList.innerHTML = '';
+
+            expiryItems.forEach((item) => {
+                const diffTime = new Date(item.date) - new Date();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                
+                let statusText = `${diffDays} days left`;
+                let statusColor = "text-green-600 bg-green-100";
+                
+                if (diffDays <= 30) statusColor = "text-orange-600 bg-orange-100";
+                if (diffDays <= 7) statusColor = "text-red-600 bg-red-100";
+                if (diffDays < 0) {
+                    statusText = "Expired!";
+                    statusColor = "text-gray-600 bg-gray-200";
+                }
+
+                const itemHTML = `
+                    <div class="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
+                        <div class="flex-1">
+                            <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">${item.category.split(' ')[0]}</div>
+                            <div class="font-bold text-gray-800">${item.name}</div>
+                            <div class="text-sm text-gray-500 mt-1">Expires: ${item.date}</div>
+                        </div>
+                        <div class="flex flex-col items-end gap-2">
+                            <span class="text-xs font-bold px-2 py-1 rounded-full ${statusColor}">
+                                ${statusText}
+                            </span>
+                            <button onclick="deleteItem('${item.id}', '${item.eventId || ''}')" class="text-red-400 hover:text-red-600 text-sm font-medium mt-1">
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+                itemsList.insertAdjacentHTML('beforeend', itemHTML);
+            });
+        }
+    </script>
+</body>
+</html>
