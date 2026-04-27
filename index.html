@@ -4,47 +4,67 @@
     <meta charset="UTF-8">
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Expire.vip</title>
+    <title>Expire.vip - Track Expiring Documents</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Identity Services (GIS) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { background-color: #f3f4f6; }
-        .app-container { max-width: 480px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
+        .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         .hidden-auth { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="app-container flex flex-col relative pb-20">
+    <div class="app-container flex flex-col relative pb-10">
         <!-- Header -->
         <header class="bg-indigo-600 text-white p-5 shadow-md flex justify-between items-center rounded-b-2xl">
             <div>
                 <h1 class="text-2xl font-bold tracking-tight">Expire.vip</h1>
-                <p id="syncStatus" class="text-indigo-200 text-xs mt-1">Not connected</p>
+                <p id="syncStatus" class="text-indigo-200 text-xs mt-1 hidden-auth">Connected</p>
             </div>
             <!-- Logout Button (Hidden initially) -->
             <button id="logoutBtn" class="hidden-auth bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded">Logout</button>
         </header>
 
         <!-- Main Content -->
-        <main class="flex-grow p-5 relative">
+        <main class="flex-grow p-5">
             
-            <!-- Login Screen -->
-            <div id="loginScreen" class="absolute inset-0 bg-white z-10 flex flex-col items-center justify-center p-6 text-center rounded-b-2xl">
-                <div class="mb-8">
-                    <span class="text-6xl mb-4 block">☁️</span>
-                    <h2 class="text-2xl font-bold text-gray-800">Sync & Save</h2>
-                    <p class="text-gray-500 mt-2">Log in with Google to sync your expiring items across all devices and automatically add reminders to your calendar.</p>
+            <!-- PUBLIC LANDING PAGE -->
+            <div id="landingPage" class="flex flex-col items-center text-center py-4">
+                <div class="mb-6">
+                    <span class="text-6xl mb-4 block">📅</span>
+                    <h2 class="text-2xl font-bold text-gray-800">Never let important documents expire.</h2>
+                    <p class="text-gray-500 mt-3 text-sm leading-relaxed">
+                        Expire.vip is a simple tool to track the expiration dates of your passports, ID cards, car insurance, and subscriptions.
+                    </p>
                 </div>
+
+                <!-- Explanation of Purpose -->
+                <div class="bg-indigo-50 rounded-xl p-4 mb-8 text-left w-full border border-indigo-100">
+                    <h3 class="font-bold text-indigo-900 mb-2 text-sm uppercase tracking-wider">How it works:</h3>
+                    <ul class="text-sm text-indigo-800 space-y-3">
+                        <li class="flex items-start gap-2">
+                            <span>☁️</span>
+                            <span><strong>Secure Sync:</strong> By logging in, we securely save your list to a hidden app folder in your <strong>Google Drive</strong>, so you can access your trackers on any device.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span>🔔</span>
+                            <span><strong>Smart Reminders:</strong> We use your <strong>Google Calendar</strong> to automatically set a 30-day reminder before any of your items expire.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Google Login Button -->
                 <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-200 flex justify-center items-center gap-3">
                     <svg class="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-                    <span>Connect with Google</span>
+                    <span>Get Started with Google</span>
                 </button>
+                <p class="text-xs text-gray-400 mt-3">No backend database. Your data stays in your Google account.</p>
             </div>
 
-            <!-- Dashboard App (Hidden initially) -->
+            <!-- DASHBOARD APP (Hidden initially, shown after login) -->
             <div id="appScreen" class="hidden-auth">
                 <!-- Add Item Form -->
                 <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 mb-6">
@@ -89,21 +109,21 @@
         <!-- Footer -->
         <footer class="p-5 mt-auto border-t border-gray-100 bg-gray-50 text-center">
             <p class="text-xs text-gray-500 mb-3">Found this useful?</p>
-            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2 px-4 rounded-lg transition duration-200">
-                ⭐ Support this project by sharing it with a friend!
+            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2 px-4 rounded-lg transition duration-200 mb-4">
+                ⭐ Support this project
             </a>
-            <!-- Privacy Policy Link for Google Verification -->
+            
+            <!-- Privacy Policy Link -->
             <div class="text-xs text-gray-400 flex justify-center items-center gap-2">
                 <span>&copy; 2026 Expire.vip</span>
                 <span>&bull;</span>
-                <a href="/privacy" class="hover:text-gray-600 hover:underline">Privacy Policy</a>
+                <a href="/privacy.html" class="hover:text-gray-600 hover:underline">Privacy Policy</a>
             </div>
         </footer>
     </div>
 
     <!-- Main Logic -->
     <script>
-        // --- Configuration ---
         const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
         
@@ -112,8 +132,7 @@
         let driveFileId = null;
         let expiryItems =[];
 
-        // DOM Elements
-        const loginScreen = document.getElementById('loginScreen');
+        const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
@@ -121,11 +140,9 @@
         const itemsList = document.getElementById('itemsList');
         const submitBtn = document.getElementById('submitBtn');
 
-        // Prevent past dates
         const todayStr = new Date().toISOString().split('T')[0];
         document.getElementById('expiryDate').min = todayStr;
 
-        // --- Google Authentication Setup ---
         window.onload = function () {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
@@ -136,7 +153,8 @@
                         return;
                     }
                     accessToken = response.access_token;
-                    loginScreen.style.display = 'none';
+                    // Hide landing page, show app
+                    landingPage.style.display = 'none';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
                     initAppData();
                 },
@@ -153,32 +171,28 @@
                     accessToken = null;
                     driveFileId = null;
                     expiryItems =[];
-                    loginScreen.style.display = 'flex';
+                    // Show landing page, hide app
+                    landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
-                    syncStatus.innerText = "Not connected";
                 });
             }
         };
 
-        // --- Google Drive AppData Sync ---
         async function initAppData() {
             updateStatus("Syncing cloud data...");
             try {
-                // 1. Search for the config file in the hidden appDataFolder
                 const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
                 const searchData = await searchRes.json();
 
                 if (searchData.files && searchData.files.length > 0) {
-                    // File exists, download contents
                     driveFileId = searchData.files[0].id;
                     const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
                         headers: { 'Authorization': `Bearer ${accessToken}` }
                     });
                     expiryItems = await fileRes.json();
                 } else {
-                    // File doesn't exist, create metadata first
                     const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -186,7 +200,6 @@
                     });
                     const fileMeta = await createRes.json();
                     driveFileId = fileMeta.id;
-                    // Upload empty array
                     await syncToCloud();
                 }
                 updateStatus("✅ Cloud Synced");
@@ -209,9 +222,7 @@
             updateStatus("✅ Cloud Synced");
         }
 
-        // --- Google Calendar API ---
         async function addCalendarEvent(name, dateStr) {
-            // Google Calendar requires end date to be the next day for all-day events
             let [y, m, d] = dateStr.split('-');
             let endDate = new Date(y, m - 1, d);
             endDate.setDate(endDate.getDate() + 1);
@@ -224,7 +235,6 @@
                 end: { date: endStr },
                 reminders: {
                     useDefault: false,
-                    // Send a popup/notification 30 days before (30 days * 24 hours * 60 mins)
                     overrides:[{ method: 'popup', minutes: 43200 }]
                 }
             };
@@ -235,7 +245,7 @@
                 body: JSON.stringify(eventBody)
             });
             const data = await res.json();
-            return data.id; // Returns the generated Event ID
+            return data.id; 
         }
 
         async function removeCalendarEvent(eventId) {
@@ -246,11 +256,8 @@
             });
         }
 
-        // --- App Logic ---
         document.getElementById('expiryForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
-            // Disable button to prevent double submission
             submitBtn.disabled = true;
             submitBtn.innerText = "Processing...";
 
@@ -259,23 +266,16 @@
             const date = document.getElementById('expiryDate').value;
 
             try {
-                // 1. Create Google Calendar Event
                 const calEventId = await addCalendarEvent(name, date);
-
-                // 2. Add to Local Array
                 const newItem = {
                     id: Date.now().toString(),
                     name: name,
                     category: category,
                     date: date,
-                    eventId: calEventId // Save this so we can delete it later!
+                    eventId: calEventId
                 };
                 expiryItems.push(newItem);
-
-                // 3. Sync Array to Google Drive
                 await syncToCloud();
-
-                // 4. Update UI
                 this.reset();
                 document.getElementById('expiryDate').min = todayStr;
                 renderItems();
@@ -291,22 +291,15 @@
         async function deleteItem(id, eventId) {
             if(confirm("Delete this item and remove the calendar reminder?")) {
                 updateStatus("Deleting...");
-                
-                // 1. Remove from Google Calendar
                 try {
                     await removeCalendarEvent(eventId);
                 } catch(e) { console.warn("Calendar event already gone or error", e); }
-
-                // 2. Remove from Array & Sync
                 expiryItems = expiryItems.filter(item => item.id !== id);
                 await syncToCloud();
-                
-                // 3. Update UI
                 renderItems();
             }
         }
 
-        // --- UI Rendering ---
         function updateStatus(text) {
             syncStatus.innerText = text;
         }
@@ -317,7 +310,6 @@
                 return;
             }
 
-            // Sort closest to expire first
             expiryItems.sort((a, b) => new Date(a.date) - new Date(b.date));
             itemsList.innerHTML = '';
 
