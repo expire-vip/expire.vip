@@ -235,7 +235,11 @@
                 end: { date: endStr },
                 reminders: {
                     useDefault: false,
-                    overrides:[{ method: 'popup', minutes: 43200 }]
+                    overrides:[
+                        { method: 'email', minutes: 40320 }, // 4 weeks before the event
+                        { method: 'popup', minutes: 10080 }, // 1 week before the event
+                        { method: 'email', minutes: 10080 },
+                        { method: 'popup', minutes: 40320 }]
                 }
             };
 
