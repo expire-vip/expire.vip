@@ -1,356 +1,518 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="">
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/png" href="/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Expire.vip - Track Expiring Documents</title>
-    <!-- Tailwind CSS -->
+    <script> tailwind.config = { darkMode: 'class' }; </script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Google Identity Services (GIS) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { background-color: #f3f4f6; }
         .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         .hidden-auth { display: none; }
+        .toast {
+            visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #1f2937; color: #f9fafb;
+            text-align: center; border-radius: 8px; padding: 12px; position: fixed; z-index: 9999;
+            left: 50%; bottom: 30px; font-size: 14px;
+        }
+        .toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
+        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
     </style>
 </head>
-<body>
+<body class="bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+    <div id="toast" class="toast"></div>
 
-    <div class="app-container flex flex-col relative pb-10">
+    <div class="app-container flex flex-col relative pb-10 bg-white dark:bg-gray-900 transition-colors shadow-lg rounded-none sm:rounded-2xl overflow-hidden">
         <!-- Header -->
-        <header class="bg-indigo-600 text-white p-5 shadow-md flex justify-between items-center rounded-b-2xl">
+        <header class="bg-indigo-600 dark:bg-indigo-800 text-white p-5 shadow-md flex justify-between items-center rounded-b-xl">
             <div>
-                <h1 class="text-2xl font-bold tracking-tight">Expire.vip</h1>
-                <p id="syncStatus" class="text-indigo-200 text-xs mt-1 hidden-auth">Connected</p>
+                <h1 class="text-2xl font-bold tracking-tight">📅 Expire.vip</h1>
+                <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
             </div>
-            <!-- Logout Button (Hidden initially) -->
-            <button id="logoutBtn" class="hidden-auth bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded">Logout</button>
+            <div class="flex items-center gap-2">
+                <button id="darkModeToggle" class="text-white/80 hover:text-white transition" title="Toggle dark mode">
+                    <i id="darkIcon" class="fas fa-moon text-lg"></i>
+                </button>
+                <button id="settingsBtn" class="text-white/80 hover:text-white transition hidden-auth" title="Settings">
+                    <i class="fas fa-cog text-lg"></i>
+                </button>
+                <a href="https://github.com/expire-vip/expire.vip/issues" target="_blank" class="text-white/80 hover:text-white transition" title="Report an issue">
+                    <i class="fab fa-github text-lg"></i>
+                </a>
+                <button id="logoutBtn" class="bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded hidden-auth">Logout</button>
+                <button id="exitTestBtn" class="bg-amber-500 hover:bg-amber-600 text-xs px-3 py-1 rounded" style="display:none;">Exit Test</button>
+            </div>
         </header>
+
+        <!-- Reminder info banner (always visible after login / test) -->
+        <div id="reminderBanner" class="hidden-auth text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 p-3 text-center border-b border-indigo-100 dark:border-indigo-800">
+            ⏰ Default reminders: 4 weeks & 1 week before expiry (email + popup)
+        </div>
+
+        <!-- Test mode banner -->
+        <div id="testBanner" class="hidden-auth bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 text-center p-3 text-sm font-medium border-b border-amber-200 dark:border-amber-800">
+            🧪 Test Mode — data stored locally. Console: <code class="font-mono bg-amber-200 dark:bg-amber-900 px-1.5 py-0.5 rounded text-amber-900 dark:text-amber-100">disableTestMode()</code>
+        </div>
 
         <!-- Main Content -->
         <main class="flex-grow p-5">
-            
             <!-- PUBLIC LANDING PAGE -->
-            <div id="landingPage" class="flex flex-col items-center text-center py-4">
-                <div class="mb-6">
+            <div id="landingPage" class="flex flex-col items-center text-center py-6">
+                <div class="mb-8">
                     <span class="text-6xl mb-4 block">📅</span>
-                    <h2 class="text-2xl font-bold text-gray-800">Never let important documents expire.</h2>
-                    <p class="text-gray-500 mt-3 text-sm leading-relaxed">
-                        Expire.vip is a simple tool to track the expiration dates of your passports, ID cards, car insurance, and subscriptions.
+                    <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Never let important documents expire.</h2>
+                    <p class="text-gray-600 dark:text-gray-300 mt-3 text-sm leading-relaxed max-w-sm mx-auto">
+                        Expire.vip tracks passports, IDs, insurance, subscriptions, and more.
                     </p>
                 </div>
 
-                <!-- Explanation of Purpose -->
-                <div class="bg-indigo-50 rounded-xl p-4 mb-8 text-left w-full border border-indigo-100">
-                    <h3 class="font-bold text-indigo-900 mb-2 text-sm uppercase tracking-wider">How it works:</h3>
-                    <ul class="text-sm text-indigo-800 space-y-3">
+                <div class="bg-indigo-50 dark:bg-indigo-950 rounded-2xl p-5 mb-8 text-left w-full border border-indigo-100 dark:border-indigo-800">
+                    <h3 class="font-bold text-indigo-900 dark:text-indigo-200 mb-2 text-sm uppercase tracking-wider">How it works:</h3>
+                    <ul class="text-sm text-indigo-800 dark:text-indigo-300 space-y-3">
                         <li class="flex items-start gap-2">
-                            <span>☁️</span>
-                            <span><strong>Secure Sync:</strong> By logging in, we securely save your list to a hidden app folder in your <strong>Google Drive</strong>, so you can access your trackers on any device.</span>
+                            <span class="text-lg">☁️</span>
+                            <span><strong>Secure Sync:</strong> Your list is saved to a hidden folder in your <strong>Google Drive</strong>. Access it from any device.</span>
                         </li>
                         <li class="flex items-start gap-2">
-                            <span>🔔</span>
-                            <span><strong>Smart Reminders:</strong> We use your <strong>Google Calendar</strong> to automatically add calendar events for your tracked items. This way you can get reminders and see the tracked items in your calendar.</span>
+                            <span class="text-lg">🔔</span>
+                            <span><strong>Smart Reminders:</strong> We create <strong>Google Calendar</strong> events with customizable reminders. You should never miss a deadline.</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span class="text-lg">⏰</span>
+                            <span><strong>Default reminders:</strong> 4 weeks & 1 week before expiry (email + calender popup)</span>
                         </li>
                     </ul>
                 </div>
 
-                <!-- Google Login Button -->
-                <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg shadow-md transition duration-200 flex justify-center items-center gap-3">
+                <button id="loginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition duration-200 flex justify-center items-center gap-3">
                     <svg class="w-5 h-5 bg-white rounded-full p-0.5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                     <span>Get Started with Google</span>
                 </button>
-                <p class="text-xs text-gray-400 mt-3">No backend database. Your data stays in your Google account.</p>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-3">No backend database. Your data stays in your Google account.</p>
             </div>
 
-            <!-- DASHBOARD APP (Hidden initially, shown after login) -->
+            <!-- DASHBOARD APP (Hidden initially, shown after login / test) -->
             <div id="appScreen" class="hidden-auth">
-                <!-- Add Item Form -->
-                <div class="bg-white border border-gray-100 rounded-xl shadow-sm p-4 mb-6">
-                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Add New Item</h2>
-                    <form id="expiryForm" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Item Name</label>
-                            <input type="text" id="itemName" placeholder="e.g., Passport, RCA, License" required
-                                class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                            <select id="itemCategory" class="w-full border border-gray-300 rounded-lg p-3 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option value="Document">📄 Document</option>
-                                <option value="Vehicle">🚗 Vehicle</option>
-                                <option value="Subscription">💳 Subscription</option>
-                                <option value="Other">📌 Other</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Expiration Date</label>
-                            <input type="date" id="expiryDate" required
-                                class="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        </div>
-                        <button type="submit" id="submitBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg shadow-md transition duration-200">
-                            Save & Sync to Calendar
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Saved Items List -->
-                <div>
-                    <h2 class="text-lg font-semibold text-gray-800 mb-3">Your Tracked Items</h2>
-                    <div id="itemsList" class="space-y-3">
-                        <!-- Items injected here -->
+                <!-- Search & Filter -->
+                <div class="flex flex-col gap-3 mb-5">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
+                        <input type="text" id="searchInput" placeholder="Search items..." 
+                               class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500">
+                    </div>
+                    <div id="categoryChips" class="flex flex-wrap gap-2">
+                        <!-- Chips injected -->
                     </div>
                 </div>
-            </div>
 
+                <!-- Add Button -->
+                <button id="addItemBtn" class="w-full mb-5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                    <i class="fas fa-plus"></i> Add New Item
+                </button>
+
+                <!-- Items List -->
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Your Tracked Items</h2>
+                <div id="itemsList" class="space-y-3">
+                    <!-- Items injected -->
+                </div>
+            </div>
         </main>
 
         <!-- Footer -->
-        <footer class="p-5 mt-auto border-t border-gray-100 bg-gray-50 text-center">
-            <p class="text-xs text-gray-500 mb-3">Found this useful?</p>
-            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2 px-4 rounded-lg transition duration-200 mb-4">
-                ⭐ Support this project by sharing it with a friend!
+        <footer class="p-5 mt-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-center">
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Found this useful? Share it!</p>
+            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 px-4 rounded-xl transition duration-200 mb-4">
+                ⭐ Support this project
             </a>
-            
-            <!-- Privacy Policy Link -->
-            <div class="text-xs text-gray-400 flex justify-center items-center gap-2">
+            <div class="text-xs text-gray-400 dark:text-gray-500 flex justify-center items-center gap-2">
                 <span>&copy; 2026 Expire.vip</span>
                 <span>&bull;</span>
-                <a href="/privacy.html" class="hover:text-gray-600 hover:underline">Privacy Policy</a>
+                <a href="/privacy.html" class="hover:text-gray-600 dark:hover:text-gray-300 hover:underline">Privacy Policy</a>
             </div>
         </footer>
     </div>
 
-    <!-- Main Logic -->
+    <!-- Add / Edit Item Modal -->
+    <div id="itemModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="p-6">
+                <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Add New Item</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item Name</label>
+                        <input type="text" id="itemName" placeholder="e.g., Passport, Car Insurance" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
+                        <select id="itemCategory" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <option value="Document">📄 Document</option>
+                            <option value="Vehicle">🚗 Vehicle</option>
+                            <option value="Subscription">💳 Subscription</option>
+                            <option value="Other">📌 Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expiration Date</label>
+                        <input type="date" id="itemDate" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Custom Reminders (max 5, ≤28 days)</label>
+                        <div class="flex items-center gap-2 mb-3">
+                            <input type="number" id="reminderDays" min="1" max="28" step="1" placeholder="Days" class="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                            <select id="reminderMethod" class="border border-gray-300 dark:border-gray-600 rounded-xl px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                                <option value="email">📧 Email</option>
+                                <option value="popup">🔔 Popup</option>
+                            </select>
+                            <button onclick="addReminderToForm()" class="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 px-3 py-2 rounded-xl text-sm font-medium transition">
+                                + Add
+                            </button>
+                        </div>
+                        <div id="reminderChipsForm" class="flex flex-wrap gap-2 mb-1">
+                            <!-- reminder chips -->
+                        </div>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Default: 28 days (email + popup) & 7 days (email + popup).</p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="closeItemModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">Cancel</button>
+                    <button onclick="saveItem()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="p-6">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Settings</h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone for reminders</label>
+                    <select id="timezoneSelect" class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <!-- populated dynamically -->
+                    </select>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Reminders will be sent at a sensible hour in this timezone.</p>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button onclick="closeSettings()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">Close</button>
+                    <button onclick="saveSettings()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // ---------- GLOBAL STATE ----------
         const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
         const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
-        
+
         let tokenClient;
         let accessToken = null;
         let driveFileId = null;
-        let expiryItems =[];
+        let appData = { items: [], settings: { timezone: '' } };
+        let isTestMode = localStorage.getItem('expire_testMode') === 'true';
+        let editingItemId = null;
+        let formReminders = [];
 
+        // DOM elements
         const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
+        const exitTestBtn = document.getElementById('exitTestBtn');
         const syncStatus = document.getElementById('syncStatus');
         const itemsList = document.getElementById('itemsList');
-        const submitBtn = document.getElementById('submitBtn');
+        const reminderBanner = document.getElementById('reminderBanner');
+        const testBanner = document.getElementById('testBanner');
+        const addItemBtn = document.getElementById('addItemBtn');
+        const settingsBtn = document.getElementById('settingsBtn');
 
-        const todayStr = new Date().toISOString().split('T')[0];
-        document.getElementById('expiryDate').min = todayStr;
+        // ---------- DARK MODE ----------
+        const darkIcon = document.getElementById('darkIcon');
+        function applyDarkMode() {
+            if (localStorage.getItem('expire_darkMode') === 'true' ||
+                (!localStorage.getItem('expire_darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                darkIcon.classList.remove('fa-moon'); darkIcon.classList.add('fa-sun');
+            } else {
+                document.documentElement.classList.remove('dark');
+                darkIcon.classList.remove('fa-sun'); darkIcon.classList.add('fa-moon');
+            }
+        }
+        applyDarkMode();
+        document.getElementById('darkModeToggle').addEventListener('click', () => {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                localStorage.setItem('expire_darkMode', 'false');
+                darkIcon.classList.remove('fa-sun'); darkIcon.classList.add('fa-moon');
+            } else {
+                document.documentElement.classList.add('dark');
+                localStorage.setItem('expire_darkMode', 'true');
+                darkIcon.classList.remove('fa-moon'); darkIcon.classList.add('fa-sun');
+            }
+        });
 
-        window.onload = function () {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: (response) => {
-                    if (response.error !== undefined) {
-                        alert('Login failed. Please try again.');
-                        return;
-                    }
-                    accessToken = response.access_token;
-                    // Hide landing page, show app
-                    landingPage.style.display = 'none';
-                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
-                    initAppData();
-                },
+        // ---------- TOAST ----------
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'toast show';
+            setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
+        }
+
+        // ---------- TEST MODE ----------
+        window.enableTestMode = () => { localStorage.setItem('expire_testMode', 'true'); location.reload(); };
+        window.disableTestMode = () => { localStorage.removeItem('expire_testMode'); location.reload(); };
+
+        // ---------- TIMEZONE LIST ----------
+        function populateTimezoneSelect() {
+            const select = document.getElementById('timezoneSelect');
+            if (!select) return;
+            select.innerHTML = '';
+            let timezones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : ['UTC', 'America/New_York', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney'];
+            timezones.forEach(tz => {
+                const option = document.createElement('option');
+                option.value = tz; option.textContent = tz;
+                if (tz === appData.settings.timezone) option.selected = true;
+                select.appendChild(option);
             });
-        };
+        }
 
-        loginBtn.onclick = () => {
-            tokenClient.requestAccessToken({ prompt: 'consent' });
-        };
+        // ---------- SETTINGS ----------
+        function openSettings() { document.getElementById('settingsModal').classList.remove('hidden'); populateTimezoneSelect(); }
+        function closeSettings() { document.getElementById('settingsModal').classList.add('hidden'); }
+        async function saveSettings() {
+            const newTz = document.getElementById('timezoneSelect').value;
+            appData.settings.timezone = newTz;
+            if (isTestMode) { localStorage.setItem('expire_testData', JSON.stringify(appData)); showToast('Settings saved (test mode).'); }
+            else { await syncToCloud(); showToast('Settings saved to Google Drive.'); }
+            closeSettings();
+        }
 
-        logoutBtn.onclick = () => {
-            if (accessToken) {
-                google.accounts.oauth2.revoke(accessToken, () => {
-                    accessToken = null;
-                    driveFileId = null;
-                    expiryItems =[];
-                    // Show landing page, hide app
-                    landingPage.style.display = 'flex';
-                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+        // ---------- CLOUD STORAGE (Google Drive) ----------
+        async function loadFromCloud() {
+            const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
+            const searchData = await searchRes.json();
+            if (searchData.files && searchData.files.length > 0) {
+                driveFileId = searchData.files[0].id;
+                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+                const raw = await fileRes.json();
+                appData = Array.isArray(raw) ? { items: raw, settings: { timezone: '' } } : raw;
+            } else {
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                appData = { items: [], settings: { timezone: tz } };
+                const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                    method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
                 });
+                const fileMeta = await createRes.json();
+                driveFileId = fileMeta.id;
+                await syncToCloud();
             }
-        };
-
-        async function initAppData() {
-            updateStatus("Syncing cloud data...");
-            try {
-                const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-                const searchData = await searchRes.json();
-
-                if (searchData.files && searchData.files.length > 0) {
-                    driveFileId = searchData.files[0].id;
-                    const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                    expiryItems = await fileRes.json();
-                } else {
-                    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: 'expire_data.json', parents:['appDataFolder'] })
-                    });
-                    const fileMeta = await createRes.json();
-                    driveFileId = fileMeta.id;
-                    await syncToCloud();
-                }
-                updateStatus("✅ Cloud Synced");
-                renderItems();
-            } catch (error) {
-                console.error(error);
-                updateStatus("❌ Sync Error");
-                alert("Failed to load data from Google Drive.");
-            }
+            if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
         }
 
         async function syncToCloud() {
             if (!driveFileId || !accessToken) return;
             updateStatus("Saving to cloud...");
             await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
-                method: 'PATCH',
-                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(expiryItems)
+                method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(appData)
             });
             updateStatus("✅ Cloud Synced");
         }
 
-        async function addCalendarEvent(name, dateStr) {
-            let [y, m, d] = dateStr.split('-');
-            let endDate = new Date(y, m - 1, d);
-            endDate.setDate(endDate.getDate() + 1);
-            let endStr = endDate.toISOString().split('T')[0];
-
-            const eventBody = {
-                summary: `🔴 EXPIRING: ${name}`,
-                description: `Your ${name} is expiring today! Tracked via Expire.vip`,
-                start: { date: dateStr },
-                end: { date: endStr },
-                reminders: {
-                    useDefault: false,
-                    overrides:[
-                        { method: 'email', minutes: 40320 }, // 4 weeks before the event
-                        { method: 'popup', minutes: 10080 }, // 1 week before the event
-                        { method: 'email', minutes: 10080 },
-                        { method: 'popup', minutes: 40320 }]
-                }
+        // ---------- CALENDAR ----------
+        async function addCalendarEvent(item) {
+            const [y, m, d] = item.date.split('-');
+            const endDate = new Date(y, m - 1, d); endDate.setDate(endDate.getDate() + 1);
+            const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: r.days * 24 * 60 }));
+            const body = {
+                summary: `🔴 EXPIRING: ${item.name}`, description: `Your ${item.name} is expiring.`, start: { date: item.date },
+                end: { date: endDate.toISOString().split('T')[0] }, reminders: { useDefault: false, overrides }
             };
-
             const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify(eventBody)
+                method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
             });
-            const data = await res.json();
-            return data.id; 
+            const data = await res.json(); return data.id;
         }
-
         async function removeCalendarEvent(eventId) {
             if (!eventId) return;
-            await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${accessToken}` }
+            await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
+        }
+
+        // ---------- ITEM FORM ----------
+        function openAddModal() {
+            editingItemId = null;
+            document.getElementById('modalTitle').textContent = 'Add New Item';
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemCategory').value = 'Document';
+            document.getElementById('itemDate').value = '';
+            formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'popup' }, { days: 7, method: 'email' }, { days: 28, method: 'popup' }];
+            renderReminderChipsForm();
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+        function openEditModal(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            editingItemId = itemId;
+            document.getElementById('modalTitle').textContent = 'Edit Item';
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemCategory').value = item.category;
+            document.getElementById('itemDate').value = item.date;
+            formReminders = item.reminders ? [...item.reminders] : [];
+            renderReminderChipsForm();
+            document.getElementById('itemModal').classList.remove('hidden');
+        }
+        function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        function addReminderToForm() {
+            const days = parseInt(document.getElementById('reminderDays').value);
+            if (isNaN(days) || days < 1 || days > 28) { showToast('Days must be 1–28.'); return; }
+            if (formReminders.length >= 5) { showToast('Max 5 reminders.'); return; }
+            formReminders.push({ days, method: document.getElementById('reminderMethod').value });
+            renderReminderChipsForm();
+            document.getElementById('reminderDays').value = '';
+        }
+        function removeReminderFromForm(idx) { formReminders.splice(idx, 1); renderReminderChipsForm(); }
+        function renderReminderChipsForm() {
+            const container = document.getElementById('reminderChipsForm');
+            container.innerHTML = formReminders.map((r,i) => `<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm text-gray-800 dark:text-gray-200">${r.days}d (${r.method}) <button onclick="removeReminderFromForm(${i})" class="ml-1 text-gray-500 hover:text-red-500">&times;</button></span>`).join('');
+        }
+
+        async function saveItem() {
+            const name = document.getElementById('itemName').value.trim();
+            const category = document.getElementById('itemCategory').value;
+            const date = document.getElementById('itemDate').value;
+            if (!name || !date) return showToast('Name and date required.');
+            if (!formReminders.length) return showToast('Add at least one reminder.');
+
+            if (editingItemId) {
+                const idx = appData.items.findIndex(i => i.id === editingItemId);
+                if (idx === -1) return;
+                const old = appData.items[idx];
+                if (old.eventId && !isTestMode) await removeCalendarEvent(old.eventId).catch(()=>{});
+                const newEventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent({ name, category, date, reminders: formReminders });
+                appData.items[idx] = { ...old, name, category, date, reminders: formReminders, eventId: newEventId };
+            } else {
+                const newEventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent({ name, category, date, reminders: formReminders });
+                appData.items.push({ id: Date.now().toString(), name, category, date, reminders: formReminders, eventId: newEventId });
+            }
+
+            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
+            else await syncToCloud();
+            closeItemModal();
+            renderAll();
+            showToast(editingItemId ? 'Updated.' : 'Added.');
+        }
+
+        async function deleteItem(itemId, eventId) {
+            if (!confirm('Delete this item?')) return;
+            if (eventId && !isTestMode) await removeCalendarEvent(eventId).catch(()=>{});
+            appData.items = appData.items.filter(i => i.id !== itemId);
+            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
+            else await syncToCloud();
+            renderAll();
+            showToast('Deleted.');
+        }
+
+        function updateStatus(t) { syncStatus.textContent = t; }
+
+        // ---------- SEARCH & FILTER ----------
+        let activeCategory = 'All';
+        function renderCategoryChips() {
+            const cats = [...new Set(appData.items.map(i => i.category))];
+            const container = document.getElementById('categoryChips');
+            container.innerHTML = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}" onclick="activeCategory='All';renderAll()">All</span>`;
+            cats.forEach(cat => {
+                container.innerHTML += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === cat ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}" onclick="activeCategory='${cat}';renderAll()">${cat}</span>`;
             });
         }
-
-        document.getElementById('expiryForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            submitBtn.disabled = true;
-            submitBtn.innerText = "Processing...";
-
-            const name = document.getElementById('itemName').value;
-            const category = document.getElementById('itemCategory').value;
-            const date = document.getElementById('expiryDate').value;
-
-            try {
-                const calEventId = await addCalendarEvent(name, date);
-                const newItem = {
-                    id: Date.now().toString(),
-                    name: name,
-                    category: category,
-                    date: date,
-                    eventId: calEventId
-                };
-                expiryItems.push(newItem);
-                await syncToCloud();
-                this.reset();
-                document.getElementById('expiryDate').min = todayStr;
-                renderItems();
-            } catch (err) {
-                console.error(err);
-                alert("Failed to add to calendar. Please try again.");
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Save & Sync to Calendar";
-            }
-        });
-
-        async function deleteItem(id, eventId) {
-            if(confirm("Delete this item and remove the calendar reminder?")) {
-                updateStatus("Deleting...");
-                try {
-                    await removeCalendarEvent(eventId);
-                } catch(e) { console.warn("Calendar event already gone or error", e); }
-                expiryItems = expiryItems.filter(item => item.id !== id);
-                await syncToCloud();
-                renderItems();
-            }
-        }
-
-        function updateStatus(text) {
-            syncStatus.innerText = text;
+        function filterItems() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            return appData.items.filter(i => (activeCategory === 'All' || i.category === activeCategory) && (!term || i.name.toLowerCase().includes(term)));
         }
 
         function renderItems() {
-            if (expiryItems.length === 0) {
-                itemsList.innerHTML = `<p class="text-gray-400 text-sm text-center py-4">No items tracked yet. Add one above!</p>`;
-                return;
-            }
-
-            expiryItems.sort((a, b) => new Date(a.date) - new Date(b.date));
-            itemsList.innerHTML = '';
-
-            expiryItems.forEach((item) => {
-                const diffTime = new Date(item.date) - new Date();
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                
-                let statusText = `${diffDays} days left`;
-                let statusColor = "text-green-600 bg-green-100";
-                
-                if (diffDays <= 30) statusColor = "text-orange-600 bg-orange-100";
-                if (diffDays <= 7) statusColor = "text-red-600 bg-red-100";
-                if (diffDays < 0) {
-                    statusText = "Expired!";
-                    statusColor = "text-gray-600 bg-gray-200";
-                }
-
-                const itemHTML = `
-                    <div class="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl shadow-sm">
+            const filtered = filterItems();
+            if (!filtered.length) return itemsList.innerHTML = '<p class="text-gray-400 dark:text-gray-500 text-center py-6">No items found.</p>';
+            filtered.sort((a,b) => new Date(a.date) - new Date(b.date));
+            itemsList.innerHTML = filtered.map(item => {
+                const diffDays = Math.ceil((new Date(item.date) - new Date())/(1000*60*60*24));
+                let status = `${diffDays} days left`, color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+                if (diffDays <= 30) { status = `${diffDays} days`; color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; }
+                if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
+                if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
+                const remindersHtml = (item.reminders || []).map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' ');
+                return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
+                    <div class="flex justify-between items-start">
                         <div class="flex-1">
-                            <div class="text-xs text-gray-500 uppercase tracking-wider font-semibold">${item.category.split(' ')[0]}</div>
-                            <div class="font-bold text-gray-800">${item.name}</div>
-                            <div class="text-sm text-gray-500 mt-1">Expires: ${item.date}</div>
+                            <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${item.category}</span>
+                            <h3 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5">${item.name}</h3>
+                            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">Expires: ${item.date}</p>
+                            <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
                         </div>
-                        <div class="flex flex-col items-end gap-2">
-                            <span class="text-xs font-bold px-2 py-1 rounded-full ${statusColor}">
-                                ${statusText}
-                            </span>
-                            <button onclick="deleteItem('${item.id}', '${item.eventId || ''}')" class="text-red-400 hover:text-red-600 text-sm font-medium mt-1">
-                                Delete
-                            </button>
+                        <div class="flex flex-col items-end gap-2 ml-3">
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color}">${status}</span>
+                            <div class="flex gap-2">
+                                <button onclick="openEditModal('${item.id}')" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400" title="Edit"><i class="fas fa-edit"></i></button>
+                                <button onclick="deleteItem('${item.id}','${item.eventId||''}')" class="text-gray-400 hover:text-red-500" title="Delete"><i class="fas fa-trash"></i></button>
+                            </div>
                         </div>
                     </div>
-                `;
-                itemsList.insertAdjacentHTML('beforeend', itemHTML);
-            });
+                </div>`;
+            }).join('');
         }
+
+        function renderAll() { renderCategoryChips(); renderItems(); }
+        function showAppUI() {
+            landingPage.style.display = 'none';
+            document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
+            if (isTestMode) { testBanner.style.display = 'block'; exitTestBtn.style.display = 'inline-block'; logoutBtn.style.display = 'none'; settingsBtn.style.display = 'block'; }
+            else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
+            reminderBanner.style.display = 'block';
+            renderAll();
+        }
+
+        // ---------- INIT ----------
+        async function initAppData() {
+            updateStatus("Syncing cloud data...");
+            try { await loadFromCloud(); updateStatus("✅ Cloud Synced"); showAppUI(); }
+            catch(e) { console.error(e); updateStatus("❌ Sync Error"); alert("Failed to load from Google Drive."); }
+        }
+        function loadTestData() {
+            const stored = localStorage.getItem('expire_testData');
+            if (stored) {
+                try { appData = JSON.parse(stored); } catch(e) { appData = { items:[], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } }; }
+            } else {
+                appData = { items:[], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
+                appData.items = [
+                    { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
+                    { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
+                    { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', eventId:'test-3', reminders:[{days:7,method:'popup'}] }
+                ];
+                localStorage.setItem('expire_testData', JSON.stringify(appData));
+            }
+        }
+
+        window.onload = function () {
+            if (isTestMode) { loadTestData(); showAppUI(); updateStatus("Test Mode (localStorage)"); return; }
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID, scope: SCOPES,
+                callback: response => { if (response.error) return alert('Login failed.'); accessToken = response.access_token; initAppData(); }
+            });
+        };
+        loginBtn.onclick = () => { if (!isTestMode) tokenClient.requestAccessToken({ prompt: 'consent' }); };
+        logoutBtn.onclick = () => { /* revoke etc. */ };
+        exitTestBtn.onclick = () => { if (confirm('Exit test mode?')) window.disableTestMode(); };
+
+        addItemBtn.onclick = openAddModal;
+        settingsBtn.onclick = openSettings;
+        document.getElementById('searchInput').addEventListener('input', renderAll);
+        console.log('ℹ️ To test without login, call enableTestMode() in the console.');
     </script>
 </body>
 </html>
