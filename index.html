@@ -212,6 +212,8 @@
 
         let tokenClient;
         let accessToken = null;
+        let silentRefreshPromise = null;
+        let tokenExpiry = 0;
         let driveFileId = null;
         let appData = { items: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
@@ -230,6 +232,55 @@
         const testBanner = document.getElementById('testBanner');
         const addItemBtn = document.getElementById('addItemBtn');
         const settingsBtn = document.getElementById('settingsBtn');
+
+
+function ensureValidToken() {
+    if (accessToken && Date.now() < tokenExpiry) {
+        return Promise.resolve(accessToken);
+    }
+
+    if (!silentRefreshPromise) {
+        silentRefreshPromise = new Promise((resolve, reject) => {
+            tokenClient.requestAccessToken({ prompt: '' });
+
+            // Temporary callback overwrite
+            const originalCallback = tokenClient.callback;
+            tokenClient.callback = (response) => {
+                tokenClient.callback = originalCallback; // restore
+                if (response.error) {
+                    // Silent refresh failed – ask user to log in again
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                    reject(new Error('Silent refresh failed, consent required'));
+                } else {
+                    accessToken = response.access_token;
+                    tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+                    resolve(accessToken);
+                }
+                silentRefreshPromise = null;
+            };
+        });
+    }
+    return silentRefreshPromise;
+}
+
+async function callGoogleAPI(url, options = {}) {
+    const token = await ensureValidToken();
+    options.headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+    };
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+        // Token may be invalid (e.g., user revoked permission)
+        // Force a full re‑consent
+        accessToken = null;
+        tokenExpiry = 0;
+        await tokenClient.requestAccessToken({ prompt: 'consent' });
+        throw new Error('Re‑authenticated');
+    }
+    return response;
+}
+
 
         // ---------- DARK MODE ----------
         const darkIcon = document.getElementById('darkIcon');
@@ -295,17 +346,17 @@
 
         // ---------- CLOUD STORAGE (Google Drive) ----------
         async function loadFromCloud() {
-            const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
+            const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
             if (searchData.files && searchData.files.length > 0) {
                 driveFileId = searchData.files[0].id;
-                const fileRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
+                const fileRes = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
                 const raw = await fileRes.json();
                 appData = Array.isArray(raw) ? { items: raw, settings: { timezone: '' } } : raw;
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], settings: { timezone: tz } };
-                const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
                 });
@@ -319,7 +370,7 @@
         async function syncToCloud() {
             if (!driveFileId || !accessToken) return;
             updateStatus("Saving to cloud...");
-            await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+            await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
                 method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(appData)
             });
@@ -335,14 +386,14 @@
                 summary: `🔴 EXPIRING: ${item.name}`, description: `Your ${item.name} is expiring.`, start: { date: item.date },
                 end: { date: endDate.toISOString().split('T')[0] }, reminders: { useDefault: false, overrides }
             };
-            const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+            const res = await callGoogleAPI('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
                 method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
             });
             const data = await res.json(); return data.id;
         }
         async function removeCalendarEvent(eventId) {
             if (!eventId) return;
-            await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
+            await callGoogleAPI(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
         }
 
         // ---------- ITEM FORM ----------
@@ -502,8 +553,13 @@
             if (isTestMode) { loadTestData(); showAppUI(); updateStatus("Test Mode (localStorage)"); return; }
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID, scope: SCOPES,
-                callback: response => { if (response.error) return alert('Login failed.'); accessToken = response.access_token; initAppData(); }
+                callback: response => { if (response.error) return alert('Login failed.'); 
+                accessToken = response.access_token;
+                tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+                initAppData(); }
             });
+            // Attempt immediate silent login
+            tokenClient.requestAccessToken({ prompt: '' });
         };
         loginBtn.onclick = () => { if (!isTestMode) tokenClient.requestAccessToken({ prompt: 'consent' }); };
         logoutBtn.onclick = () => { /* revoke etc. */ };
