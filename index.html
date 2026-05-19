@@ -474,7 +474,7 @@ async function callGoogleAPI(url, options = {}) {
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
             if (!name || !date) return showToast('Name and date required.');
-            if (!formReminders.length) return showToast('Add at least one reminder.');
+            // if (!formReminders.length) return showToast('Add at least one reminder.');
 
             if (editingItemId) {
                 const idx = appData.items.findIndex(i => i.id === editingItemId);
