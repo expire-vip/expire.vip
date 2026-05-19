@@ -70,7 +70,7 @@
         </h1>
         <p class="text-gray-600 dark:text-gray-300 mt-3 max-w-xs sm:max-w-sm mx-auto text-sm sm:text-base leading-relaxed">
             Track passports, licences, subscriptions & more. <br class="hidden sm:block">
-            We send <strong class="text-gray-800 dark:text-gray-100">reminders</strong> to your Google Calendar – for free.
+            We set <strong class="text-gray-800 dark:text-gray-100">email reminders</strong> in your Google Calendar – for free.
         </p>
     </div>
 
@@ -93,17 +93,17 @@
         <div class="bg-indigo-50 dark:bg-indigo-900/40 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
             <span class="text-2xl">✍️</span>
             <h4 class="font-bold text-indigo-800 dark:text-indigo-200 mt-1 text-sm">1. Add</h4>
-            <p class="text-xs text-indigo-700 dark:text-indigo-300 mt-1">Enter any document, ID, or subscription with an expiry date.</p>
+            <p class="text-sm text-indigo-700 dark:text-indigo-300 mt-1">Enter any document, ID, or subscription with an expiry date.</p>
         </div>
         <div class="bg-indigo-50 dark:bg-indigo-900/40 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
             <span class="text-2xl">☁️</span>
             <h4 class="font-bold text-indigo-800 dark:text-indigo-200 mt-1 text-sm">2. Sync</h4>
-            <p class="text-xs text-indigo-700 dark:text-indigo-300 mt-1">Your list is saved privately in your Google Drive (app‑folder).</p>
+            <p class="text-sm text-indigo-700 dark:text-indigo-300 mt-1">Your list is saved privately in your Google Drive (app‑folder).</p>
         </div>
         <div class="bg-indigo-50 dark:bg-indigo-900/40 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
             <span class="text-2xl">🔔</span>
             <h4 class="font-bold text-indigo-800 dark:text-indigo-200 mt-1 text-sm">3. Remind</h4>
-            <p class="text-xs text-indigo-700 dark:text-indigo-300 mt-1">We create calendar events with email & popup reminders (4 weeks & 1 week before).</p>
+            <p class="text-sm text-indigo-700 dark:text-indigo-300 mt-1">We create calendar events with email & popup reminders (4 weeks & 1 week before).</p>
         </div>
     </div>
 
@@ -235,6 +235,7 @@
         const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
 
         let tokenClient;
+        let loginTriggeredByUser = false;
         let accessToken = null;
         let silentRefreshPromise = null;
         let tokenExpiry = 0;
@@ -577,18 +578,36 @@ async function callGoogleAPI(url, options = {}) {
             if (isTestMode) { loadTestData(); showAppUI(); updateStatus("Test Mode (localStorage)"); return; }
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID, scope: SCOPES,
-                callback: response => { if (response.error) return alert('Login failed.'); 
-                accessToken = response.access_token;
-                tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-                initAppData(); }
+                callback: handleTokenResponse
             });
             // Attempt immediate silent login
-            if (accessToken !== null){
-                tokenClient.requestAccessToken({ prompt: '' });
-            }
+            tokenClient.requestAccessToken({ prompt: '' });
         };
-        loginBtn.onclick = () => { if (!isTestMode) tokenClient.requestAccessToken({ prompt: 'consent' }); };
+        
+        function handleTokenResponse(response) {
+            if (response.error !== undefined) {
+                // The request failed (no session, user revoked, etc.)
+                if (loginTriggeredByUser) {
+                    // Only alert if the user clicked the login button
+                    alert('Login failed. Please try again.');
+                    loginTriggeredByUser = false;
+                }
+                // Otherwise, do nothing – stay on the landing page
+                return;
+            }
+            // Success! Save the token and show the app
+            accessToken = response.access_token;
+            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+            initAppData();
+        }
+        
+        loginBtn.onclick = () => {
+            if (isTestMode) return;
+            loginTriggeredByUser = true;
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        };
         logoutBtn.onclick = () => { 
+            loginTriggeredByUser = false;
             if (accessToken) {
                 google.accounts.oauth2.revoke(accessToken, () => {
                     accessToken = null;
