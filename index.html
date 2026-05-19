@@ -576,13 +576,40 @@ async function callGoogleAPI(url, options = {}) {
 
         window.onload = function () {
             if (isTestMode) { loadTestData(); showAppUI(); updateStatus("Test Mode (localStorage)"); return; }
+            const cached = restoreCachedToken();
+            
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID, scope: SCOPES,
                 callback: handleTokenResponse
             });
-            // Attempt immediate silent login
-            tokenClient.requestAccessToken({ prompt: '' });
+            if (cached) {
+                // We have a valid cached token – use it immediately
+                initAppData();
+                // Then try to upgrade it silently in the background
+                tokenClient.requestAccessToken({ prompt: '' });
+            } else {
+                // No cached token, try silent login (may fail, that’s fine)
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
         };
+
+        function restoreCachedToken() {
+            const token = localStorage.getItem('expire_accessToken');
+            const expiry = Number(localStorage.getItem('expire_tokenExpiry'));
+            if (token && expiry) {
+                accessToken = token;
+                tokenExpiry = expiry;
+            }
+            if (token && expiry && Date.now() < expiry){
+                return true;
+            }
+            return false;
+        }
+        
+        function saveToken(token, expiresIn) {
+            localStorage.setItem('expire_accessToken', token);
+            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
+        }
         
         function handleTokenResponse(response) {
             if (response.error !== undefined) {
@@ -598,6 +625,7 @@ async function callGoogleAPI(url, options = {}) {
             // Success! Save the token and show the app
             accessToken = response.access_token;
             tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+            saveToken(response.access_token, response.expires_in);
             initAppData();
         }
         
