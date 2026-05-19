@@ -583,10 +583,23 @@ async function callGoogleAPI(url, options = {}) {
                 initAppData(); }
             });
             // Attempt immediate silent login
-            tokenClient.requestAccessToken({ prompt: '' });
+            if (accessToken !== null){
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
         };
         loginBtn.onclick = () => { if (!isTestMode) tokenClient.requestAccessToken({ prompt: 'consent' }); };
-        logoutBtn.onclick = () => { /* revoke etc. */ };
+        logoutBtn.onclick = () => { 
+            if (accessToken) {
+                google.accounts.oauth2.revoke(accessToken, () => {
+                    accessToken = null;
+                    driveFileId = null;
+                    expiryItems =[];
+                    // Show landing page, hide app
+                    landingPage.style.display = 'flex';
+                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                });
+            }
+        };
         exitTestBtn.onclick = () => { if (confirm('Exit test mode?')) window.disableTestMode(); };
 
         addItemBtn.onclick = openAddModal;
