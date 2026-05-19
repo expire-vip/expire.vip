@@ -642,6 +642,7 @@ async function callGoogleAPI(url, options = {}) {
         };
         logoutBtn.onclick = () => { 
             loginTriggeredByUser = false;
+            saveToken(null, 0);
             if (accessToken) {
                 google.accounts.oauth2.revoke(accessToken, () => {
                     accessToken = null;
