@@ -543,10 +543,18 @@ async function callGoogleAPI(url, options = {}) {
                         </div>
                         <div class="flex flex-col items-end gap-2 ml-3">
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color}">${status}</span>
-                            <div class="flex gap-2">
-                                <button onclick="openEditModal('${item.id}')" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400" title="Edit"><i class="fas fa-edit"></i></button>
-                                <button onclick="deleteItem('${item.id}','${item.eventId||''}')" class="text-gray-400 hover:text-red-500" title="Delete"><i class="fas fa-trash"></i></button>
-                            </div>
+                                <div class="flex gap-2">
+                                    <button onclick="openEditModal('${item.id}')" 
+                                            class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                            title="Edit">
+                                        <i class="fas fa-edit text-lg"></i>
+                                    </button>
+                                    <button onclick="deleteItem('${item.id}','${item.eventId||''}')" 
+                                            class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                            title="Delete">
+                                        <i class="fas fa-trash text-lg"></i>
+                                    </button>
+                                </div>
                         </div>
                     </div>
                 </div>`;
