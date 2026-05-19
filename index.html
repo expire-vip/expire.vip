@@ -89,25 +89,31 @@
     </div>
 
     <!-- How it works (three clear cards, replacing the dense list) -->
-<div class="flex flex-col gap-3 w-full mb-8 text-left">
+<div class="grid grid-cols-1 gap-3 w-full mb-8 text-left">
     <div class="bg-indigo-50 dark:bg-indigo-900/60 p-5 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-        <span class="text-3xl">✍️</span>
-        <h4 class="font-bold text-indigo-900 dark:text-white mt-2 text-base">1. Add</h4>
-        <p class="text-base text-indigo-800 dark:text-gray-200 mt-1 leading-relaxed">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="text-3xl">✍️</span>
+            <h4 class="font-bold text-indigo-900 dark:text-white text-base">1. Add</h4>
+        </div>
+        <p class="text-base text-indigo-800 dark:text-gray-200 leading-relaxed">
             Enter any document, ID, or subscription with an expiry date.
         </p>
     </div>
     <div class="bg-indigo-50 dark:bg-indigo-900/60 p-5 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-        <span class="text-3xl">☁️</span>
-        <h4 class="font-bold text-indigo-900 dark:text-white mt-2 text-base">2. Sync</h4>
-        <p class="text-base text-indigo-800 dark:text-gray-200 mt-1 leading-relaxed">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="text-3xl">☁️</span>
+            <h4 class="font-bold text-indigo-900 dark:text-white text-base">2. Sync</h4>
+        </div>
+        <p class="text-base text-indigo-800 dark:text-gray-200 leading-relaxed">
             Your list is saved privately in your Google Drive (app‑folder).
         </p>
     </div>
     <div class="bg-indigo-50 dark:bg-indigo-900/60 p-5 rounded-xl border border-indigo-100 dark:border-indigo-800 shadow-sm">
-        <span class="text-3xl">🔔</span>
-        <h4 class="font-bold text-indigo-900 dark:text-white mt-2 text-base">3. Remind</h4>
-        <p class="text-base text-indigo-800 dark:text-gray-200 mt-1 leading-relaxed">
+        <div class="flex items-center gap-3 mb-2">
+            <span class="text-3xl">🔔</span>
+            <h4 class="font-bold text-indigo-900 dark:text-white text-base">3. Remind</h4>
+        </div>
+        <p class="text-base text-indigo-800 dark:text-gray-200 leading-relaxed">
             We create calendar events with email & popup reminders (4 weeks & 1 week before).
         </p>
     </div>
