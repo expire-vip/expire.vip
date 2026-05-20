@@ -67,6 +67,13 @@
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+    <noscript>
+        <div style="padding:2rem; text-align:center; font-family:sans-serif;">
+            <h2>Expire.vip – Expiry Date Tracker</h2>
+            <p>Track passports, licences, subscriptions, and get Google Calendar reminders.</p>
+            <p>Please enable JavaScript to use the full app, or visit our <a href="https://github.com/expire-vip/expire.vip">GitHub page</a> for more information.</p>
+        </div>
+    </noscript>
     <div class="sr-only" aria-hidden="true">
     Expire.vip is a free, private tool to track expiration dates for documents, IDs, subscriptions, and more. 
     It securely saves your list in your own Google Drive and creates automatic email & popup reminders in Google Calendar. 
@@ -89,8 +96,9 @@
                 <button id="settingsBtn" class="text-white/80 hover:text-white transition hidden-auth" title="Settings">
                     <i class="fas fa-cog text-lg"></i>
                 </button>
-                <a href="https://github.com/expire-vip/expire.vip/issues" target="_blank" class="text-white/80 hover:text-white transition" title="Report an issue">
-                    <i class="fab fa-github text-lg"></i>
+                <a href="https://github.com/expire-vip/expire.vip" target="_blank" class="text-white/80 hover:text-white transition" title="Github repo">
+                    <i class="fab fa-github text-lg" aria-hidden="true"></i>
+                    <span class="sr-only">GitHub Repo for the expire.vip page</span>
                 </a>
                 <button id="logoutBtn" class="bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded hidden-auth">Logout</button>
                 <button id="exitTestBtn" class="bg-amber-500 hover:bg-amber-600 text-xs px-3 py-1 rounded" style="display:none;">Exit Test Mode</button>
@@ -114,10 +122,10 @@
 <div id="landingPage" class="flex flex-col items-center text-center py-8 sm:py-10">
     <!-- Hero -->
     <div class="mb-8">
-        <p class="text-gray-800 dark:text-gray-100 max-w-sm mx-auto text-xl sm:text-2xl font-semibold leading-relaxed">
+        <h1 class="text-gray-800 dark:text-gray-100 max-w-sm mx-auto text-xl sm:text-2xl font-semibold leading-relaxed">
             Track passports, licences, subscriptions & more.<br class="hidden sm:block">
             We set <span class="text-indigo-600 dark:text-indigo-400">email reminders</span> in your Google Calendar – for free.
-        </p>
+        </h1>
     </div>
 
     <!-- What you can track (pill badges with HIGH CONTRAST) -->
