@@ -321,6 +321,22 @@
         </div>
     </div>
 
+    <div id="loadingOverlay"
+         class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[9999] flex items-center justify-center">
+    
+        <div class="bg-gray-800 border border-gray-700 rounded-2xl px-8 py-6 text-center shadow-xl">
+    
+            <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+    
+            <p id="loadingText"
+               class="text-gray-100 font-medium">
+                Loading...
+            </p>
+    
+        </div>
+    
+    </div>
+
     <script>
         // ---------- GLOBAL STATE ----------
         const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
@@ -349,8 +365,27 @@
         const testBanner = document.getElementById('testBanner');
         const addItemBtn = document.getElementById('addItemBtn');
         const settingsBtn = document.getElementById('settingsBtn');
+        
+function showLoading(message = "Loading...") {
+    document.getElementById("loadingText").textContent = message;
+    document.getElementById("loadingOverlay").classList.remove("hidden");
+}
 
+function hideLoading() {
+    document.getElementById("loadingOverlay").classList.add("hidden");
+}
 
+async function withLoading(message, callback) {
+    showLoading(message);
+
+    try {
+        return await callback();
+    }
+    finally {
+        hideLoading();
+    }
+}
+        
 function ensureValidToken() {
     if (accessToken && Date.now() < tokenExpiry) {
         return Promise.resolve(accessToken);
@@ -457,7 +492,7 @@ async function callGoogleAPI(url, options = {}) {
             const newTz = document.getElementById('timezoneSelect').value;
             appData.settings.timezone = newTz;
             if (isTestMode) { localStorage.setItem('expire_testData', JSON.stringify(appData)); showToast('Settings saved (test mode).'); }
-            else { await syncToCloud(); showToast('Settings saved to Google Drive.'); }
+            else { await withLoading("Saving item...", async () => {await syncToCloud();}); showToast('Settings saved to Google Drive.'); }
             closeSettings();
         }
 
@@ -479,9 +514,10 @@ async function callGoogleAPI(url, options = {}) {
                 });
                 const fileMeta = await createRes.json();
                 driveFileId = fileMeta.id;
-                await syncToCloud();
+                // await syncToCloud();
+                await withLoading("Saving item...", async () => {await syncToCloud();});
             }
-            if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
+            if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await withLoading("Saving item...", async () => {await syncToCloud();}); }
         }
 
         async function syncToCloud() {
@@ -589,7 +625,7 @@ function renderReminderChipsForm() {
             }
 
             if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
-            else await syncToCloud();
+            else await withLoading("Saving item...", async () => {await syncToCloud();});
             closeItemModal();
             renderAll();
             showToast(editingItemId ? 'Updated.' : 'Added.');
@@ -600,7 +636,7 @@ function renderReminderChipsForm() {
             if (eventId && !isTestMode) await removeCalendarEvent(eventId).catch(()=>{});
             appData.items = appData.items.filter(i => i.id !== itemId);
             if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
-            else await syncToCloud();
+            else await withLoading("Saving item...", async () => {await syncToCloud();});
             renderAll();
             showToast('Deleted.');
         }
