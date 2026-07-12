@@ -111,7 +111,7 @@
 
         <!-- Reminder info banner (always visible after login / test) -->
         <div id="reminderBanner" class="hidden-auth text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 p-3 text-center border-b border-indigo-100 dark:border-indigo-800">
-            ⏰ Default reminders: 4 weeks & 1 week before expiry (email + popup)
+            ⏰ Default reminders: 4 weeks & 1 week before expiry (email)
         </div>
 
         <!-- Test mode banner -->
@@ -290,7 +290,7 @@
                             </div>
                         </div>
 
-                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Default: 28 days (email + calendar popup) & 7 days (email + popup).</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Default: 28 days (email) & 7 days (email).</p>
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
@@ -520,7 +520,7 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('itemName').value = '';
             document.getElementById('itemCategory').value = 'Document';
             document.getElementById('itemDate').value = '';
-            formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'popup' }, { days: 7, method: 'email' }, { days: 28, method: 'popup' }];
+            formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
             renderReminderChipsForm();
             document.getElementById('itemModal').classList.remove('hidden');
         }
