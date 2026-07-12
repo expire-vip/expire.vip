@@ -720,7 +720,7 @@ function renderReminderChipsForm() {
         // ---------- INIT ----------
         async function initAppData() {
             updateStatus("Syncing cloud data...");
-            try { await loadFromCloud(); updateStatus("✅ Cloud Synced"); showAppUI(); }
+            try { await withLoading("Loading data...", async () => {await withLoading("Loading data...", async () => {await loadFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
             catch(e) { console.error(e); updateStatus("❌ Sync Error"); alert("Failed to load from Google Drive."); }
         }
         function loadTestData() {
