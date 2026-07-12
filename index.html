@@ -630,15 +630,27 @@ function renderReminderChipsForm() {
             renderAll();
             showToast(editingItemId ? 'Updated.' : 'Added.');
         }
-
+        
         async function deleteItem(itemId, eventId) {
             if (!confirm('Delete this item?')) return;
-            if (eventId && !isTestMode) await removeCalendarEvent(eventId).catch(()=>{});
-            appData.items = appData.items.filter(i => i.id !== itemId);
-            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
-            else await withLoading("Saving item...", async () => {await syncToCloud();});
-            renderAll();
-            showToast('Deleted.');
+        
+            await withLoading("Deleting item...", async () => {
+                if (eventId && !isTestMode) {
+                    await removeCalendarEvent(eventId).catch(() => {});
+                }
+        
+                appData.items = appData.items.filter(i => i.id !== itemId);
+        
+                if (isTestMode) {
+                    localStorage.setItem('expire_testData', JSON.stringify(appData));
+                } else {
+                    await syncToCloud();
+                }
+        
+                renderAll();
+            });
+        
+            showToast("Deleted.");
         }
 
         function updateStatus(t) { syncStatus.textContent = t; }
