@@ -54,6 +54,10 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         body { background-color: #f3f4f6; }
+        select { color-scheme: dark; }
+        .dark input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: brightness(0) invert(1);
+        }
         .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         .hidden-auth { display: none; }
         .toast {
