@@ -514,8 +514,8 @@ async function callGoogleAPI(url, options = {}) {
                 });
                 const fileMeta = await createRes.json();
                 driveFileId = fileMeta.id;
-                // await syncToCloud();
-                await withLoading("Saving item...", async () => {await syncToCloud();});
+                await syncToCloud();
+                // await withLoading("Saving item...", async () => {await syncToCloud();});
             }
             if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await withLoading("Saving item...", async () => {await syncToCloud();}); }
         }
