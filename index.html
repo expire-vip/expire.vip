@@ -61,13 +61,52 @@
         .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         .hidden-auth { display: none; }
         .toast {
-            visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #1f2937; color: #f9fafb;
-            text-align: center; border-radius: 8px; padding: 12px; position: fixed; z-index: 9999;
-            left: 50%; bottom: 30px; font-size: 14px;
+            visibility: hidden;
+            min-width: 280px;
+            margin-left: -140px;
+            color: white;
+            text-align: center;
+            border-radius: 12px;
+            padding: 14px 18px;
+            position: fixed;
+            z-index: 9999;
+            left: 50%;
+            bottom: 30px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 10px 25px rgba(0,0,0,.25);
         }
-        .toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
-        @keyframes fadein { from {bottom: 0; opacity: 0;} to {bottom: 30px; opacity: 1;} }
-        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 0; opacity: 0;} }
+        
+        .toast.show {
+            visibility: visible;
+            animation: fadein .25s, fadeout .25s 2.75s;
+        }
+        
+        .toast.success {
+            background: #16a34a;
+        }
+        
+        .toast.error {
+            background: #dc2626;
+        }
+        
+        .toast.info {
+            background: #2563eb;
+        }
+        
+        .toast.warning {
+            background: #d97706;
+        }
+        
+        @keyframes fadein {
+            from { opacity:0; transform:translate(-50%,20px);}
+            to   { opacity:1; transform:translate(-50%,0);}
+        }
+        
+        @keyframes fadeout {
+            from { opacity:1; transform:translate(-50%,0);}
+            to   { opacity:0; transform:translate(-50%,20px);}
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 transition-colors duration-300">
@@ -460,11 +499,44 @@ async function callGoogleAPI(url, options = {}) {
         });
 
         // ---------- TOAST ----------
-        function showToast(msg) {
+        function showToastSimple(msg) {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
             toast.className = 'toast show';
             setTimeout(() => { toast.className = toast.className.replace('show', ''); }, 3000);
+        }
+
+        function showToast(message, type = "info") {
+            const toast = document.getElementById("toast");
+        
+            const icons = {
+                success: "✅",
+                error: "❌",
+                warning: "⚠️",
+                info: "ℹ️"
+            };
+            toast.textContent = `${icons[type]} ${message}`;
+            toast.className = `toast ${type} show`;
+            clearTimeout(toast.hideTimeout);
+            toast.hideTimeout = setTimeout(() => {
+                toast.classList.remove("show");
+            }, 3000);
+        }
+
+        function toastSuccess(msg) {
+            showToast(msg, "success");
+        }
+        
+        function toastError(msg) {
+            showToast(msg, "error");
+        }
+        
+        function toastWarning(msg) {
+            showToast(msg, "warning");
+        }
+        
+        function toastInfo(msg) {
+            showToast(msg, "info");
         }
 
         // ---------- TEST MODE ----------
@@ -586,24 +658,24 @@ async function callGoogleAPI(url, options = {}) {
         //    const container = document.getElementById('reminderChipsForm');
         //    container.innerHTML = formReminders.map((r,i) => `<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm text-gray-800 dark:text-gray-200">${r.days}d (${r.method}) <button onclick="removeReminderFromForm(${i})" class="ml-1 text-gray-500 hover:text-red-500">&times;</button></span>`).join('');
         //}
-function renderReminderChipsForm() {
-    const container = document.getElementById('reminderChipsForm');
-
-    container.innerHTML = formReminders
-        .sort((a, b) => b.days - a.days)
-        .map((r, i) => `
-            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-lg text-gray-800 dark:text-gray-200">
-                ${r.method === 'email' ? '📧' : '🔔'}
-                ${r.days} days
-                <button
-                    onclick="removeReminderFromForm(${i})"
-                    class="text-gray-500 hover:text-red-500">
-                    &times;
-                </button>
-            </span>
-        `)
-        .join('');
-}
+        function renderReminderChipsForm() {
+            const container = document.getElementById('reminderChipsForm');
+        
+            container.innerHTML = formReminders
+                .sort((a, b) => b.days - a.days)
+                .map((r, i) => `
+                    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-lg text-gray-800 dark:text-gray-200">
+                        ${r.method === 'email' ? '📧' : '🔔'}
+                        ${r.days} days
+                        <button
+                            onclick="removeReminderFromForm(${i})"
+                            class="text-gray-500 hover:text-red-500">
+                            &times;
+                        </button>
+                    </span>
+                `)
+                .join('');
+        }
 
         async function saveItem() {
             const name = document.getElementById('itemName').value.trim();
@@ -701,7 +773,7 @@ function renderReminderChipsForm() {
                 renderAll();
             });
         
-            showToast("Deleted.");
+            toastSuccess("Deleted.");
         }
 
         function updateStatus(t) { syncStatus.textContent = t; }
