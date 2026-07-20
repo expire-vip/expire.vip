@@ -609,26 +609,77 @@ function renderReminderChipsForm() {
             const name = document.getElementById('itemName').value.trim();
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
-            if (!name || !date) return showToast('Name and date required.');
-            // if (!formReminders.length) return showToast('Add at least one reminder.');
-
-            if (editingItemId) {
-                const idx = appData.items.findIndex(i => i.id === editingItemId);
-                if (idx === -1) return;
-                const old = appData.items[idx];
-                if (old.eventId && !isTestMode) await removeCalendarEvent(old.eventId).catch(()=>{});
-                const newEventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent({ name, category, date, reminders: formReminders });
-                appData.items[idx] = { ...old, name, category, date, reminders: formReminders, eventId: newEventId };
-            } else {
-                const newEventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent({ name, category, date, reminders: formReminders });
-                appData.items.push({ id: Date.now().toString(), name, category, date, reminders: formReminders, eventId: newEventId });
+        
+            if (!name || !date) {
+                showToast('Name and date required.');
+                return;
             }
-
-            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
-            else await withLoading("Saving item...", async () => {await syncToCloud();});
-            closeItemModal();
-            renderAll();
-            showToast(editingItemId ? 'Updated.' : 'Added.');
+        
+            const wasEditing = editingItemId !== null;
+        
+            await withLoading(
+                wasEditing ? "Updating item..." : "Creating item...",
+                async () => {
+        
+                    if (wasEditing) {
+                        const idx = appData.items.findIndex(i => i.id === editingItemId);
+                        if (idx === -1) return;
+        
+                        const old = appData.items[idx];
+        
+                        if (old.eventId && !isTestMode) {
+                            await removeCalendarEvent(old.eventId).catch(() => {});
+                        }
+        
+                        const newEventId = isTestMode
+                            ? `test-${Date.now()}`
+                            : await addCalendarEvent({
+                                name,
+                                category,
+                                date,
+                                reminders: formReminders
+                            });
+        
+                        appData.items[idx] = {
+                            ...old,
+                            name,
+                            category,
+                            date,
+                            reminders: formReminders,
+                            eventId: newEventId
+                        };
+                    } else {
+                        const newEventId = isTestMode
+                            ? `test-${Date.now()}`
+                            : await addCalendarEvent({
+                                name,
+                                category,
+                                date,
+                                reminders: formReminders
+                            });
+        
+                        appData.items.push({
+                            id: Date.now().toString(),
+                            name,
+                            category,
+                            date,
+                            reminders: formReminders,
+                            eventId: newEventId
+                        });
+                    }
+        
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+        
+                    closeItemModal();
+                    renderAll();
+                }
+            );
+        
+            showToast(wasEditing ? 'Updated.' : 'Added.');
         }
         
         async function deleteItem(itemId, eventId) {
