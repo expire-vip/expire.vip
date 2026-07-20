@@ -137,7 +137,7 @@
         const url =
             'https://www.googleapis.com/drive/v3/files' +
             '?spaces=appDataFolder' +
-            '&fields=files(id,name)' +
+            '&fields=files(id,name,size,mimeType,createdTime,modifiedTime)' +
             '&pageSize=100';
             
             const response = await fetch(url, {
@@ -189,22 +189,38 @@
 
                 files.forEach(file => {
                     const li = document.createElement('li');
-                    li.style.marginBottom = '5px';
-                    
+                    li.style.marginBottom = '10px';
+                
                     const link = document.createElement('a');
                     link.href = '#';
-                    link.textContent = `${file.name} (${file.id})`;
+                    link.textContent = file.name;
                     link.style.color = 'blue';
                     link.style.textDecoration = 'underline';
-                    
-                    // Clicking the list item auto-populates the ID field and runs the preview
+                
                     link.addEventListener('click', (e) => {
                         e.preventDefault();
                         manualFileIdInput.value = file.id;
                         previewBtn.click();
                     });
-
+                
+                    const meta = document.createElement('div');
+                    meta.style.fontSize = '12px';
+                    meta.style.color = '#666';
+                
+                    const sizeKB = file.size
+                        ? (Number(file.size) / 1024).toFixed(1) + ' KB'
+                        : 'Unknown';
+                
+                    meta.innerHTML = `
+                        <strong>ID:</strong> ${file.id}<br>
+                        <strong>Size:</strong> ${sizeKB}<br>
+                        <strong>Type:</strong> ${file.mimeType}<br>
+                        <strong>Created:</strong> ${new Date(file.createdTime).toLocaleString()}<br>
+                        <strong>Modified:</strong> ${new Date(file.modifiedTime).toLocaleString()}
+                    `;
+                
                     li.appendChild(link);
+                    li.appendChild(meta);
                     fileList.appendChild(li);
                 });
             } catch (err) {
