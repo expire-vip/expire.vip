@@ -517,7 +517,7 @@ async function callGoogleAPI(url, options = {}) {
                 await syncToCloud();
                 // await withLoading("Saving item...", async () => {await syncToCloud();});
             }
-            if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await withLoading("Saving item...", async () => {await syncToCloud();}); }
+            if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
         }
 
         async function syncToCloud() {
