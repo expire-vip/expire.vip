@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple AppData Tester</title>
+    
+    <script src="https://google.com" async defer></script>
+</head>
+<body>
+
+    <h2>1. Authentication</h2>
+    <button id="authBtn">Connect Google Account</button>
+    <p>Status: <b id="authStatus" style="color:red">Disconnected</b></p>
+
+    <hr>
+
+    <h2>2. Upload Image</h2>
+    <input type="file" id="fileInput" accept="image/*" />
+    <button id="uploadBtn" disabled>Upload File to Hidden Folder</button>
+    <p>Generated File ID: <span id="targetFileId" style="font-family:monospace; font-weight:bold;">None</span></p>
+
+    <hr>
+
+    <h2>3. Available Files in AppData Folder</h2>
+    <button id="listBtn" disabled>List All Files</button>
+    <ul id="fileList" style="margin-top: 10px; max-height: 150px; overflow-y: auto; padding-left: 20px;">
+        <li style="color: gray; list-style-type: none;">No files loaded yet. Click 'List All Files'.</li>
+    </ul>
+
+    <hr>
+
+    <h2>4. Fetch & Preview</h2>
+    <input type="text" id="manualFileIdInput" placeholder="Paste or click a file ID above" style="width: 300px;" />
+    <button id="previewBtn" disabled>Fetch Image</button>
+    
+    <div style="margin-top: 15px; border: 1px solid #ccc; width: 300px; height: 200px; display: flex; align-items: center; justify-content: center;">
+        <img id="previewImage" style="max-width: 100%; max-height: 100%; display: none;" alt="Preview" />
+    </div>
+
+    <script>
+        // ---------- GLOBAL STATE ----------
+        const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
+
+        let tokenClient;
+        let accessToken = null;
+        let silentRefreshPromise = null;
+        let tokenExpiry = 0;
+
+        // ---------- DOM ELEMENTS ----------
+        const authBtn = document.getElementById('authBtn');
+        const authStatus = document.getElementById('authStatus');
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const targetFileId = document.getElementById('targetFileId');
+        const listBtn = document.getElementById('listBtn');
+        const fileList = document.getElementById('fileList');
+        const manualFileIdInput = document.getElementById('manualFileIdInput');
+        const previewBtn = document.getElementById('previewBtn');
+        const previewImage = document.getElementById('previewImage');
+
+        // ---------- TOKEN HANDLING ----------
+        function ensureValidToken() {
+            if (accessToken && Date.now() < tokenExpiry) {
+                return Promise.resolve(accessToken);
+            }
+            if (!silentRefreshPromise) {
+                silentRefreshPromise = new Promise((resolve, reject) => {
+                    tokenClient.requestAccessToken({ prompt: '' });
+                    const originalCallback = tokenClient.callback;
+                    tokenClient.callback = (response) => {
+                        tokenClient.callback = originalCallback;
+                        if (response.error) {
+                            tokenClient.requestAccessToken({ prompt: 'consent' });
+                            reject(new Error('Silent refresh failed'));
+                        } else {
+                            accessToken = response.access_token;
+                            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+                            resolve(accessToken);
+                        }
+                        silentRefreshPromise = null;
+                    };
+                });
+            }
+            return silentRefreshPromise;
+        }
+
+        // ---------- INIT GOOGLE IDENTITY ----------
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (response) => {
+                    if (response.error) {
+                        alert("Authentication failed!");
+                        return;
+                    }
+                    accessToken = response.access_token;
+                    tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+                    
+                    authStatus.textContent = "Connected";
+                    authStatus.style.color = "green";
+                    uploadBtn.disabled = false;
+                    listBtn.disabled = false;
+                    previewBtn.disabled = false;
+                },
+            });
+        };
+
+        authBtn.addEventListener('click', () => {
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        });
+
+        // ---------- API LOGIC ----------
+        async function uploadFileToAppData(fileBlob, fileName) {
+            const token = await ensureValidToken();
+            const metadata = { name: fileName, parents: ['appDataFolder'] };
+
+            const formData = new FormData();
+            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            formData.append('file', fileBlob);
+
+            const response = await fetch('https://googleapis.com', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error("Upload request failed.");
+            const data = await response.json();
+            return data.id;
+        }
+
+        async function listAppDataFiles() {
+            const token = await ensureValidToken();
+            // spaces must target 'appDataFolder' explicitly in the search query
+            const url = `https://googleapis.com`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Failed to list files.");
+            const data = await response.json();
+            return data.files || [];
+        }
+
+        async function fetchImageFromAppData(fileId) {
+            const token = await ensureValidToken();
+            const response = await fetch(`https://googleapis.com{fileId}?alt=media`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.ok) throw new Error("Fetch request failed.");
+            return await response.blob();
+        }
+
+        // ---------- BUTTON EVENTS ----------
+        uploadBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return alert("Select a file first.");
+
+            try {
+                const id = await uploadFileToAppData(file, file.name);
+                targetFileId.textContent = id;
+                manualFileIdInput.value = id;
+                alert("Upload complete!");
+                listBtn.click(); // Automatically refresh the list
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        listBtn.addEventListener('click', async () => {
+            try {
+                const files = await listAppDataFiles();
+                fileList.innerHTML = ''; // Clear current UI items
+
+                if (files.length === 0) {
+                    fileList.innerHTML = '<li style="color: gray; list-style-type: none;">No files found in appDataFolder.</li>';
+                    return;
+                }
+
+                files.forEach(file => {
+                    const li = document.createElement('li');
+                    li.style.marginBottom = '5px';
+                    
+                    const link = document.createElement('a');
+                    link.href = '#';
+                    link.textContent = `${file.name} (${file.id})`;
+                    link.style.color = 'blue';
+                    link.style.textDecoration = 'underline';
+                    
+                    // Clicking the list item auto-populates the ID field and runs the preview
+                    link.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        manualFileIdInput.value = file.id;
+                        previewBtn.click();
+                    });
+
+                    li.appendChild(link);
+                    fileList.appendChild(li);
+                });
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        previewBtn.addEventListener('click', async () => {
+            const fileId = manualFileIdInput.value.trim();
+            if (!fileId) return alert("Enter a file ID.");
+
+            try {
+                const imageBlob = await fetchImageFromAppData(fileId);
+                previewImage.src = URL.createObjectURL(imageBlob);
+                previewImage.style.display = "block";
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    </script>
+</body>
+</html>
