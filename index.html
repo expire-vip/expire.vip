@@ -661,7 +661,7 @@ async function callGoogleAPI(url, options = {}) {
             renderReminderChipsForm();
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        function closeItemModal() { if (isLoading) return; document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        function closeItemModal() { /*if (isLoading) return;*/ document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
         function addReminderToForm() {
             const days = parseInt(document.getElementById('reminderDays').value);
             if (isNaN(days) || days < 1 || days > 28) { showToast('Days must be 1–28.'); return; }
