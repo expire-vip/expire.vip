@@ -420,27 +420,27 @@
         const addItemBtn = document.getElementById('addItemBtn');
         const settingsBtn = document.getElementById('settingsBtn');
         
-function showLoading(message = "Loading...") {
-    isLoading = true;
-    document.getElementById("loadingText").textContent = message;
-    document.getElementById("loadingOverlay").classList.remove("hidden");
-}
+        function showLoading(message = "Loading...") {
+            isLoading = true;
+            document.getElementById("loadingText").textContent = message;
+            document.getElementById("loadingOverlay").classList.remove("hidden");
+        }
 
-function hideLoading() {
-    isLoading = false;
-    document.getElementById("loadingOverlay").classList.add("hidden");
-}
+        function hideLoading() {
+            isLoading = false;
+            document.getElementById("loadingOverlay").classList.add("hidden");
+        }
 
-async function withLoading(message, callback) {
-    showLoading(message);
-
-    try {
-        return await callback();
-    }
-    finally {
-        hideLoading();
-    }
-}
+        async function withLoading(message, callback) {
+            showLoading(message);
+        
+            try {
+                return await callback();
+            }
+            finally {
+                hideLoading();
+            }
+        }
         
 function ensureValidToken() {
     if (accessToken && Date.now() < tokenExpiry) {
@@ -720,9 +720,12 @@ async function callGoogleAPI(url, options = {}) {
                         const old = appData.items[idx];
         
                         if (old.eventId && !isTestMode) {
+                            showLoading("Removing calendar event");
                             await removeCalendarEvent(old.eventId).catch(() => {});
+                            showLoading("Done removing calendar event");
                         }
-        
+
+                        showLoading("Adding new calendar event");
                         const newEventId = isTestMode
                             ? `test-${Date.now()}`
                             : await addCalendarEvent({
@@ -731,6 +734,7 @@ async function callGoogleAPI(url, options = {}) {
                                 date,
                                 reminders: formReminders
                             });
+                        // showLoading("Done adding new calendar event");
         
                         appData.items[idx] = {
                             ...old,
@@ -741,6 +745,7 @@ async function callGoogleAPI(url, options = {}) {
                             eventId: newEventId
                         };
                     } else {
+                        showLoading("Adding new calendar event");
                         const newEventId = isTestMode
                             ? `test-${Date.now()}`
                             : await addCalendarEvent({
@@ -749,6 +754,7 @@ async function callGoogleAPI(url, options = {}) {
                                 date,
                                 reminders: formReminders
                             });
+                        // showLoading("Done adding new calendar event");
         
                         appData.items.push({
                             id: Date.now().toString(),
@@ -763,6 +769,7 @@ async function callGoogleAPI(url, options = {}) {
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
+                        showLoading("Syncing data to cloud");
                         await syncToCloud();
                     }
         
