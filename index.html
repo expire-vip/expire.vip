@@ -702,8 +702,11 @@ async function callGoogleAPI(url, options = {}) {
             }
         
             const wasEditing = editingItemId !== null;
-        
-            await withLoading(
+            const saveBtn = document.getElementById("saveItemButton");
+            saveBtn.disabled = true;
+            saveBtn.textContent = "Saving...";
+            try {
+              await withLoading(
                 wasEditing ? "Updating item..." : "Creating item...",
                 async () => {
         
@@ -763,8 +766,11 @@ async function callGoogleAPI(url, options = {}) {
                     closeItemModal();
                     renderAll();
                 }
-            );
-        
+              );
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.textContent = "Save";
+            }        
             showToast(wasEditing ? 'Updated.' : 'Added.');
         }
         
