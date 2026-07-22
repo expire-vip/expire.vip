@@ -405,6 +405,7 @@
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
         let formReminders = [];
+        let isLoading = false;
 
         // DOM elements
         const landingPage = document.getElementById('landingPage');
@@ -420,11 +421,13 @@
         const settingsBtn = document.getElementById('settingsBtn');
         
 function showLoading(message = "Loading...") {
+    isLoading = true;
     document.getElementById("loadingText").textContent = message;
     document.getElementById("loadingOverlay").classList.remove("hidden");
 }
 
 function hideLoading() {
+    isLoading = false;
     document.getElementById("loadingOverlay").classList.add("hidden");
 }
 
@@ -658,7 +661,7 @@ async function callGoogleAPI(url, options = {}) {
             renderReminderChipsForm();
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        function closeItemModal() { if (isLoading) return; document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
         function addReminderToForm() {
             const days = parseInt(document.getElementById('reminderDays').value);
             if (isNaN(days) || days < 1 || days > 28) { showToast('Days must be 1–28.'); return; }
