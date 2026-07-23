@@ -69,27 +69,6 @@
         const previewImage = document.getElementById('previewImage');
         const jsonPreview = document.getElementById('jsonPreview');
 
-        const downloadBtn = document.createElement('button');
-        downloadBtn.textContent = "Download";
-        downloadBtn.style.marginLeft = "10px";
-
-        downloadBtn.addEventListener("click", async () => {
-            try {
-                const response = await fetchFile(file.id);
-                const blob = await response.blob();
-        
-                const url = URL.createObjectURL(blob);
-        
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = file.name;
-                a.click();
-        
-                URL.revokeObjectURL(url);
-            } catch (err) {
-                alert(err.message);
-            }
-        });
         // ---------- TOKEN HANDLING ----------
         function ensureValidToken() {
             if (accessToken && Date.now() < tokenExpiry) {
@@ -251,6 +230,29 @@
                         e.preventDefault();
                         manualFileIdInput.value = file.id;
                         previewBtn.click();
+                    });
+
+            
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.textContent = "Download";
+                    downloadBtn.style.marginLeft = "10px";
+            
+                    downloadBtn.addEventListener("click", async () => {
+                        try {
+                            const response = await fetchFile(file.id);
+                            const blob = await response.blob();
+                    
+                            const url = URL.createObjectURL(blob);
+                    
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = file.name;
+                            a.click();
+                    
+                            URL.revokeObjectURL(url);
+                        } catch (err) {
+                            alert(err.message);
+                        }
                     });
                 
                     const meta = document.createElement('div');
