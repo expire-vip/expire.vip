@@ -115,6 +115,7 @@
                     previewBtn.disabled = false;
                 },
             });
+            tokenClient.requestAccessToken({ prompt: '' });
         };
 
         authBtn.addEventListener('click', () => {
