@@ -67,6 +67,66 @@
                 box-shadow:0 2px 8px rgba(0,0,0,0.08);
             "></pre>
     </div>
+    <div id="jsonModal"
+         style="
+            display:none;
+            position:fixed;
+            inset:0;
+            background:rgba(0,0,0,.5);
+            z-index:9999;
+            align-items:center;
+            justify-content:center;
+        ">
+    
+        <div style="
+            width:90vw;
+            height:90vh;
+            background:white;
+            border-radius:8px;
+            display:flex;
+            flex-direction:column;
+            overflow:hidden;
+            box-shadow:0 10px 30px rgba(0,0,0,.4);
+        ">
+    
+            <div style="
+                display:flex;
+                justify-content:space-between;
+                align-items:center;
+                padding:12px 16px;
+                border-bottom:1px solid #ddd;
+                font-size:18px;
+                font-weight:bold;
+            ">
+                <span id="jsonModalTitle">JSON Preview</span>
+    
+                <button id="closeJsonModal"
+                        style="
+                            font-size:20px;
+                            cursor:pointer;
+                            border:none;
+                            background:none;
+                        ">
+                    ✕
+                </button>
+            </div>
+    
+            <pre id="jsonModalContent"
+                 style="
+                    flex:1;
+                    margin:0;
+                    padding:20px;
+                    overflow:auto;
+                    font-family:Consolas, Monaco, monospace;
+                    font-size:14px;
+                    line-height:1.5;
+                    background:#f8f8f8;
+                    white-space:pre;
+                "></pre>
+    
+        </div>
+    
+    </div>
 
     <script>
         // ---------- GLOBAL STATE ----------
@@ -91,7 +151,25 @@
         const previewImage = document.getElementById('previewImage');
         const jsonPreview = document.getElementById('jsonPreview');
         const jsonTitle = document.getElementById("jsonTitle");
+        const jsonModal = document.getElementById("jsonModal");
+        const jsonModalContent = document.getElementById("jsonModalContent");
+        const jsonModalTitle = document.getElementById("jsonModalTitle");
+        const closeJsonModal = document.getElementById("closeJsonModal");
 
+
+        closeJsonModal.onclick = () => {
+            jsonModal.style.display = "none";
+        };
+        jsonModal.onclick = (e) => {
+            if (e.target === jsonModal) {
+                jsonModal.style.display = "none";
+            }
+        };
+        document.addEventListener("keydown", e => {
+            if (e.key === "Escape") {
+                jsonModal.style.display = "none";
+            }
+        });
         // ---------- TOKEN HANDLING ----------
         function ensureValidToken() {
             if (accessToken && Date.now() < tokenExpiry) {
@@ -489,9 +567,9 @@
                     contentType.includes("text/json")
                 ) {
                     const json = await response.json();
-                    jsonPreview.textContent = JSON.stringify(json, null, 4);
-                    jsonTitle.style.display = "block";
-                    jsonPreview.style.display = "block";
+                    jsonModalTitle.textContent = fileId + ".json";
+                    jsonModalContent.textContent = JSON.stringify(json, null, 4);
+                    jsonModal.style.display = "flex";
                 }
                 else if (contentType.startsWith("image/")) {
                     const blob = await response.blob();
