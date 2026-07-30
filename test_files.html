@@ -35,15 +35,37 @@
     
     <div style="margin-top: 15px; border: 1px solid #ccc; width: 300px; height: 200px; display: flex; align-items: center; justify-content: center;">
         <img id="previewImage" style="max-width: 100%; max-height: 100%; display: none;" alt="Preview" />
+
+        <div id="jsonTitle"
+             style="display:none;
+                    margin-top:15px;
+                    margin-bottom:8px;
+                    font-weight:bold;
+                    font-size:16px;">
+            JSON Preview
+        </div>
         <pre id="jsonPreview"
-        style="display:none;
-           width:600px;
-           max-height:400px;
-           overflow:auto;
-           border:1px solid #ccc;
-           padding:10px;
-           background:#f7f7f7;
-           white-space:pre-wrap;"></pre>
+            style="
+                display:none;
+                width:100%;
+                max-width:900px;
+                min-height:250px;
+                max-height:600px;
+                overflow:auto;
+                box-sizing:border-box;
+                padding:16px;
+                margin-top:15px;
+                border:1px solid #ccc;
+                border-radius:8px;
+                background:#f8f9fa;
+                color:#222;
+                font-family:Consolas, Monaco, 'Courier New', monospace;
+                font-size:14px;
+                line-height:1.5;
+                white-space:pre;
+                word-break:break-word;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08);
+            "></pre>
     </div>
 
     <script>
@@ -68,6 +90,7 @@
         const previewBtn = document.getElementById('previewBtn');
         const previewImage = document.getElementById('previewImage');
         const jsonPreview = document.getElementById('jsonPreview');
+        const jsonTitle = document.getElementById("jsonTitle");
 
         // ---------- TOKEN HANDLING ----------
         function ensureValidToken() {
@@ -371,6 +394,7 @@
                             if (manualFileIdInput.value === file.id) {
                                 manualFileIdInput.value = "";
                                 previewImage.style.display = "none";
+                                jsonTitle.style.display = "none";
                                 jsonPreview.style.display = "none";
                             }
                         } catch (err) {
@@ -457,6 +481,7 @@
                 const contentType = response.headers.get("Content-Type") || "";
         
                 previewImage.style.display = "none";
+                jsonTitle.style.display = "none";
                 jsonPreview.style.display = "none";
         
                 if (
@@ -464,7 +489,8 @@
                     contentType.includes("text/json")
                 ) {
                     const json = await response.json();
-                    jsonPreview.textContent = JSON.stringify(json, null, 2);
+                    jsonPreview.textContent = JSON.stringify(json, null, 4);
+                    jsonTitle.style.display = "block";
                     jsonPreview.style.display = "block";
                 }
                 else if (contentType.startsWith("image/")) {
