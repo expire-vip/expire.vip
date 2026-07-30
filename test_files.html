@@ -578,8 +578,9 @@
                 }
                 else {
                     const text = await response.text();
-                    jsonPreview.textContent = text;
-                    jsonPreview.style.display = "block";
+                    jsonModalTitle.textContent = fileId;
+                    jsonModalContent.textContent = text;
+                    jsonModal.style.display = "flex";
                 }
             }
             catch (err) {
