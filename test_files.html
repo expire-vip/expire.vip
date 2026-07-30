@@ -183,6 +183,59 @@
         
             return await response.json();
         }
+
+
+        async function duplicateFile(file) {
+            const token = await ensureValidToken();
+        
+            // Download the original
+            const downloadResponse = await fetch(
+                `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+        
+            if (!downloadResponse.ok) {
+                throw new Error(await downloadResponse.text());
+            }
+        
+            const blob = await downloadResponse.blob();
+        
+            // Upload the copy
+            const metadata = {
+                name: `Copy of ${file.name}`,
+                parents: ["appDataFolder"]
+            };
+        
+            const formData = new FormData();
+            formData.append(
+                "metadata",
+                new Blob([JSON.stringify(metadata)], {
+                    type: "application/json"
+                })
+            );
+            formData.append("file", blob, `Copy of ${file.name}`);
+        
+            const uploadResponse = await fetch(
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    },
+                    body: formData
+                }
+            );
+        
+            if (!uploadResponse.ok) {
+                throw new Error(await uploadResponse.text());
+            }
+        
+            return await uploadResponse.json();
+        }
         
         async function listAppDataFiles() {
             const token = await ensureValidToken();
@@ -348,7 +401,22 @@
                             alert(err.message);
                         }
                     });
+
+
+                    const duplicateBtn = document.createElement("button");
+                    duplicateBtn.textContent = "Duplicate";
+                    duplicateBtn.style.marginLeft = "5px";
                     
+                    duplicateBtn.addEventListener("click", async () => {
+                        try {
+                            await duplicateFile(file);
+                    
+                            // Refresh the list
+                            listBtn.click();
+                        } catch (err) {
+                            alert(err.message);
+                        }
+                    });
                 
                     const meta = document.createElement('div');
                     meta.style.fontSize = '12px';
@@ -369,6 +437,7 @@
                     li.appendChild(link);
                     li.appendChild(downloadBtn);
                     li.appendChild(renameBtn);
+                    li.appendChild(duplicateBtn);
                     li.appendChild(deleteBtn);
                     li.appendChild(meta);
                     fileList.appendChild(li);
