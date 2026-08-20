@@ -323,6 +323,13 @@
                     <input type="date" id="itemDate" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                 </div>
                 <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="itemNotes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes (optional)</label>
+                        <span id="notesCharCount" class="text-xs text-gray-400 dark:text-gray-500">0/500</span>
+                    </div>
+                    <textarea id="itemNotes" rows="3" maxlength="500" placeholder="e.g., Policy number, renewal link, memo..." class="w-full max-w-full block px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm resize-none"></textarea>
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Reminders (max 5, ≤28 days)</label>
                     <div id="reminderChipsForm" class="flex flex-wrap gap-2 mb-1">
                         <!-- reminder chips -->
@@ -649,8 +656,9 @@ async function callGoogleAPI(url, options = {}) {
             const [y, m, d] = item.date.split('-');
             const endDate = new Date(y, m - 1, d); endDate.setDate(endDate.getDate() + 1);
             const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: r.days * 24 * 60 }));
+            const desc = item.notes ? `${item.notes}\n\n(Saved via Expire.vip)` : `Your ${item.name} is expiring.`;
             const body = {
-                summary: `🔴 EXPIRING: ${item.name}`, description: `Your ${item.name} is expiring.`, start: { date: item.date },
+                summary: `🔴 EXPIRING: ${item.name}`, description: desc, start: { date: item.date },
                 end: { date: endDate.toISOString().split('T')[0] }, reminders: { useDefault: false, overrides }
             };
             const res = await callGoogleAPI('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
@@ -664,6 +672,24 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         // ---------- ITEM FORM ----------
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function updateNotesCharCount() {
+            const notesEl = document.getElementById('itemNotes');
+            const countEl = document.getElementById('notesCharCount');
+            if (notesEl && countEl) {
+                countEl.textContent = `${notesEl.value.length}/500`;
+            }
+        }
+
         function getTodayDateString() {
             const today = new Date();
             const yyyy = today.getFullYear();
@@ -678,6 +704,8 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('itemName').value = '';
             document.getElementById('itemCategory').value = 'Document';
             document.getElementById('itemDate').value = getTodayDateString();
+            document.getElementById('itemNotes').value = '';
+            updateNotesCharCount();
             formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
             renderReminderChipsForm();
             document.getElementById('itemModal').classList.remove('hidden');
@@ -690,6 +718,8 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('itemName').value = item.name;
             document.getElementById('itemCategory').value = item.category;
             document.getElementById('itemDate').value = item.date;
+            document.getElementById('itemNotes').value = item.notes || '';
+            updateNotesCharCount();
             formReminders = item.reminders ? [...item.reminders] : [];
             renderReminderChipsForm();
             document.getElementById('itemModal').classList.remove('hidden');
@@ -734,6 +764,7 @@ async function callGoogleAPI(url, options = {}) {
             const name = document.getElementById('itemName').value.trim();
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
+            const notes = document.getElementById('itemNotes').value.trim().slice(0, 500);
         
             if (!name || !date) {
                 showToast('Name and date required.');
@@ -768,6 +799,7 @@ async function callGoogleAPI(url, options = {}) {
                                 name,
                                 category,
                                 date,
+                                notes,
                                 reminders: formReminders
                             });
                         // showLoading("Done adding new calendar event");
@@ -777,6 +809,7 @@ async function callGoogleAPI(url, options = {}) {
                             name,
                             category,
                             date,
+                            notes,
                             reminders: formReminders,
                             eventId: newEventId
                         };
@@ -788,6 +821,7 @@ async function callGoogleAPI(url, options = {}) {
                                 name,
                                 category,
                                 date,
+                                notes,
                                 reminders: formReminders
                             });
                         // showLoading("Done adding new calendar event");
@@ -797,6 +831,7 @@ async function callGoogleAPI(url, options = {}) {
                             name,
                             category,
                             date,
+                            notes,
                             reminders: formReminders,
                             eventId: newEventId
                         });
@@ -856,7 +891,10 @@ async function callGoogleAPI(url, options = {}) {
         }
         function filterItems() {
             const term = document.getElementById('searchInput').value.toLowerCase();
-            return appData.items.filter(i => (activeCategory === 'All' || i.category === activeCategory) && (!term || i.name.toLowerCase().includes(term)));
+            return appData.items.filter(i => 
+                (activeCategory === 'All' || i.category === activeCategory) && 
+                (!term || i.name.toLowerCase().includes(term) || (i.notes && i.notes.toLowerCase().includes(term)))
+            );
         }
 
         function getCategoryEmoji(category) {
@@ -880,15 +918,21 @@ async function callGoogleAPI(url, options = {}) {
                 if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
                 if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
                 const remindersHtml = (item.reminders || []).map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' ');
+                const notesHtml = item.notes ? `
+                    <div class="mt-2.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 flex items-start gap-2 break-words">
+                        <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
+                        <span class="whitespace-pre-line flex-1">${escapeHtml(item.notes)}</span>
+                    </div>` : '';
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
                     <div class="flex justify-between items-start">
-                        <div class="flex-1">
+                        <div class="flex-1 min-w-0">
                             <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
-                            <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5">${item.name}</h2>
+                            <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">Expires: ${item.date}</p>
                             <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
+                            ${notesHtml}
                         </div>
-                        <div class="flex flex-col items-end gap-2 ml-3">
+                        <div class="flex flex-col items-end gap-2 ml-3 flex-shrink-0">
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color}">${status}</span>
                                 <div class="flex gap-2">
                                     <button onclick="openEditModal('${item.id}')" 
@@ -931,9 +975,9 @@ async function callGoogleAPI(url, options = {}) {
             } else {
                 appData = { items:[], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
                 appData.items = [
-                    { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
-                    { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
-                    { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', eventId:'test-3', reminders:[{days:7,method:'popup'}] }
+                    { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
+                    { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
+                    { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] }
                 ];
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
             }
@@ -1018,6 +1062,7 @@ async function callGoogleAPI(url, options = {}) {
         addItemBtn.onclick = openAddModal;
         settingsBtn.onclick = openSettings;
         document.getElementById('searchInput').addEventListener('input', renderAll);
+        document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
 
         // Close modals when clicking backdrop
         document.getElementById('itemModal').addEventListener('click', (e) => {
