@@ -263,6 +263,9 @@
                     <div id="categoryChips" class="flex flex-wrap gap-2">
                         <!-- Chips injected -->
                     </div>
+                    <div id="tagFilterChips" class="flex flex-wrap gap-1.5 items-center">
+                        <!-- Tag filter chips injected -->
+                    </div>
                 </div>
 
                 <!-- Add Button -->
@@ -314,6 +317,26 @@
                     <select id="itemCategory" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                         <!-- populated dynamically -->
                     </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tags (optional)</label>
+                    <div id="tagChipsForm" class="flex flex-wrap gap-1.5 min-h-[36px] items-center p-2 mb-2 bg-gray-50 dark:bg-gray-700/40 rounded-xl border border-gray-200 dark:border-gray-600/80">
+                        <!-- tag chips injected -->
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="relative flex-1">
+                            <span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm font-medium select-none">#</span>
+                            <input type="text" id="tagInput" list="knownTagsDatalist" placeholder="Add tag (press Enter)" class="w-full max-w-full block h-10 pl-8 pr-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                            <datalist id="knownTagsDatalist"></datalist>
+                        </div>
+                        <button type="button" onclick="addTagToForm()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-3.5 h-10 rounded-xl text-sm font-medium transition flex-shrink-0 border border-gray-200 dark:border-gray-600">
+                            + Add
+                        </button>
+                    </div>
+                    <div id="tagSuggestionsContainer" class="flex flex-wrap items-center gap-1.5 mt-2 hidden">
+                        <span class="text-xs text-gray-400 dark:text-gray-500 mr-0.5">Known tags:</span>
+                        <div id="tagSuggestionsList" class="flex flex-wrap gap-1"></div>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expiration Date</label>
@@ -430,6 +453,31 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Tags Management Section -->
+                <div class="border-t border-gray-100 dark:border-gray-700/60 pt-4">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tags</label>
+                        <span class="text-xs text-gray-400 dark:text-gray-500" id="customTagsCount">0 tags</span>
+                    </div>
+
+                    <!-- List of tags -->
+                    <div id="settingsTagsList" class="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                        <!-- populated dynamically -->
+                    </div>
+
+                    <!-- Add new tag form -->
+                    <div class="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-xl border border-gray-200/80 dark:border-gray-700/80">
+                        <p class="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">Add New Tag</p>
+                        <div class="flex items-center gap-2">
+                            <div class="relative flex-1">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-xs font-semibold select-none">#</span>
+                                <input type="text" id="newSettingTagName" maxlength="30" placeholder="e.g., medical, tax" class="w-full h-10 pl-7 pr-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border" onkeydown="if(event.key==='Enter') addTagFromSettings();">
+                            </div>
+                            <button type="button" onclick="addTagFromSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 h-10 rounded-xl text-sm font-medium transition flex-shrink-0">+ Add</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Modal Footer -->
@@ -467,10 +515,12 @@
         let silentRefreshPromise = null;
         let tokenExpiry = 0;
         let driveFileId = null;
-        let appData = { items: [], customCategories: [], settings: { timezone: '' } };
+        let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
         let formReminders = [];
+        let formTags = [];
+        let activeTag = null;
         let isLoading = false;
 
         // DOM elements
@@ -625,6 +675,48 @@ async function callGoogleAPI(url, options = {}) {
         // ---------- TEST MODE ----------
         window.enableTestMode = () => { localStorage.setItem('expire_testMode', 'true'); location.reload(); };
         window.disableTestMode = () => { localStorage.removeItem('expire_testMode'); location.reload(); };
+
+        // ---------- TAGS CONFIG & HELPERS ----------
+        const TAG_PALETTES = [
+            { bg: 'bg-blue-50 dark:bg-blue-900/40', text: 'text-blue-700 dark:text-blue-300', border: 'border-blue-200 dark:border-blue-800' },
+            { bg: 'bg-emerald-50 dark:bg-emerald-900/40', text: 'text-emerald-700 dark:text-emerald-300', border: 'border-emerald-200 dark:border-emerald-800' },
+            { bg: 'bg-purple-50 dark:bg-purple-900/40', text: 'text-purple-700 dark:text-purple-300', border: 'border-purple-200 dark:border-purple-800' },
+            { bg: 'bg-amber-50 dark:bg-amber-900/40', text: 'text-amber-700 dark:text-amber-300', border: 'border-amber-200 dark:border-amber-800' },
+            { bg: 'bg-rose-50 dark:bg-rose-900/40', text: 'text-rose-700 dark:text-rose-300', border: 'border-rose-200 dark:border-rose-800' },
+            { bg: 'bg-cyan-50 dark:bg-cyan-900/40', text: 'text-cyan-700 dark:text-cyan-300', border: 'border-cyan-200 dark:border-cyan-800' },
+            { bg: 'bg-fuchsia-50 dark:bg-fuchsia-900/40', text: 'text-fuchsia-700 dark:text-fuchsia-300', border: 'border-fuchsia-200 dark:border-fuchsia-800' },
+            { bg: 'bg-teal-50 dark:bg-teal-900/40', text: 'text-teal-700 dark:text-teal-300', border: 'border-teal-200 dark:border-teal-800' },
+            { bg: 'bg-orange-50 dark:bg-orange-900/40', text: 'text-orange-700 dark:text-orange-300', border: 'border-orange-200 dark:border-orange-800' }
+        ];
+
+        function getTagColor(tag) {
+            if (!tag) return TAG_PALETTES[0];
+            let hash = 0;
+            const str = String(tag).toLowerCase();
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const idx = Math.abs(hash) % TAG_PALETTES.length;
+            return TAG_PALETTES[idx];
+        }
+
+        function getAllKnownTags() {
+            appData.knownTags = appData.knownTags || [];
+            const itemTags = (appData.items || []).flatMap(i => i.tags || []);
+            const all = [...new Set([...appData.knownTags, ...itemTags])].map(t => String(t).trim()).filter(Boolean);
+            return all;
+        }
+
+        function registerKnownTags(tags) {
+            if (!tags || !tags.length) return;
+            appData.knownTags = appData.knownTags || [];
+            tags.forEach(t => {
+                const clean = String(t).trim();
+                if (clean && !appData.knownTags.some(k => k.toLowerCase() === clean.toLowerCase())) {
+                    appData.knownTags.push(clean);
+                }
+            });
+        }
 
         // ---------- CATEGORIES CONFIG & HELPERS ----------
         const BUILTIN_CATEGORIES = [
@@ -860,21 +952,197 @@ async function callGoogleAPI(url, options = {}) {
             showToast(`Deleted category "${cat.name}".`);
         }
 
+        // ---------- TAGS IN SETTINGS ----------
+        let editingTagIndex = null;
+
+        function startEditTag(idx) {
+            editingTagIndex = idx;
+            renderSettingsTagsList();
+            const input = document.getElementById(`editTagName_${idx}`);
+            if (input) {
+                input.focus();
+                input.select();
+            }
+        }
+
+        function cancelEditTag() {
+            editingTagIndex = null;
+            renderSettingsTagsList();
+        }
+
+        function saveEditTag(idx) {
+            appData.knownTags = appData.knownTags || [];
+            const oldTag = appData.knownTags[idx];
+            if (!oldTag) return;
+
+            const nameInput = document.getElementById(`editTagName_${idx}`);
+            let newTag = (nameInput ? nameInput.value.trim() : '').replace(/^#+/, '').trim();
+
+            if (!newTag) {
+                showToast('Tag name cannot be empty.');
+                return;
+            }
+
+            const existsOther = appData.knownTags.some((t, i) => i !== idx && t.toLowerCase() === newTag.toLowerCase());
+            if (existsOther) {
+                showToast(`Tag "#${newTag}" already exists.`);
+                return;
+            }
+
+            appData.knownTags[idx] = newTag;
+
+            // Automatically migrate items with the old tag name to the new tag name
+            if (oldTag.toLowerCase() !== newTag.toLowerCase()) {
+                appData.items.forEach(item => {
+                    if (item.tags && Array.isArray(item.tags)) {
+                        item.tags = item.tags.map(t => t.toLowerCase() === oldTag.toLowerCase() ? newTag : t);
+                    }
+                });
+                if (activeTag && activeTag.toLowerCase() === oldTag.toLowerCase()) {
+                    activeTag = newTag;
+                }
+            }
+
+            editingTagIndex = null;
+            renderSettingsTagsList();
+            renderAll();
+            showToast(`Renamed tag to "#${newTag}".`);
+        }
+
+        function renderSettingsTagsList() {
+            const container = document.getElementById('settingsTagsList');
+            const countEl = document.getElementById('customTagsCount');
+            if (!container) return;
+
+            // Ensure appData.knownTags contains all unique tags
+            const allKnown = getAllKnownTags();
+            appData.knownTags = allKnown;
+
+            if (countEl) countEl.textContent = `${appData.knownTags.length} tag${appData.knownTags.length !== 1 ? 's' : ''}`;
+
+            if (appData.knownTags.length === 0) {
+                container.innerHTML = `<p class="text-xs text-gray-400 dark:text-gray-500 py-2 italic text-center">No tags added yet.</p>`;
+                return;
+            }
+
+            container.innerHTML = appData.knownTags.map((tag, idx) => {
+                const color = getTagColor(tag);
+                const countUsed = (appData.items || []).filter(i => (i.tags || []).some(t => t.toLowerCase() === tag.toLowerCase())).length;
+
+                if (editingTagIndex === idx) {
+                    return `
+                        <div class="flex items-center gap-1.5 p-1.5 bg-indigo-50/70 dark:bg-gray-700/80 rounded-xl border border-indigo-300 dark:border-indigo-500">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 pl-1 select-none">#</span>
+                            <input type="text" id="editTagName_${idx}" value="${escapeHtml(tag)}" maxlength="30" class="flex-1 min-w-0 h-8 px-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm outline-none" onkeydown="if(event.key==='Enter') saveEditTag(${idx}); if(event.key==='Escape') cancelEditTag();">
+                            <button type="button" onclick="saveEditTag(${idx})" class="text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 h-8 rounded-lg text-xs font-medium transition flex-shrink-0 flex items-center gap-1" title="Save">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button type="button" onclick="cancelEditTag()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 h-8 rounded-lg text-xs transition flex-shrink-0" title="Cancel">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="inline-flex items-center text-xs px-2.5 py-1 rounded-lg font-medium ${color.bg} ${color.text} ${color.border} border truncate">
+                                #${escapeHtml(tag)}
+                            </span>
+                            <span class="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
+                                (${countUsed} item${countUsed !== 1 ? 's' : ''})
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-0.5 ml-2 flex-shrink-0">
+                            <button type="button" onclick="startEditTag(${idx})" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg transition" title="Rename tag">
+                                <i class="fas fa-pencil-alt text-xs"></i>
+                            </button>
+                            <button type="button" onclick="deleteTag(${idx})" class="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition" title="Delete tag">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addTagFromSettings() {
+            const input = document.getElementById('newSettingTagName');
+            let name = (input ? input.value.trim() : '').replace(/^#+/, '').trim();
+
+            if (!name) {
+                showToast('Please enter a tag name.');
+                return;
+            }
+
+            appData.knownTags = appData.knownTags || [];
+            const exists = appData.knownTags.some(t => t.toLowerCase() === name.toLowerCase());
+            if (exists) {
+                showToast(`Tag "#${name}" already exists.`);
+                return;
+            }
+
+            appData.knownTags.push(name);
+            if (input) input.value = '';
+
+            editingTagIndex = null;
+            renderSettingsTagsList();
+            renderAll();
+            showToast(`Added tag "#${name}".`);
+        }
+
+        function deleteTag(idx) {
+            appData.knownTags = appData.knownTags || [];
+            const tag = appData.knownTags[idx];
+            if (!tag) return;
+
+            const countItems = (appData.items || []).filter(i => (i.tags || []).some(t => t.toLowerCase() === tag.toLowerCase())).length;
+            let msg = `Delete tag "#${tag}"?`;
+            if (countItems > 0) {
+                msg += ` (${countItems} item${countItems > 1 ? 's are' : ' is'} using this tag and will have it removed)`;
+            }
+
+            if (!confirm(msg)) return;
+
+            if (editingTagIndex === idx) editingTagIndex = null;
+            appData.knownTags.splice(idx, 1);
+
+            // Remove tag from items as well
+            appData.items.forEach(item => {
+                if (item.tags && Array.isArray(item.tags)) {
+                    item.tags = item.tags.filter(t => t.toLowerCase() !== tag.toLowerCase());
+                }
+            });
+
+            if (activeTag && activeTag.toLowerCase() === tag.toLowerCase()) {
+                activeTag = null;
+            }
+
+            renderSettingsTagsList();
+            renderAll();
+            showToast(`Deleted tag "#${tag}".`);
+        }
+
         // ---------- SETTINGS ----------
         function openSettings() {
             editingCustomCategoryIndex = null;
+            editingTagIndex = null;
             document.getElementById('settingsModal').classList.remove('hidden');
             populateTimezoneSelect();
             renderCustomCategoriesList();
+            renderSettingsTagsList();
         }
         function closeSettings() {
             editingCustomCategoryIndex = null;
+            editingTagIndex = null;
             document.getElementById('settingsModal').classList.add('hidden');
         }
         async function saveSettings() {
             const newTz = document.getElementById('timezoneSelect').value;
             appData.settings.timezone = newTz;
             appData.customCategories = appData.customCategories || [];
+            appData.knownTags = appData.knownTags || [];
             if (isTestMode) {
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
                 showToast('Settings saved (test mode).');
@@ -894,11 +1162,12 @@ async function callGoogleAPI(url, options = {}) {
                 driveFileId = searchData.files[0].id;
                 const fileRes = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
                 const raw = await fileRes.json();
-                appData = Array.isArray(raw) ? { items: raw, customCategories: [], settings: { timezone: '' } } : raw;
+                appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
+                if (!appData.knownTags) appData.knownTags = [];
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                appData = { items: [], customCategories: [], settings: { timezone: tz } };
+                appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
@@ -926,7 +1195,11 @@ async function callGoogleAPI(url, options = {}) {
             const [y, m, d] = item.date.split('-');
             const endDate = new Date(y, m - 1, d); endDate.setDate(endDate.getDate() + 1);
             const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: r.days * 24 * 60 }));
-            const desc = item.notes ? `${item.notes}\n\n(Saved via Expire.vip)` : `Your ${item.name} is expiring.`;
+            let desc = item.notes ? `${item.notes}\n\n` : '';
+            if (item.tags && item.tags.length > 0) {
+                desc += `Tags: ${item.tags.map(t => '#' + t).join(' ')}\n\n`;
+            }
+            desc += `(Saved via Expire.vip)`;
             const body = {
                 summary: `🔴 EXPIRING: ${item.name}`, description: desc, start: { date: item.date },
                 end: { date: endDate.toISOString().split('T')[0] }, reminders: { useDefault: false, overrides }
@@ -978,6 +1251,11 @@ async function callGoogleAPI(url, options = {}) {
             updateNotesCharCount();
             formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
             renderReminderChipsForm();
+            formTags = [];
+            const tagInput = document.getElementById('tagInput');
+            if (tagInput) tagInput.value = '';
+            renderTagChipsForm();
+            updateTagSuggestions();
             document.getElementById('itemModal').classList.remove('hidden');
         }
         function openEditModal(itemId) {
@@ -992,9 +1270,87 @@ async function callGoogleAPI(url, options = {}) {
             updateNotesCharCount();
             formReminders = item.reminders ? [...item.reminders] : [];
             renderReminderChipsForm();
+            formTags = item.tags ? [...item.tags] : [];
+            const tagInput = document.getElementById('tagInput');
+            if (tagInput) tagInput.value = '';
+            renderTagChipsForm();
+            updateTagSuggestions();
             document.getElementById('itemModal').classList.remove('hidden');
         }
         function closeItemModal() { /*if (isLoading) return;*/ document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        
+        function renderTagChipsForm() {
+            const container = document.getElementById('tagChipsForm');
+            if (!container) return;
+            if (!formTags || formTags.length === 0) {
+                container.innerHTML = `<span class="text-xs text-gray-400 dark:text-gray-500 italic">No tags added yet. Type below and press Enter.</span>`;
+                return;
+            }
+            container.innerHTML = formTags.map((tag, idx) => {
+                const color = getTagColor(tag);
+                return `
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${color.bg} ${color.text} ${color.border} border shadow-xs">
+                        #${escapeHtml(tag)}
+                        <button type="button" onclick="removeTagFromForm(${idx})" class="hover:text-red-500 dark:hover:text-red-400 transition ml-0.5" title="Remove tag" aria-label="Remove tag">
+                            &times;
+                        </button>
+                    </span>
+                `;
+            }).join('');
+        }
+
+        function updateTagSuggestions() {
+            const allKnown = getAllKnownTags();
+            const datalist = document.getElementById('knownTagsDatalist');
+            if (datalist) {
+                datalist.innerHTML = allKnown
+                    .filter(t => !formTags.some(ft => ft.toLowerCase() === t.toLowerCase()))
+                    .map(t => `<option value="${escapeHtml(t)}"></option>`)
+                    .join('');
+            }
+
+            const suggestionsContainer = document.getElementById('tagSuggestionsContainer');
+            const suggestionsList = document.getElementById('tagSuggestionsList');
+            if (!suggestionsContainer || !suggestionsList) return;
+
+            const available = allKnown.filter(t => !formTags.some(ft => ft.toLowerCase() === t.toLowerCase()));
+            if (available.length === 0) {
+                suggestionsContainer.classList.add('hidden');
+            } else {
+                suggestionsContainer.classList.remove('hidden');
+                suggestionsList.innerHTML = available.slice(0, 8).map(t => {
+                    const color = getTagColor(t);
+                    return `<button type="button" onclick="addTagToForm('${escapeHtml(t)}')" class="inline-flex items-center text-xs px-2 py-0.5 rounded-md font-medium ${color.bg} ${color.text} ${color.border} border hover:opacity-80 transition">+ #${escapeHtml(t)}</button>`;
+                }).join('');
+            }
+        }
+
+        function addTagToForm(tagValue) {
+            const input = document.getElementById('tagInput');
+            let val = tagValue !== undefined ? tagValue : (input ? input.value : '');
+            val = String(val).trim().replace(/^#+/, '').trim();
+            if (!val) return;
+            if (val.length > 30) val = val.slice(0, 30);
+            
+            const exists = formTags.some(t => t.toLowerCase() === val.toLowerCase());
+            if (exists) {
+                showToast(`Tag "#${val}" already added.`);
+                if (input) input.value = '';
+                return;
+            }
+            
+            formTags.push(val);
+            if (input) input.value = '';
+            renderTagChipsForm();
+            updateTagSuggestions();
+        }
+
+        function removeTagFromForm(idx) {
+            formTags.splice(idx, 1);
+            renderTagChipsForm();
+            updateTagSuggestions();
+        }
+
         function addReminderToForm() {
             const days = parseInt(document.getElementById('reminderDays').value);
             if (isNaN(days) || days < 1 || days > 28) { showToast('Days must be 1–28.'); return; }
@@ -1035,6 +1391,12 @@ async function callGoogleAPI(url, options = {}) {
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
             const notes = document.getElementById('itemNotes').value.trim().slice(0, 500);
+
+            // If user typed tag text without pressing Enter before clicking save, add it automatically
+            const tagInput = document.getElementById('tagInput');
+            if (tagInput && tagInput.value.trim()) {
+                addTagToForm();
+            }
         
             if (!name || !date) {
                 showToast('Name and date required.');
@@ -1070,6 +1432,7 @@ async function callGoogleAPI(url, options = {}) {
                                 category,
                                 date,
                                 notes,
+                                tags: formTags,
                                 reminders: formReminders
                             });
                         // showLoading("Done adding new calendar event");
@@ -1080,6 +1443,7 @@ async function callGoogleAPI(url, options = {}) {
                             category,
                             date,
                             notes,
+                            tags: [...formTags],
                             reminders: formReminders,
                             eventId: newEventId
                         };
@@ -1092,6 +1456,7 @@ async function callGoogleAPI(url, options = {}) {
                                 category,
                                 date,
                                 notes,
+                                tags: formTags,
                                 reminders: formReminders
                             });
                         // showLoading("Done adding new calendar event");
@@ -1102,10 +1467,13 @@ async function callGoogleAPI(url, options = {}) {
                             category,
                             date,
                             notes,
+                            tags: [...formTags],
                             reminders: formReminders,
                             eventId: newEventId
                         });
                     }
+
+                    registerKnownTags(formTags);
         
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
@@ -1121,7 +1489,7 @@ async function callGoogleAPI(url, options = {}) {
             } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = "Save";
-            }        
+            }
             showToast(wasEditing ? 'Updated.' : 'Added.');
         }
         
@@ -1151,31 +1519,97 @@ async function callGoogleAPI(url, options = {}) {
 
         // ---------- SEARCH & FILTER ----------
         let activeCategory = 'All';
+
+        function setTagFilter(tag) {
+            if (activeTag && activeTag.toLowerCase() === String(tag).toLowerCase()) {
+                activeTag = null;
+            } else {
+                activeTag = tag;
+            }
+            renderAll();
+        }
+
+        function clearTagFilter() {
+            activeTag = null;
+            renderAll();
+        }
+
         function renderCategoryChips() {
             const customCats = (appData.customCategories || []).map(c => c.name);
-            const itemCats = appData.items.map(i => i.category);
+            const itemCats = appData.items.map(i => i.category || 'Other');
             const builtinCats = BUILTIN_CATEGORIES.map(c => c.name);
             const allUniqueCats = [...new Set([...builtinCats, ...customCats, ...itemCats])];
             
             const container = document.getElementById('categoryChips');
-            if (!container) return;
-            
-            let html = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='All';renderAll()">All</span>`;
-            
-            allUniqueCats.forEach(cat => {
-                const emoji = getCategoryEmoji(cat);
-                const isActive = activeCategory.toLowerCase() === cat.toLowerCase();
-                html += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='${escapeHtml(cat)}';renderAll()">${emoji} ${escapeHtml(cat)}</span>`;
-            });
-            
-            container.innerHTML = html;
+            if (container) {
+                let html = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='All';renderAll()">All</span>`;
+                
+                allUniqueCats.forEach(cat => {
+                    const emoji = getCategoryEmoji(cat);
+                    const isActive = activeCategory.toLowerCase() === cat.toLowerCase();
+                    html += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='${escapeHtml(cat)}';renderAll()">${emoji} ${escapeHtml(cat)}</span>`;
+                });
+                
+                container.innerHTML = html;
+            }
+
+            // Render Tag Filter Chips
+            const tagContainer = document.getElementById('tagFilterChips');
+            if (tagContainer) {
+                const allTags = getAllKnownTags();
+                if (allTags.length === 0) {
+                    tagContainer.innerHTML = '';
+                } else {
+                    let tagHtml = `
+                        <div class="flex flex-wrap items-center gap-1.5 pt-1 w-full">
+                            <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 mr-1 flex items-center gap-1">
+                                <i class="fas fa-tags text-[10px]"></i> Tags:
+                            </span>
+                    `;
+                    allTags.forEach(t => {
+                        const isActive = activeTag && activeTag.toLowerCase() === t.toLowerCase();
+                        if (isActive) {
+                            tagHtml += `
+                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white shadow-xs transition" title="Click to clear filter">
+                                    #${escapeHtml(t)}
+                                    <i class="fas fa-times text-[10px]"></i>
+                                </button>
+                            `;
+                        } else {
+                            tagHtml += `
+                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200/60 dark:border-gray-600/60 transition">
+                                    #${escapeHtml(t)}
+                                </button>
+                            `;
+                        }
+                    });
+                    if (activeTag) {
+                        tagHtml += `
+                            <button type="button" onclick="clearTagFilter()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium ml-1">
+                                Clear tag
+                            </button>
+                        `;
+                    }
+                    tagHtml += `</div>`;
+                    tagContainer.innerHTML = tagHtml;
+                }
+            }
         }
+
         function filterItems() {
-            const term = document.getElementById('searchInput').value.toLowerCase();
-            return appData.items.filter(i => 
-                (activeCategory === 'All' || i.category.toLowerCase() === activeCategory.toLowerCase()) && 
-                (!term || i.name.toLowerCase().includes(term) || (i.notes && i.notes.toLowerCase().includes(term)))
-            );
+            const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            return appData.items.filter(i => {
+                const itemCategory = i.category || 'Other';
+                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
+                const itemTags = (i.tags || []).map(t => t.toLowerCase());
+                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
+                const matchesTerm = !term || 
+                    (i.name && i.name.toLowerCase().includes(term)) || 
+                    (i.notes && i.notes.toLowerCase().includes(term)) ||
+                    (itemCategory && itemCategory.toLowerCase().includes(term)) ||
+                    itemTags.some(t => t.includes(term));
+                return matchesCategory && matchesTag && matchesTerm;
+            });
         }
 
         function renderItems() {
@@ -1189,6 +1623,15 @@ async function callGoogleAPI(url, options = {}) {
                 if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
                 if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
                 const remindersHtml = (item.reminders || []).map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' ');
+                
+                const tagsHtml = (item.tags && item.tags.length > 0)
+                    ? `<div class="flex flex-wrap gap-1.5 mt-1.5">${item.tags.map(t => {
+                        const c = getTagColor(t);
+                        const isFilterActive = activeTag && activeTag.toLowerCase() === t.toLowerCase();
+                        return `<button type="button" onclick="setTagFilter('${escapeHtml(t)}'); event.stopPropagation();" class="inline-flex items-center text-xs px-2 py-0.5 rounded-md font-medium ${c.bg} ${c.text} ${c.border} border transition hover:scale-105 ${isFilterActive ? 'ring-2 ring-indigo-500 font-semibold' : ''}" title="Filter by #${escapeHtml(t)}">#${escapeHtml(t)}</button>`;
+                      }).join('')}</div>`
+                    : '';
+
                 const notesHtml = item.notes ? `
                     <div class="mt-2.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 flex items-start gap-2 break-words">
                         <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
@@ -1199,7 +1642,8 @@ async function callGoogleAPI(url, options = {}) {
                         <div class="flex-1 min-w-0">
                             <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
                             <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
-                            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">Expires: ${item.date}</p>
+                            ${tagsHtml}
+                            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}</p>
                             <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
                             ${notesHtml}
                         </div>
@@ -1207,13 +1651,13 @@ async function callGoogleAPI(url, options = {}) {
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color}">${status}</span>
                                 <div class="flex gap-2">
                                     <button onclick="openEditModal('${item.id}')" 
-                                            class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                            title="Edit">
+                                             class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             title="Edit">
                                         <i class="fas fa-edit text-lg"></i>
                                     </button>
                                     <button onclick="deleteItem('${item.id}','${item.eventId||''}')" 
-                                            class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                            title="Delete">
+                                             class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             title="Delete">
                                         <i class="fas fa-trash text-lg"></i>
                                     </button>
                                 </div>
@@ -1245,21 +1689,23 @@ async function callGoogleAPI(url, options = {}) {
                 try {
                     appData = JSON.parse(stored);
                     if (!appData.customCategories) appData.customCategories = [];
+                    if (!appData.knownTags) appData.knownTags = [];
                 } catch(e) {
-                    appData = { items:[], customCategories: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
+                    appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
                 }
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}] }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}] }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
                         { id: 'cat_2', name: 'Pet', emoji: '🐶' }
                     ],
+                    knownTags: ['travel', 'personal', 'car', 'recurring', 'web', 'health'],
                     settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' }
                 };
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
@@ -1346,6 +1792,16 @@ async function callGoogleAPI(url, options = {}) {
         settingsBtn.onclick = openSettings;
         document.getElementById('searchInput').addEventListener('input', renderAll);
         document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
+        
+        const tagInputEl = document.getElementById('tagInput');
+        if (tagInputEl) {
+            tagInputEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    addTagToForm();
+                }
+            });
+        }
 
         // Close modals when clicking backdrop
         document.getElementById('itemModal').addEventListener('click', (e) => {
