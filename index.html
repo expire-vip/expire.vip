@@ -312,10 +312,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Category</label>
                     <select id="itemCategory" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
-                        <option value="Document">📄 Document</option>
-                        <option value="Vehicle">🚗 Vehicle</option>
-                        <option value="Subscription">💳 Subscription</option>
-                        <option value="Other">📌 Other</option>
+                        <!-- populated dynamically -->
                     </select>
                 </div>
                 <div>
@@ -388,13 +385,50 @@
             </div>
 
             <!-- Modal Body (Scrollable) -->
-            <div class="p-5 sm:p-6 overflow-y-auto overflow-x-hidden space-y-4 flex-1">
+            <div class="p-5 sm:p-6 overflow-y-auto overflow-x-hidden space-y-5 flex-1">
+                <!-- Timezone Section -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Timezone for reminders</label>
                     <select id="timezoneSelect" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                         <!-- populated dynamically -->
                     </select>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Reminders will be sent at a sensible hour in this timezone.</p>
+                </div>
+
+                <!-- Custom Categories Section -->
+                <div class="border-t border-gray-100 dark:border-gray-700/60 pt-4">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Custom Categories</label>
+                        <span class="text-xs text-gray-400 dark:text-gray-500" id="customCatCount">0 custom</span>
+                    </div>
+
+                    <!-- List of custom categories -->
+                    <div id="customCategoriesList" class="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                        <!-- populated dynamically -->
+                    </div>
+
+                    <!-- Add new custom category form -->
+                    <div class="bg-gray-50 dark:bg-gray-700/40 p-3 rounded-xl border border-gray-200/80 dark:border-gray-700/80">
+                        <p class="text-xs font-semibold text-gray-600 dark:text-gray-300 mb-2">Add New Category</p>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="newCatEmoji" maxlength="4" placeholder="🏷️" value="🏷️" class="w-12 h-10 px-1 text-center text-lg border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border flex-shrink-0" title="Emoji">
+                            <input type="text" id="newCatName" maxlength="30" placeholder="e.g., Health, Pet" class="flex-1 min-w-0 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                            <button type="button" onclick="addCustomCategory()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 h-10 rounded-xl text-sm font-medium transition flex-shrink-0">+ Add</button>
+                        </div>
+                        <!-- Quick emoji suggestions -->
+                        <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
+                            <span class="text-xs text-gray-400 dark:text-gray-500 mr-1">Quick pick:</span>
+                            <button type="button" onclick="setQuickEmoji('🏥')" class="hover:scale-125 transition text-sm p-0.5" title="Health">🏥</button>
+                            <button type="button" onclick="setQuickEmoji('🐶')" class="hover:scale-125 transition text-sm p-0.5" title="Pet">🐶</button>
+                            <button type="button" onclick="setQuickEmoji('🏠')" class="hover:scale-125 transition text-sm p-0.5" title="Home">🏠</button>
+                            <button type="button" onclick="setQuickEmoji('✈️')" class="hover:scale-125 transition text-sm p-0.5" title="Travel">✈️</button>
+                            <button type="button" onclick="setQuickEmoji('💻')" class="hover:scale-125 transition text-sm p-0.5" title="Tech">💻</button>
+                            <button type="button" onclick="setQuickEmoji('🎓')" class="hover:scale-125 transition text-sm p-0.5" title="Education">🎓</button>
+                            <button type="button" onclick="setQuickEmoji('🏋️')" class="hover:scale-125 transition text-sm p-0.5" title="Fitness">🏋️</button>
+                            <button type="button" onclick="setQuickEmoji('⚡')" class="hover:scale-125 transition text-sm p-0.5" title="Utilities">⚡</button>
+                            <button type="button" onclick="setQuickEmoji('🎨')" class="hover:scale-125 transition text-sm p-0.5" title="Hobby">🎨</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -433,7 +467,7 @@
         let silentRefreshPromise = null;
         let tokenExpiry = 0;
         let driveFileId = null;
-        let appData = { items: [], settings: { timezone: '' } };
+        let appData = { items: [], customCategories: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
         let formReminders = [];
@@ -592,6 +626,53 @@ async function callGoogleAPI(url, options = {}) {
         window.enableTestMode = () => { localStorage.setItem('expire_testMode', 'true'); location.reload(); };
         window.disableTestMode = () => { localStorage.removeItem('expire_testMode'); location.reload(); };
 
+        // ---------- CATEGORIES CONFIG & HELPERS ----------
+        const BUILTIN_CATEGORIES = [
+            { name: 'Document', emoji: '📄' },
+            { name: 'Vehicle', emoji: '🚗' },
+            { name: 'Subscription', emoji: '💳' },
+            { name: 'Other', emoji: '📌' }
+        ];
+
+        function getAllCategories() {
+            const custom = appData.customCategories || [];
+            return [...BUILTIN_CATEGORIES, ...custom];
+        }
+
+        function getCategoryEmoji(category) {
+            if (!category) return '📌';
+            const builtin = BUILTIN_CATEGORIES.find(c => c.name.toLowerCase() === category.toLowerCase());
+            if (builtin) return builtin.emoji;
+            const custom = (appData.customCategories || []).find(c => c.name.toLowerCase() === category.toLowerCase());
+            if (custom && custom.emoji) return custom.emoji;
+            return '📌';
+        }
+
+        function populateItemCategorySelect(selectedCategory = 'Document') {
+            const select = document.getElementById('itemCategory');
+            if (!select) return;
+            select.innerHTML = '';
+            const all = getAllCategories();
+            let hasSelected = false;
+            all.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.name;
+                option.textContent = `${cat.emoji} ${cat.name}`;
+                if (cat.name.toLowerCase() === (selectedCategory || '').toLowerCase()) {
+                    option.selected = true;
+                    hasSelected = true;
+                }
+                select.appendChild(option);
+            });
+            if (selectedCategory && !hasSelected) {
+                const option = document.createElement('option');
+                option.value = selectedCategory;
+                option.textContent = `${getCategoryEmoji(selectedCategory)} ${selectedCategory}`;
+                option.selected = true;
+                select.appendChild(option);
+            }
+        }
+
         // ---------- TIMEZONE LIST ----------
         function populateTimezoneSelect() {
             const select = document.getElementById('timezoneSelect');
@@ -606,14 +687,202 @@ async function callGoogleAPI(url, options = {}) {
             });
         }
 
+        // ---------- CUSTOM CATEGORIES IN SETTINGS ----------
+        let editingCustomCategoryIndex = null;
+
+        function setQuickEmoji(emoji) {
+            if (editingCustomCategoryIndex !== null) {
+                const editInput = document.getElementById(`editCatEmoji_${editingCustomCategoryIndex}`);
+                if (editInput) { editInput.value = emoji; return; }
+            }
+            const input = document.getElementById('newCatEmoji');
+            if (input) input.value = emoji;
+        }
+
+        function startEditCustomCategory(idx) {
+            editingCustomCategoryIndex = idx;
+            renderCustomCategoriesList();
+            const nameInput = document.getElementById(`editCatName_${idx}`);
+            if (nameInput) {
+                nameInput.focus();
+                nameInput.select();
+            }
+        }
+
+        function cancelEditCustomCategory() {
+            editingCustomCategoryIndex = null;
+            renderCustomCategoriesList();
+        }
+
+        function saveEditCustomCategory(idx) {
+            appData.customCategories = appData.customCategories || [];
+            const cat = appData.customCategories[idx];
+            if (!cat) return;
+
+            const emojiInput = document.getElementById(`editCatEmoji_${idx}`);
+            const nameInput = document.getElementById(`editCatName_${idx}`);
+            const newEmoji = (emojiInput ? emojiInput.value.trim() : '') || '🏷️';
+            const newName = (nameInput ? nameInput.value.trim() : '');
+
+            if (!newName) {
+                showToast('Category name cannot be empty.');
+                return;
+            }
+
+            const existsBuiltin = BUILTIN_CATEGORIES.some(c => c.name.toLowerCase() === newName.toLowerCase());
+            const existsOtherCustom = appData.customCategories.some((c, i) => i !== idx && c.name.toLowerCase() === newName.toLowerCase());
+            if (existsBuiltin || existsOtherCustom) {
+                showToast('A category with this name already exists.');
+                return;
+            }
+
+            const oldName = cat.name;
+            cat.name = newName;
+            cat.emoji = newEmoji;
+
+            // Automatically migrate items with the old category name to the new name
+            if (oldName.toLowerCase() !== newName.toLowerCase()) {
+                appData.items.forEach(item => {
+                    if (item.category && item.category.toLowerCase() === oldName.toLowerCase()) {
+                        item.category = newName;
+                    }
+                });
+                if (activeCategory && activeCategory.toLowerCase() === oldName.toLowerCase()) {
+                    activeCategory = newName;
+                }
+            }
+
+            editingCustomCategoryIndex = null;
+            renderCustomCategoriesList();
+            renderAll();
+            showToast(`Renamed category to "${newName}".`);
+        }
+
+        function renderCustomCategoriesList() {
+            const container = document.getElementById('customCategoriesList');
+            const countEl = document.getElementById('customCatCount');
+            if (!container) return;
+            
+            appData.customCategories = appData.customCategories || [];
+            if (countEl) countEl.textContent = `${appData.customCategories.length} custom`;
+            
+            if (appData.customCategories.length === 0) {
+                container.innerHTML = `<p class="text-xs text-gray-400 dark:text-gray-500 py-2 italic text-center">No custom categories added yet.</p>`;
+                return;
+            }
+            
+            container.innerHTML = appData.customCategories.map((cat, idx) => {
+                if (editingCustomCategoryIndex === idx) {
+                    return `
+                        <div class="flex items-center gap-1.5 p-1.5 bg-indigo-50/70 dark:bg-gray-700/80 rounded-xl border border-indigo-300 dark:border-indigo-500">
+                            <input type="text" id="editCatEmoji_${idx}" value="${escapeHtml(cat.emoji || '🏷️')}" maxlength="4" class="w-10 h-8 px-1 text-center text-base border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 outline-none flex-shrink-0" title="Emoji">
+                            <input type="text" id="editCatName_${idx}" value="${escapeHtml(cat.name)}" maxlength="30" class="flex-1 min-w-0 h-8 px-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm outline-none" onkeydown="if(event.key==='Enter') saveEditCustomCategory(${idx}); if(event.key==='Escape') cancelEditCustomCategory();">
+                            <button type="button" onclick="saveEditCustomCategory(${idx})" class="text-white bg-indigo-600 hover:bg-indigo-700 px-2.5 h-8 rounded-lg text-xs font-medium transition flex-shrink-0 flex items-center gap-1" title="Save">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button type="button" onclick="cancelEditCustomCategory()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 px-2 h-8 rounded-lg text-xs transition flex-shrink-0" title="Cancel">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+                return `
+                    <div class="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <span class="text-base flex-shrink-0">${escapeHtml(cat.emoji || '🏷️')}</span>
+                            <span class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">${escapeHtml(cat.name)}</span>
+                        </div>
+                        <div class="flex items-center gap-0.5 ml-2 flex-shrink-0">
+                            <button type="button" onclick="startEditCustomCategory(${idx})" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg transition" title="Rename category">
+                                <i class="fas fa-pencil-alt text-xs"></i>
+                            </button>
+                            <button type="button" onclick="deleteCustomCategory(${idx})" class="text-gray-400 hover:text-red-500 p-1.5 rounded-lg transition" title="Delete category">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function addCustomCategory() {
+            const emojiInput = document.getElementById('newCatEmoji');
+            const nameInput = document.getElementById('newCatName');
+            const emoji = (emojiInput ? emojiInput.value.trim() : '') || '🏷️';
+            const name = (nameInput ? nameInput.value.trim() : '');
+            
+            if (!name) {
+                showToast('Please enter a category name.');
+                return;
+            }
+            
+            appData.customCategories = appData.customCategories || [];
+            
+            const existsBuiltin = BUILTIN_CATEGORIES.some(c => c.name.toLowerCase() === name.toLowerCase());
+            const existsCustom = appData.customCategories.some(c => c.name.toLowerCase() === name.toLowerCase());
+            if (existsBuiltin || existsCustom) {
+                showToast('A category with this name already exists.');
+                return;
+            }
+            
+            appData.customCategories.push({
+                id: `cat_${Date.now()}`,
+                name,
+                emoji
+            });
+            
+            if (nameInput) nameInput.value = '';
+            if (emojiInput) emojiInput.value = '🏷️';
+            
+            editingCustomCategoryIndex = null;
+            renderCustomCategoriesList();
+            renderAll();
+            showToast(`Added category "${name}".`);
+        }
+
+        function deleteCustomCategory(idx) {
+            appData.customCategories = appData.customCategories || [];
+            const cat = appData.customCategories[idx];
+            if (!cat) return;
+            
+            const countItems = appData.items.filter(i => i.category.toLowerCase() === cat.name.toLowerCase()).length;
+            let msg = `Delete category "${cat.name}"?`;
+            if (countItems > 0) {
+                msg += ` (${countItems} item${countItems > 1 ? 's are' : ' is'} using this category and will keep their category name)`;
+            }
+            
+            if (!confirm(msg)) return;
+            
+            if (editingCustomCategoryIndex === idx) editingCustomCategoryIndex = null;
+            appData.customCategories.splice(idx, 1);
+            renderCustomCategoriesList();
+            renderAll();
+            showToast(`Deleted category "${cat.name}".`);
+        }
+
         // ---------- SETTINGS ----------
-        function openSettings() { document.getElementById('settingsModal').classList.remove('hidden'); populateTimezoneSelect(); }
-        function closeSettings() { document.getElementById('settingsModal').classList.add('hidden'); }
+        function openSettings() {
+            editingCustomCategoryIndex = null;
+            document.getElementById('settingsModal').classList.remove('hidden');
+            populateTimezoneSelect();
+            renderCustomCategoriesList();
+        }
+        function closeSettings() {
+            editingCustomCategoryIndex = null;
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
         async function saveSettings() {
             const newTz = document.getElementById('timezoneSelect').value;
             appData.settings.timezone = newTz;
-            if (isTestMode) { localStorage.setItem('expire_testData', JSON.stringify(appData)); showToast('Settings saved (test mode).'); }
-            else { await withLoading("Saving item...", async () => {await syncToCloud();}); showToast('Settings saved to Google Drive.'); }
+            appData.customCategories = appData.customCategories || [];
+            if (isTestMode) {
+                localStorage.setItem('expire_testData', JSON.stringify(appData));
+                showToast('Settings saved (test mode).');
+            } else {
+                await withLoading("Saving settings...", async () => { await syncToCloud(); });
+                showToast('Settings saved to Google Drive.');
+            }
+            renderAll();
             closeSettings();
         }
 
@@ -625,10 +894,11 @@ async function callGoogleAPI(url, options = {}) {
                 driveFileId = searchData.files[0].id;
                 const fileRes = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
                 const raw = await fileRes.json();
-                appData = Array.isArray(raw) ? { items: raw, settings: { timezone: '' } } : raw;
+                appData = Array.isArray(raw) ? { items: raw, customCategories: [], settings: { timezone: '' } } : raw;
+                if (!appData.customCategories) appData.customCategories = [];
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                appData = { items: [], settings: { timezone: tz } };
+                appData = { items: [], customCategories: [], settings: { timezone: tz } };
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
@@ -702,7 +972,7 @@ async function callGoogleAPI(url, options = {}) {
             editingItemId = null;
             document.getElementById('modalTitle').textContent = 'Add New Item';
             document.getElementById('itemName').value = '';
-            document.getElementById('itemCategory').value = 'Document';
+            populateItemCategorySelect('Document');
             document.getElementById('itemDate').value = getTodayDateString();
             document.getElementById('itemNotes').value = '';
             updateNotesCharCount();
@@ -716,7 +986,7 @@ async function callGoogleAPI(url, options = {}) {
             editingItemId = itemId;
             document.getElementById('modalTitle').textContent = 'Edit Item';
             document.getElementById('itemName').value = item.name;
-            document.getElementById('itemCategory').value = item.category;
+            populateItemCategorySelect(item.category);
             document.getElementById('itemDate').value = item.date;
             document.getElementById('itemNotes').value = item.notes || '';
             updateNotesCharCount();
@@ -882,29 +1152,30 @@ async function callGoogleAPI(url, options = {}) {
         // ---------- SEARCH & FILTER ----------
         let activeCategory = 'All';
         function renderCategoryChips() {
-            const cats = [...new Set(appData.items.map(i => i.category))];
+            const customCats = (appData.customCategories || []).map(c => c.name);
+            const itemCats = appData.items.map(i => i.category);
+            const builtinCats = BUILTIN_CATEGORIES.map(c => c.name);
+            const allUniqueCats = [...new Set([...builtinCats, ...customCats, ...itemCats])];
+            
             const container = document.getElementById('categoryChips');
-            container.innerHTML = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}" onclick="activeCategory='All';renderAll()">All</span>`;
-            cats.forEach(cat => {
-                container.innerHTML += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === cat ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}" onclick="activeCategory='${cat}';renderAll()">${cat}</span>`;
+            if (!container) return;
+            
+            let html = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='All';renderAll()">All</span>`;
+            
+            allUniqueCats.forEach(cat => {
+                const emoji = getCategoryEmoji(cat);
+                const isActive = activeCategory.toLowerCase() === cat.toLowerCase();
+                html += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='${escapeHtml(cat)}';renderAll()">${emoji} ${escapeHtml(cat)}</span>`;
             });
+            
+            container.innerHTML = html;
         }
         function filterItems() {
             const term = document.getElementById('searchInput').value.toLowerCase();
             return appData.items.filter(i => 
-                (activeCategory === 'All' || i.category === activeCategory) && 
+                (activeCategory === 'All' || i.category.toLowerCase() === activeCategory.toLowerCase()) && 
                 (!term || i.name.toLowerCase().includes(term) || (i.notes && i.notes.toLowerCase().includes(term)))
             );
-        }
-
-        function getCategoryEmoji(category) {
-            const map = {
-                'Document': '📄',
-                'Vehicle': '🚗',
-                'Subscription': '💳',
-                'Other': '📌'
-            };
-            return map[category] || '📌';
         }
 
         function renderItems() {
@@ -971,14 +1242,26 @@ async function callGoogleAPI(url, options = {}) {
         function loadTestData() {
             const stored = localStorage.getItem('expire_testData');
             if (stored) {
-                try { appData = JSON.parse(stored); } catch(e) { appData = { items:[], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } }; }
+                try {
+                    appData = JSON.parse(stored);
+                    if (!appData.customCategories) appData.customCategories = [];
+                } catch(e) {
+                    appData = { items:[], customCategories: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
+                }
             } else {
-                appData = { items:[], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
-                appData.items = [
-                    { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
-                    { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
-                    { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] }
-                ];
+                appData = {
+                    items: [
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}] }
+                    ],
+                    customCategories: [
+                        { id: 'cat_1', name: 'Health', emoji: '🏥' },
+                        { id: 'cat_2', name: 'Pet', emoji: '🐶' }
+                    ],
+                    settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' }
+                };
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
             }
         }
