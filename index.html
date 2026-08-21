@@ -1522,6 +1522,11 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         async function archiveItem(itemId, currentArchived) {
+            const action = currentArchived ? 'unarchive' : 'archive';
+            const actionText = currentArchived ? 'unarchive' : 'archive';
+            if (!confirm(`Are you sure you want to ${actionText} this item?`)) {
+                return;
+            }
             const idx = appData.items.findIndex(i => i.id === itemId);
             if (idx === -1) return;
             
@@ -1535,8 +1540,7 @@ async function callGoogleAPI(url, options = {}) {
                 });
             }
             
-            const action = currentArchived ? 'unarchived' : 'archived';
-            showToast(`Item ${action}.`);
+            showToast(`Item ${action}d.`);
             renderAll();
         }
 
@@ -1888,21 +1892,21 @@ async function callGoogleAPI(url, options = {}) {
                         </div>
                         <div class="flex flex-col items-end gap-2 ml-3 flex-shrink-0">
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color}">${status}</span>
-                                <div class="flex gap-2">
+                                <div class="flex gap-1">
                                     <button onclick="openEditModal('${item.id}')" 
-                                             class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                              title="Edit">
-                                        <i class="fas fa-edit text-lg"></i>
+                                        <i class="fas fa-edit text-base"></i>
                                     </button>
                                     <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
-                                             class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                              title="${item.archived ? 'Unarchive' : 'Archive'}">
-                                        <i class="fas fa-archive text-lg"></i>
+                                        <i class="fas fa-archive text-base"></i>
                                     </button>
                                     <button onclick="deleteItem('${item.id}','${item.eventId||''}')" 
-                                             class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             class="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                              title="Delete">
-                                        <i class="fas fa-trash text-lg"></i>
+                                        <i class="fas fa-trash text-base"></i>
                                     </button>
                                 </div>
                         </div>
