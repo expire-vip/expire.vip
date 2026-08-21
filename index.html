@@ -354,6 +354,27 @@
                         <span>This item has no expiration date — saved in your vault without calendar alerts.</span>
                     </div>
                 </div>
+                <!-- Time & Duration -->
+                <div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-400 select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition">
+                            <input type="checkbox" id="itemHasTime" onchange="toggleTimeFields()" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <span>Set specific time</span>
+                        </label>
+                    </div>
+                    <div id="timeFieldsContainer" class="mt-2 hidden">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="flex-1 min-w-[120px]">
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Time</label>
+                                <input type="time" id="itemTime" class="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                            </div>
+                            <div class="flex-1 min-w-[100px]">
+                                <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Duration (minutes)</label>
+                                <input type="number" id="itemDuration" min="1" max="1440" value="30" class="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label for="itemNotes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes (optional)</label>
@@ -1176,6 +1197,9 @@ async function callGoogleAPI(url, options = {}) {
                 }
                 // Ensure date is a string (could be empty)
                 item.date = item.date || '';
+                // Ensure time and duration exist (optional)
+                if (item.time === undefined) item.time = '';
+                if (item.durationMinutes === undefined) item.durationMinutes = 30;
             });
         }
 
@@ -1189,7 +1213,7 @@ async function callGoogleAPI(url, options = {}) {
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
-                migrateItems(); // ensure noExpiration is set
+                migrateItems(); // ensure noExpiration and time fields
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
@@ -1216,8 +1240,26 @@ async function callGoogleAPI(url, options = {}) {
 
         // ---------- CALENDAR ----------
         async function addCalendarEvent(item) {
-            const [y, m, d] = item.date.split('-');
-            const endDate = new Date(y, m - 1, d); endDate.setDate(endDate.getDate() + 1);
+            const tz = appData.settings.timezone || 'UTC';
+            let start, end;
+            if (item.time && item.time.length > 0 && !item.noExpiration) {
+                // Timed event
+                const startDateTime = `${item.date}T${item.time}:00`;
+                const startDate = new Date(`${item.date}T${item.time}:00`);
+                const duration = item.durationMinutes || 30;
+                const endDate = new Date(startDate.getTime() + duration * 60000);
+                const endDateTime = endDate.toISOString().replace('Z', '');
+                start = { dateTime: startDateTime, timeZone: tz };
+                end = { dateTime: endDateTime, timeZone: tz };
+            } else {
+                // All-day event
+                const [y, m, d] = item.date.split('-');
+                const endDate = new Date(y, m - 1, d);
+                endDate.setDate(endDate.getDate() + 1);
+                start = { date: item.date };
+                end = { date: endDate.toISOString().split('T')[0] };
+            }
+
             const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: r.days * 24 * 60 }));
             let desc = item.notes ? `${item.notes}\n\n` : '';
             if (item.tags && item.tags.length > 0) {
@@ -1225,8 +1267,11 @@ async function callGoogleAPI(url, options = {}) {
             }
             desc += `(Saved via Expire.vip)`;
             const body = {
-                summary: `🔴 EXPIRING: ${item.name}`, description: desc, start: { date: item.date },
-                end: { date: endDate.toISOString().split('T')[0] }, reminders: { useDefault: false, overrides }
+                summary: `🔴 EXPIRING: ${item.name}`,
+                description: desc,
+                start,
+                end,
+                reminders: { useDefault: false, overrides }
             };
             const res = await callGoogleAPI('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
                 method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -1270,7 +1315,18 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('dateInputContainer').classList.toggle('hidden', noDate);
             document.getElementById('noDateMessage').classList.toggle('hidden', !noDate);
             document.getElementById('remindersSection').classList.toggle('hidden', noDate);
+            document.getElementById('timeFieldsContainer').classList.toggle('hidden', noDate || !document.getElementById('itemHasTime').checked);
             // Do NOT clear the date input – keep the value for later use
+        }
+
+        function toggleTimeFields() {
+            const hasTime = document.getElementById('itemHasTime').checked;
+            const noDate = document.getElementById('itemNoDate').checked;
+            // Only show time fields if not no-date and hasTime checked
+            document.getElementById('timeFieldsContainer').classList.toggle('hidden', !hasTime || noDate);
+            if (!hasTime) {
+                document.getElementById('itemTime').value = '';
+            }
         }
 
         function openAddModal() {
@@ -1286,6 +1342,11 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('itemDate').value = getTodayDateString();
             document.getElementById('itemNotes').value = '';
             updateNotesCharCount();
+            // Reset time fields
+            document.getElementById('itemHasTime').checked = false;
+            document.getElementById('timeFieldsContainer').classList.add('hidden');
+            document.getElementById('itemTime').value = '';
+            document.getElementById('itemDuration').value = 30;
             formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
             renderReminderChipsForm();
             formTags = [];
@@ -1311,6 +1372,12 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('itemDate').value = item.date || '';
             document.getElementById('itemNotes').value = item.notes || '';
             updateNotesCharCount();
+            // Time fields
+            const hasTime = item.time && item.time.length > 0 && !noExpiration;
+            document.getElementById('itemHasTime').checked = hasTime;
+            document.getElementById('timeFieldsContainer').classList.toggle('hidden', !hasTime || noExpiration);
+            document.getElementById('itemTime').value = hasTime ? item.time : '';
+            document.getElementById('itemDuration').value = hasTime ? (item.durationMinutes || 30) : 30;
             formReminders = item.reminders ? [...item.reminders] : [];
             renderReminderChipsForm();
             formTags = item.tags ? [...item.tags] : [];
@@ -1431,6 +1498,9 @@ async function callGoogleAPI(url, options = {}) {
             const date = document.getElementById('itemDate').value;
             const notes = document.getElementById('itemNotes').value.trim().slice(0, 500);
             const noExpiration = document.getElementById('itemNoDate').checked;
+            const hasTime = document.getElementById('itemHasTime').checked;
+            const time = hasTime ? document.getElementById('itemTime').value : '';
+            const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
 
             // If user typed tag text without pressing Enter before clicking save, add it automatically
             const tagInput = document.getElementById('tagInput');
@@ -1444,6 +1514,10 @@ async function callGoogleAPI(url, options = {}) {
             }
             if (!noExpiration && !date) {
                 showToast('Please enter an expiration date, or check "No expiry date".');
+                return;
+            }
+            if (hasTime && !time) {
+                showToast('Please enter a time, or uncheck "Set specific time".');
                 return;
             }
         
@@ -1462,7 +1536,7 @@ async function callGoogleAPI(url, options = {}) {
         
                         const old = appData.items[idx];
         
-                        // Remove old calendar event if it exists (regardless of new noExpiration state)
+                        // Remove old calendar event if it exists (regardless of new state)
                         if (old.eventId && !isTestMode) {
                             showLoading("Removing calendar event");
                             await removeCalendarEvent(old.eventId).catch(() => {});
@@ -1470,19 +1544,23 @@ async function callGoogleAPI(url, options = {}) {
                         }
 
                         let newEventId = null;
-                        // Only create a new event if we have a date AND noExpiration is false
+                        // Only create a new event if we have a date, not noExpiration, and (time is optional)
                         if (date && !noExpiration) {
                             showLoading("Adding new calendar event");
+                            const eventData = {
+                                name,
+                                category,
+                                date,
+                                time: hasTime ? time : '',
+                                durationMinutes: hasTime ? durationMinutes : 30,
+                                notes,
+                                tags: formTags,
+                                reminders: formReminders,
+                                noExpiration: false
+                            };
                             newEventId = isTestMode
                                 ? `test-${Date.now()}`
-                                : await addCalendarEvent({
-                                    name,
-                                    category,
-                                    date,
-                                    notes,
-                                    tags: formTags,
-                                    reminders: formReminders
-                                });
+                                : await addCalendarEvent(eventData);
                         }
         
                         appData.items[idx] = {
@@ -1491,6 +1569,8 @@ async function callGoogleAPI(url, options = {}) {
                             category,
                             date,                 // keep the date even if noExpiration is true
                             noExpiration: noExpiration,
+                            time: hasTime ? time : '',
+                            durationMinutes: hasTime ? durationMinutes : 30,
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
@@ -1500,16 +1580,20 @@ async function callGoogleAPI(url, options = {}) {
                         let newEventId = null;
                         if (date && !noExpiration) {
                             showLoading("Adding new calendar event");
+                            const eventData = {
+                                name,
+                                category,
+                                date,
+                                time: hasTime ? time : '',
+                                durationMinutes: hasTime ? durationMinutes : 30,
+                                notes,
+                                tags: formTags,
+                                reminders: formReminders,
+                                noExpiration: false
+                            };
                             newEventId = isTestMode
                                 ? `test-${Date.now()}`
-                                : await addCalendarEvent({
-                                    name,
-                                    category,
-                                    date,
-                                    notes,
-                                    tags: formTags,
-                                    reminders: formReminders
-                                });
+                                : await addCalendarEvent(eventData);
                         }
         
                         appData.items.push({
@@ -1518,6 +1602,8 @@ async function callGoogleAPI(url, options = {}) {
                             category,
                             date,
                             noExpiration: noExpiration,
+                            time: hasTime ? time : '',
+                            durationMinutes: hasTime ? durationMinutes : 30,
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
@@ -1667,7 +1753,7 @@ async function callGoogleAPI(url, options = {}) {
         function renderItems() {
             const filtered = filterItems();
             if (!filtered.length) return itemsList.innerHTML = '<p class="text-gray-400 dark:text-gray-500 text-center py-6">No items found.</p>';
-            // Sort: items with noExpiration go to the end, then by date ascending
+            // Sort: items with noExpiration go to the end, then by date ascending (and time if same date)
             filtered.sort((a, b) => {
                 // Sort by noExpiration: false (has date) first, true (no expiry) last
                 if (a.noExpiration && !b.noExpiration) return 1;
@@ -1676,7 +1762,12 @@ async function callGoogleAPI(url, options = {}) {
                 if (!a.date && !b.date) return 0;
                 if (!a.date) return 1;
                 if (!b.date) return -1;
-                return new Date(a.date) - new Date(b.date);
+                const dateCompare = new Date(a.date) - new Date(b.date);
+                if (dateCompare !== 0) return dateCompare;
+                // If same date, sort by time (earlier first)
+                const aTime = a.time || '00:00';
+                const bTime = b.time || '00:00';
+                return aTime.localeCompare(bTime);
             });
             itemsList.innerHTML = filtered.map(item => {
                 let status, color;
@@ -1713,9 +1804,13 @@ async function callGoogleAPI(url, options = {}) {
                         <span class="whitespace-pre-line flex-1">${escapeHtml(item.notes)}</span>
                     </div>` : '';
 
-                const dateLineHtml = item.date && !item.noExpiration
-                    ? `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}</p>`
-                    : `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
+                let dateLineHtml = '';
+                if (item.date && !item.noExpiration) {
+                    const timeStr = item.time ? ` at ${item.time}` : '';
+                    dateLineHtml = `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}${timeStr}</p>`;
+                } else {
+                    dateLineHtml = `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
+                }
 
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
                     <div class="flex justify-between items-start">
@@ -1777,10 +1872,10 @@ async function callGoogleAPI(url, options = {}) {
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30 },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false, time:'', durationMinutes:30 },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30 },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false, time:'', durationMinutes:30 }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
