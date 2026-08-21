@@ -339,8 +339,20 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expiration Date</label>
-                    <input type="date" id="itemDate" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Expiration Date</label>
+                        <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-400 select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition">
+                            <input type="checkbox" id="itemNoDate" onchange="toggleNoDateMode()" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <span>No expiry date</span>
+                        </label>
+                    </div>
+                    <div id="dateInputContainer">
+                        <input type="date" id="itemDate" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                    </div>
+                    <div id="noDateMessage" class="hidden p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl border border-indigo-100 dark:border-indigo-800/50 text-xs text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                        <i class="fas fa-infinity text-indigo-500 text-sm flex-shrink-0"></i>
+                        <span>This item has no expiration date — saved in your vault without calendar alerts.</span>
+                    </div>
                 </div>
                 <div>
                     <div class="flex justify-between items-center mb-1">
@@ -349,7 +361,7 @@
                     </div>
                     <textarea id="itemNotes" rows="3" maxlength="500" placeholder="e.g., Policy number, renewal link, memo..." class="w-full max-w-full block px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm resize-none"></textarea>
                 </div>
-                <div>
+                <div id="remindersSection">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Reminders (max 5, ≤28 days)</label>
                     <div id="reminderChipsForm" class="flex flex-wrap gap-2 mb-1">
                         <!-- reminder chips -->
@@ -1155,6 +1167,18 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         // ---------- CLOUD STORAGE (Google Drive) ----------
+        // Migration function to add noExpiration flag and ensure date is a string
+        function migrateItems() {
+            appData.items.forEach(item => {
+                if (item.noExpiration === undefined) {
+                    // If date is empty or null, treat as no expiration
+                    item.noExpiration = !item.date || item.date.trim() === '';
+                }
+                // Ensure date is a string (could be empty)
+                item.date = item.date || '';
+            });
+        }
+
         async function loadFromCloud() {
             const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
@@ -1165,6 +1189,7 @@ async function callGoogleAPI(url, options = {}) {
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
+                migrateItems(); // ensure noExpiration is set
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
@@ -1175,7 +1200,6 @@ async function callGoogleAPI(url, options = {}) {
                 const fileMeta = await createRes.json();
                 driveFileId = fileMeta.id;
                 await syncToCloud();
-                // await withLoading("Saving item...", async () => {await syncToCloud();});
             }
             if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
         }
@@ -1241,11 +1265,24 @@ async function callGoogleAPI(url, options = {}) {
             return `${yyyy}-${mm}-${dd}`;
         }
 
+        function toggleNoDateMode() {
+            const noDate = document.getElementById('itemNoDate').checked;
+            document.getElementById('dateInputContainer').classList.toggle('hidden', noDate);
+            document.getElementById('noDateMessage').classList.toggle('hidden', !noDate);
+            document.getElementById('remindersSection').classList.toggle('hidden', noDate);
+            // Do NOT clear the date input – keep the value for later use
+        }
+
         function openAddModal() {
             editingItemId = null;
             document.getElementById('modalTitle').textContent = 'Add New Item';
             document.getElementById('itemName').value = '';
             populateItemCategorySelect('Document');
+            // Reset no-date state (unchecked, show date, hide message, show reminders)
+            document.getElementById('itemNoDate').checked = false;
+            document.getElementById('dateInputContainer').classList.remove('hidden');
+            document.getElementById('noDateMessage').classList.add('hidden');
+            document.getElementById('remindersSection').classList.remove('hidden');
             document.getElementById('itemDate').value = getTodayDateString();
             document.getElementById('itemNotes').value = '';
             updateNotesCharCount();
@@ -1265,7 +1302,13 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('modalTitle').textContent = 'Edit Item';
             document.getElementById('itemName').value = item.name;
             populateItemCategorySelect(item.category);
-            document.getElementById('itemDate').value = item.date;
+            // Use noExpiration flag, fallback to !date for backward compatibility
+            const noExpiration = item.noExpiration || false;
+            document.getElementById('itemNoDate').checked = noExpiration;
+            document.getElementById('dateInputContainer').classList.toggle('hidden', noExpiration);
+            document.getElementById('noDateMessage').classList.toggle('hidden', !noExpiration);
+            document.getElementById('remindersSection').classList.toggle('hidden', noExpiration);
+            document.getElementById('itemDate').value = item.date || '';
             document.getElementById('itemNotes').value = item.notes || '';
             updateNotesCharCount();
             formReminders = item.reminders ? [...item.reminders] : [];
@@ -1277,7 +1320,7 @@ async function callGoogleAPI(url, options = {}) {
             updateTagSuggestions();
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        function closeItemModal() { /*if (isLoading) return;*/ document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
         
         function renderTagChipsForm() {
             const container = document.getElementById('tagChipsForm');
@@ -1360,10 +1403,6 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('reminderDays').value = '';
         }
         function removeReminderFromForm(idx) { formReminders.splice(idx, 1); renderReminderChipsForm(); }
-        //function renderReminderChipsForm() {
-        //    const container = document.getElementById('reminderChipsForm');
-        //    container.innerHTML = formReminders.map((r,i) => `<span class="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 rounded-full text-sm text-gray-800 dark:text-gray-200">${r.days}d (${r.method}) <button onclick="removeReminderFromForm(${i})" class="ml-1 text-gray-500 hover:text-red-500">&times;</button></span>`).join('');
-        //}
         function renderReminderChipsForm() {
             const container = document.getElementById('reminderChipsForm');
         
@@ -1391,6 +1430,7 @@ async function callGoogleAPI(url, options = {}) {
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
             const notes = document.getElementById('itemNotes').value.trim().slice(0, 500);
+            const noExpiration = document.getElementById('itemNoDate').checked;
 
             // If user typed tag text without pressing Enter before clicking save, add it automatically
             const tagInput = document.getElementById('tagInput');
@@ -1398,8 +1438,12 @@ async function callGoogleAPI(url, options = {}) {
                 addTagToForm();
             }
         
-            if (!name || !date) {
-                showToast('Name and date required.');
+            if (!name) {
+                showToast('Item name is required.');
+                return;
+            }
+            if (!noExpiration && !date) {
+                showToast('Please enter an expiration date, or check "No expiry date".');
                 return;
             }
         
@@ -1418,54 +1462,62 @@ async function callGoogleAPI(url, options = {}) {
         
                         const old = appData.items[idx];
         
+                        // Remove old calendar event if it exists (regardless of new noExpiration state)
                         if (old.eventId && !isTestMode) {
                             showLoading("Removing calendar event");
                             await removeCalendarEvent(old.eventId).catch(() => {});
                             showLoading("Done removing calendar event");
                         }
 
-                        showLoading("Adding new calendar event");
-                        const newEventId = isTestMode
-                            ? `test-${Date.now()}`
-                            : await addCalendarEvent({
-                                name,
-                                category,
-                                date,
-                                notes,
-                                tags: formTags,
-                                reminders: formReminders
-                            });
-                        // showLoading("Done adding new calendar event");
+                        let newEventId = null;
+                        // Only create a new event if we have a date AND noExpiration is false
+                        if (date && !noExpiration) {
+                            showLoading("Adding new calendar event");
+                            newEventId = isTestMode
+                                ? `test-${Date.now()}`
+                                : await addCalendarEvent({
+                                    name,
+                                    category,
+                                    date,
+                                    notes,
+                                    tags: formTags,
+                                    reminders: formReminders
+                                });
+                        }
         
                         appData.items[idx] = {
                             ...old,
                             name,
                             category,
-                            date,
+                            date,                 // keep the date even if noExpiration is true
+                            noExpiration: noExpiration,
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
-                            eventId: newEventId
+                            eventId: newEventId || null
                         };
                     } else {
-                        showLoading("Adding new calendar event");
-                        const newEventId = isTestMode
-                            ? `test-${Date.now()}`
-                            : await addCalendarEvent({
-                                name,
-                                category,
-                                date,
-                                notes,
-                                tags: formTags,
-                                reminders: formReminders
-                            });
-                        // showLoading("Done adding new calendar event");
+                        let newEventId = null;
+                        if (date && !noExpiration) {
+                            showLoading("Adding new calendar event");
+                            newEventId = isTestMode
+                                ? `test-${Date.now()}`
+                                : await addCalendarEvent({
+                                    name,
+                                    category,
+                                    date,
+                                    notes,
+                                    tags: formTags,
+                                    reminders: formReminders
+                                });
+                        }
         
                         appData.items.push({
                             id: Date.now().toString(),
                             name,
                             category,
                             date,
+                            noExpiration: noExpiration,
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
@@ -1615,14 +1667,37 @@ async function callGoogleAPI(url, options = {}) {
         function renderItems() {
             const filtered = filterItems();
             if (!filtered.length) return itemsList.innerHTML = '<p class="text-gray-400 dark:text-gray-500 text-center py-6">No items found.</p>';
-            filtered.sort((a,b) => new Date(a.date) - new Date(b.date));
+            // Sort: items with noExpiration go to the end, then by date ascending
+            filtered.sort((a, b) => {
+                // Sort by noExpiration: false (has date) first, true (no expiry) last
+                if (a.noExpiration && !b.noExpiration) return 1;
+                if (!a.noExpiration && b.noExpiration) return -1;
+                // Both have same noExpiration status
+                if (!a.date && !b.date) return 0;
+                if (!a.date) return 1;
+                if (!b.date) return -1;
+                return new Date(a.date) - new Date(b.date);
+            });
             itemsList.innerHTML = filtered.map(item => {
-                const diffDays = Math.ceil((new Date(item.date) - new Date())/(1000*60*60*24));
-                let status = `${diffDays} days left`, color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                if (diffDays <= 30) { status = `${diffDays} days`; color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; }
-                if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
-                if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
-                const remindersHtml = (item.reminders || []).map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' ');
+                let status, color;
+                if (item.noExpiration) {
+                    status = '∞ No expiry';
+                    color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
+                } else if (!item.date) {
+                    // fallback if no date and no flag
+                    status = '∞ No expiry';
+                    color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
+                } else {
+                    const diffDays = Math.ceil((new Date(item.date) - new Date())/(1000*60*60*24));
+                    status = `${diffDays} days left`;
+                    color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+                    if (diffDays <= 30) { status = `${diffDays} days`; color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; }
+                    if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
+                    if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
+                }
+                const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
+                    ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' '))
+                    : '';
                 
                 const tagsHtml = (item.tags && item.tags.length > 0)
                     ? `<div class="flex flex-wrap gap-1.5 mt-1.5">${item.tags.map(t => {
@@ -1637,13 +1712,18 @@ async function callGoogleAPI(url, options = {}) {
                         <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
                         <span class="whitespace-pre-line flex-1">${escapeHtml(item.notes)}</span>
                     </div>` : '';
+
+                const dateLineHtml = item.date && !item.noExpiration
+                    ? `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}</p>`
+                    : `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
+
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
                     <div class="flex justify-between items-start">
                         <div class="flex-1 min-w-0">
                             <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
                             <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             ${tagsHtml}
-                            <p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}</p>
+                            ${dateLineHtml}
                             <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
                             ${notesHtml}
                         </div>
@@ -1690,16 +1770,17 @@ async function callGoogleAPI(url, options = {}) {
                     appData = JSON.parse(stored);
                     if (!appData.customCategories) appData.customCategories = [];
                     if (!appData.knownTags) appData.knownTags = [];
+                    migrateItems();
                 } catch(e) {
                     appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
                 }
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}] },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}] },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}] },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}] }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
