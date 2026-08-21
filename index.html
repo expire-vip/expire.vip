@@ -243,6 +243,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 0.5rem;
         }
         #previewModal .preview-header h3 {
             font-size: 1rem;
@@ -257,6 +258,7 @@
             display: flex;
             gap: 0.5rem;
             align-items: center;
+            flex-shrink: 0;
         }
         #previewModal .preview-header .preview-actions button {
             background: none;
@@ -267,6 +269,7 @@
             padding: 0.25rem 0.5rem;
             border-radius: 0.5rem;
             transition: all 0.2s;
+            white-space: nowrap;
         }
         #previewModal .preview-header .preview-actions button:hover {
             background: #e5e7eb;
@@ -285,6 +288,20 @@
         }
         .dark #previewModal .preview-header .preview-actions .close-preview:hover {
             color: #f3f4f6;
+        }
+        #previewModal .preview-header .preview-actions .save-edit-btn {
+            background: #2563eb;
+            color: white;
+        }
+        #previewModal .preview-header .preview-actions .save-edit-btn:hover {
+            background: #1d4ed8;
+            color: white;
+        }
+        .dark #previewModal .preview-header .preview-actions .save-edit-btn {
+            background: #3b82f6;
+        }
+        .dark #previewModal .preview-header .preview-actions .save-edit-btn:hover {
+            background: #2563eb;
         }
         #previewModal .preview-header .preview-meta {
             font-size: 0.75rem;
@@ -307,6 +324,8 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+            transition: transform 0.2s ease;
+            transform-origin: center;
         }
         #previewModal .preview-body iframe {
             width: 100%;
@@ -347,12 +366,6 @@
             font-size: 1.2rem;
             text-align: center;
         }
-        #previewModal .preview-body .edit-actions {
-            display: flex;
-            gap: 0.5rem;
-            margin-top: 0.5rem;
-            justify-content: flex-end;
-        }
         /* Notes full width on mobile */
         .notes-wrapper {
             width: 100%;
@@ -364,6 +377,13 @@
             flex: 1;
             min-width: 0;
             word-break: break-word;
+        }
+        /* Back to top button */
+        .back-to-top {
+            cursor: pointer;
+        }
+        .back-to-top:hover {
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -525,10 +545,9 @@
 
         <!-- Footer -->
         <footer class="p-5 mt-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-center">
-            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">Found this useful? Share it!</p>
-            <a href="#" class="inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 px-4 rounded-xl transition duration-200 mb-4">
-                ⭐ Support this project by sharing it with a friend!
-            </a>
+            <button onclick="window.scrollTo({top:0,behavior:'smooth'})" class="back-to-top inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 px-4 rounded-xl transition duration-200 mb-4">
+                ⭐ Back to the top ⭐
+            </button>
             <div class="text-xs text-gray-400 dark:text-gray-500 flex justify-center items-center gap-2">
                 <span>&copy; 2026 Expire.vip</span>
                 <span>&bull;</span>
@@ -794,9 +813,14 @@
             <div class="preview-header">
                 <div class="header-top">
                     <h3 id="previewTitle">Preview</h3>
-                    <div class="preview-actions">
+                    <div class="preview-actions" id="previewActions">
+                        <!-- Dynamic buttons injected here -->
                         <button id="jsonToggleBtn" style="display:none;" onclick="toggleJsonFormat()">Format JSON</button>
                         <button id="editToggleBtn" style="display:none;" onclick="toggleEditMode()">Edit</button>
+                        <button id="zoomOutBtn" style="display:none;" onclick="zoomImage(-0.2)">🔍−</button>
+                        <button id="zoomResetBtn" style="display:none;" onclick="zoomImage(0)">⟲</button>
+                        <button id="zoomInBtn" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
+                        <button id="saveEditBtn" style="display:none;" class="save-edit-btn" onclick="saveEdit()">Save</button>
                         <button class="close-preview" onclick="closePreview()">✕</button>
                     </div>
                 </div>
@@ -851,6 +875,7 @@
         let previewData = {};
         let isEditMode = false;
         let originalContent = '';
+        let currentZoom = 1;
 
         // DOM elements
         const landingPage = document.getElementById('landingPage');
@@ -868,6 +893,10 @@
         const archivedToggleLabel = document.getElementById('archivedToggleLabel');
         const jsonToggleBtn = document.getElementById('jsonToggleBtn');
         const editToggleBtn = document.getElementById('editToggleBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomResetBtn = document.getElementById('zoomResetBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
         
         function showLoading(message = "Loading...") {
@@ -1711,15 +1740,21 @@ async function callGoogleAPI(url, options = {}) {
             const modal = document.getElementById('previewModal');
             const body = document.getElementById('previewBody');
             const titleEl = document.getElementById('previewTitle');
-            const toggleBtn = document.getElementById('jsonToggleBtn');
-            const editBtn = document.getElementById('editToggleBtn');
             const meta = document.getElementById('previewMeta');
             
-            toggleBtn.style.display = 'none';
-            editBtn.style.display = 'none';
+            // Reset zoom
+            currentZoom = 1;
+            // Hide all dynamic buttons
+            jsonToggleBtn.style.display = 'none';
+            editToggleBtn.style.display = 'none';
+            zoomOutBtn.style.display = 'none';
+            zoomResetBtn.style.display = 'none';
+            zoomInBtn.style.display = 'none';
+            saveEditBtn.style.display = 'none';
+            
             meta.textContent = '';
             isEditMode = false;
-            previewData = { title, fileId, mimeType, rawText: '', isJson: false, pretty: false, originalContent: '' };
+            previewData = { title, fileId, mimeType, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false };
             titleEl.textContent = title || 'Preview';
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
             modal.classList.add('show');
@@ -1740,9 +1775,14 @@ async function callGoogleAPI(url, options = {}) {
                     const contentType = response.headers.get('Content-Type') || mimeType || '';
                     
                     if (contentType.startsWith('image/')) {
+                        previewData.isImage = true;
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
-                        body.innerHTML = `<img src="${url}" alt="${title}" />`;
+                        body.innerHTML = `<img src="${url}" alt="${title}" id="previewImage" />`;
+                        // Show zoom controls
+                        zoomOutBtn.style.display = 'inline-block';
+                        zoomResetBtn.style.display = 'inline-block';
+                        zoomInBtn.style.display = 'inline-block';
                     } else if (contentType === 'application/pdf') {
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
@@ -1756,15 +1796,15 @@ async function callGoogleAPI(url, options = {}) {
                             const parsed = JSON.parse(text);
                             previewData.isJson = true;
                             previewData.parsed = parsed;
-                            toggleBtn.style.display = 'inline-block';
-                            toggleBtn.textContent = 'Pretty JSON';
+                            jsonToggleBtn.style.display = 'inline-block';
+                            jsonToggleBtn.textContent = 'Pretty JSON';
                             showJsonPreview(false); // raw by default
                         } catch (e) {
                             // Not valid JSON – show as plain text
                             body.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
                             // Show edit button for text files (including .txt)
                             if (contentType.includes('text/plain')) {
-                                editBtn.style.display = 'inline-block';
+                                editToggleBtn.style.display = 'inline-block';
                                 previewData.isTextFile = true;
                             }
                         }
@@ -1818,14 +1858,10 @@ async function callGoogleAPI(url, options = {}) {
                 // Enter edit mode
                 isEditMode = true;
                 const currentText = previewData.rawText || '';
-                body.innerHTML = `
-                    <textarea id="editTextarea">${escapeHtml(currentText)}</textarea>
-                    <div class="edit-actions">
-                        <button onclick="cancelEdit()" class="px-3 py-1 text-sm rounded bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 transition">Cancel</button>
-                        <button onclick="saveEdit()" class="px-3 py-1 text-sm rounded bg-indigo-600 text-white hover:bg-indigo-700 transition">Save</button>
-                    </div>
-                `;
+                body.innerHTML = `<textarea id="editTextarea">${escapeHtml(currentText)}</textarea>`;
                 editBtn.textContent = 'Cancel Edit';
+                // Show Save button in header
+                saveEditBtn.style.display = 'inline-block';
             } else {
                 // Exit edit mode without saving
                 cancelEdit();
@@ -1836,6 +1872,7 @@ async function callGoogleAPI(url, options = {}) {
             isEditMode = false;
             const editBtn = document.getElementById('editToggleBtn');
             editBtn.textContent = 'Edit';
+            saveEditBtn.style.display = 'none';
             // Re-render the original content
             const body = document.getElementById('previewBody');
             body.innerHTML = `<pre>${escapeHtml(previewData.originalContent)}</pre>`;
@@ -1854,12 +1891,24 @@ async function callGoogleAPI(url, options = {}) {
                 isEditMode = false;
                 const editBtn = document.getElementById('editToggleBtn');
                 editBtn.textContent = 'Edit';
+                saveEditBtn.style.display = 'none';
                 const body = document.getElementById('previewBody');
                 body.innerHTML = `<pre>${escapeHtml(newContent)}</pre>`;
                 showToast('File updated successfully.');
             } catch (err) {
                 toastError('Failed to update file: ' + err.message);
             }
+        }
+
+        function zoomImage(delta) {
+            const img = document.getElementById('previewImage');
+            if (!img) return;
+            if (delta === 0) {
+                currentZoom = 1;
+            } else {
+                currentZoom = Math.max(0.2, Math.min(5, currentZoom + delta));
+            }
+            img.style.transform = `scale(${currentZoom})`;
         }
 
         function closePreview() {
@@ -1877,6 +1926,7 @@ async function callGoogleAPI(url, options = {}) {
                 URL.revokeObjectURL(img.src);
             }
             isEditMode = false;
+            saveEditBtn.style.display = 'none';
         }
 
         // ---------- ATTACHMENT UI FUNCTIONS ----------
