@@ -353,6 +353,18 @@
             margin-top: 0.5rem;
             justify-content: flex-end;
         }
+        /* Notes full width on mobile */
+        .notes-wrapper {
+            width: 100%;
+        }
+        .notes-wrapper .fa-sticky-note {
+            flex-shrink: 0;
+        }
+        .notes-wrapper .notes-text {
+            flex: 1;
+            min-width: 0;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 transition-colors duration-300">
@@ -2600,15 +2612,21 @@ async function callGoogleAPI(url, options = {}) {
                     : '';
 
                 const notesHtml = item.notes ? `
-                    <div class="mt-2.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 flex items-start gap-2 break-words">
+                    <div class="mt-2.5 w-full bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 flex items-start gap-2 break-words">
                         <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
-                        <span class="whitespace-pre-line flex-1">${escapeHtml(item.notes)}</span>
+                        <span class="notes-text whitespace-pre-line">${escapeHtml(item.notes)}</span>
                     </div>` : '';
 
                 let dateLineHtml = '';
                 if (item.date && !item.noExpiration) {
-                    const timeStr = item.time ? ` at ${item.time}` : '';
-                    dateLineHtml = `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">Expires: ${item.date}${timeStr}</p>`;
+                    let timeStr = '';
+                    if (item.time) {
+                        timeStr = ` at ${item.time}`;
+                        if (item.durationMinutes) {
+                            timeStr += ` (${item.durationMinutes} minutes)`;
+                        }
+                    }
+                    dateLineHtml = `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">${item.date}${timeStr}</p>`;
                 } else {
                     dateLineHtml = `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
                 }
@@ -2641,7 +2659,7 @@ async function callGoogleAPI(url, options = {}) {
                     <div class="flex justify-between items-start">
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center flex-wrap gap-1">
-                                <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
+                                <span class="text-xs tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
                                 ${archiveBadge}
                             </div>
                             <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
