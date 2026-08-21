@@ -1243,12 +1243,23 @@ async function callGoogleAPI(url, options = {}) {
             const tz = appData.settings.timezone || 'UTC';
             let start, end;
             if (item.time && item.time.length > 0 && !item.noExpiration) {
-                // Timed event
-                const startDateTime = `${item.date}T${item.time}:00`;
-                const startDate = new Date(`${item.date}T${item.time}:00`);
+                // Timed event – construct both start and end in local time to avoid timezone issues
+                const [year, month, day] = item.date.split('-').map(Number);
+                const [hour, minute] = item.time.split(':').map(Number);
+                const startDate = new Date(year, month - 1, day, hour, minute);
                 const duration = item.durationMinutes || 30;
                 const endDate = new Date(startDate.getTime() + duration * 60000);
-                const endDateTime = endDate.toISOString().replace('Z', '');
+                
+                // Format start as local dateTime string
+                const startDateTime = `${item.date}T${item.time}:00`;
+                // Format end as local dateTime string
+                const endYear = endDate.getFullYear();
+                const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+                const endDay = String(endDate.getDate()).padStart(2, '0');
+                const endHour = String(endDate.getHours()).padStart(2, '0');
+                const endMinute = String(endDate.getMinutes()).padStart(2, '0');
+                const endDateTime = `${endYear}-${endMonth}-${endDay}T${endHour}:${endMinute}:00`;
+                
                 start = { dateTime: startDateTime, timeZone: tz };
                 end = { dateTime: endDateTime, timeZone: tz };
             } else {
