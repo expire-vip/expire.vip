@@ -247,6 +247,30 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            flex: 1;
+        }
+        #previewModal .preview-header .preview-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        #previewModal .preview-header .preview-actions button {
+            background: none;
+            border: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+            color: #6b7280;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+        #previewModal .preview-header .preview-actions button:hover {
+            background: #e5e7eb;
+            color: #1f2937;
+        }
+        .dark #previewModal .preview-header .preview-actions button:hover {
+            background: #374151;
+            color: #f3f4f6;
         }
         #previewModal .preview-header .close-preview {
             background: none;
@@ -269,11 +293,18 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
         }
         #previewModal .preview-body img {
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+        }
+        #previewModal .preview-body iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            min-height: 400px;
         }
         #previewModal .preview-body pre {
             width: 100%;
@@ -718,7 +749,10 @@
         <div class="preview-content">
             <div class="preview-header">
                 <h3 id="previewTitle">Preview</h3>
-                <button class="close-preview" onclick="closePreview()">✕</button>
+                <div class="preview-actions">
+                    <button id="jsonToggleBtn" style="display:none;" onclick="toggleJsonFormat()">Format JSON</button>
+                    <button class="close-preview" onclick="closePreview()">✕</button>
+                </div>
             </div>
             <div class="preview-body" id="previewBody">
                 <div class="preview-placeholder">Loading...</div>
@@ -765,6 +799,11 @@
         // Form attachments (local list for modal)
         let formAttachments = [];
 
+        // Preview state
+        let previewRawText = '';
+        let previewIsJson = false;
+        let previewBlobUrl = null;
+
         // DOM elements
         const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
@@ -779,6 +818,7 @@
         const settingsBtn = document.getElementById('settingsBtn');
         const showArchivedToggle = document.getElementById('showArchivedToggle');
         const archivedToggleLabel = document.getElementById('archivedToggleLabel');
+        const jsonToggleBtn = document.getElementById('jsonToggleBtn');
         
         function showLoading(message = "Loading...") {
             isLoading = true;
@@ -1584,10 +1624,15 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         // ---------- PREVIEW ----------
+        let previewData = {};
+
         function openPreview(title, fileId, mimeType) {
             const modal = document.getElementById('previewModal');
             const body = document.getElementById('previewBody');
             const titleEl = document.getElementById('previewTitle');
+            const toggleBtn = document.getElementById('jsonToggleBtn');
+            toggleBtn.style.display = 'none';
+            previewData = { title, fileId, mimeType, rawText: '', isJson: false, pretty: false };
             titleEl.textContent = title || 'Preview';
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
             modal.classList.add('show');
@@ -1596,13 +1641,30 @@ async function callGoogleAPI(url, options = {}) {
             downloadFile(fileId)
                 .then(async (response) => {
                     const contentType = response.headers.get('Content-Type') || mimeType || '';
+                    
                     if (contentType.startsWith('image/')) {
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
                         body.innerHTML = `<img src="${url}" alt="${title}" />`;
+                    } else if (contentType === 'application/pdf') {
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        body.innerHTML = `<iframe src="${url}"></iframe>`;
                     } else if (contentType.includes('json') || contentType.includes('text')) {
                         const text = await response.text();
-                        body.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+                        previewData.rawText = text;
+                        previewData.isJson = false;
+                        try {
+                            const parsed = JSON.parse(text);
+                            previewData.isJson = true;
+                            previewData.parsed = parsed;
+                            toggleBtn.style.display = 'inline-block';
+                            toggleBtn.textContent = 'Pretty JSON';
+                            showJsonPreview(false); // raw by default
+                        } catch (e) {
+                            // Not valid JSON – show as plain text
+                            body.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+                        }
                     } else {
                         body.innerHTML = `
                             <div class="preview-placeholder" style="display:flex;flex-direction:column;gap:0.5rem;">
@@ -1620,8 +1682,44 @@ async function callGoogleAPI(url, options = {}) {
                 });
         }
 
+        function showJsonPreview(pretty) {
+            const body = document.getElementById('previewBody');
+            const toggleBtn = document.getElementById('jsonToggleBtn');
+            if (!previewData.isJson) return;
+            try {
+                let displayText = previewData.rawText;
+                if (pretty) {
+                    displayText = JSON.stringify(previewData.parsed, null, 4);
+                    toggleBtn.textContent = 'Raw JSON';
+                } else {
+                    toggleBtn.textContent = 'Pretty JSON';
+                }
+                body.innerHTML = `<pre>${escapeHtml(displayText)}</pre>`;
+                previewData.pretty = pretty;
+            } catch (e) {
+                body.innerHTML = `<pre>${escapeHtml(previewData.rawText)}</pre>`;
+            }
+        }
+
+        function toggleJsonFormat() {
+            if (!previewData.isJson) return;
+            showJsonPreview(!previewData.pretty);
+        }
+
         function closePreview() {
             document.getElementById('previewModal').classList.remove('show');
+            // Clean up any blob URLs
+            const iframe = document.querySelector('#previewBody iframe');
+            if (iframe) {
+                const src = iframe.src;
+                if (src.startsWith('blob:')) {
+                    URL.revokeObjectURL(src);
+                }
+            }
+            const img = document.querySelector('#previewBody img');
+            if (img && img.src && img.src.startsWith('blob:')) {
+                URL.revokeObjectURL(img.src);
+            }
         }
 
         // ---------- ATTACHMENT UI FUNCTIONS ----------
