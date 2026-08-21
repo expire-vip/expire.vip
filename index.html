@@ -274,7 +274,13 @@
                 </button>
 
                 <!-- Items List -->
-                <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Your Tracked Items</h2>
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Your Tracked Items</h2>
+                    <button id="showArchivedToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
+                        <i class="fas fa-archive text-xs"></i>
+                        <span id="archivedToggleLabel">Show Archived</span>
+                    </button>
+                </div>
                 <div id="itemsList" class="space-y-3">
                     <!-- Items injected -->
                 </div>
@@ -555,6 +561,7 @@
         let formTags = [];
         let activeTag = null;
         let isLoading = false;
+        let showArchived = false;
 
         // DOM elements
         const landingPage = document.getElementById('landingPage');
@@ -568,6 +575,8 @@
         const testBanner = document.getElementById('testBanner');
         const addItemBtn = document.getElementById('addItemBtn');
         const settingsBtn = document.getElementById('settingsBtn');
+        const showArchivedToggle = document.getElementById('showArchivedToggle');
+        const archivedToggleLabel = document.getElementById('archivedToggleLabel');
         
         function showLoading(message = "Loading...") {
             isLoading = true;
@@ -1200,6 +1209,8 @@ async function callGoogleAPI(url, options = {}) {
                 // Ensure time and duration exist (optional)
                 if (item.time === undefined) item.time = '';
                 if (item.durationMinutes === undefined) item.durationMinutes = 30;
+                // Ensure archived field exists
+                if (item.archived === undefined) item.archived = false;
             });
         }
 
@@ -1213,7 +1224,7 @@ async function callGoogleAPI(url, options = {}) {
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
-                migrateItems(); // ensure noExpiration and time fields
+                migrateItems(); // ensure noExpiration, time, and archived fields
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
@@ -1503,6 +1514,54 @@ async function callGoogleAPI(url, options = {}) {
                 .join('');
         }
 
+        // ---------- ARCHIVE ----------
+        function toggleShowArchived() {
+            showArchived = !showArchived;
+            archivedToggleLabel.textContent = showArchived ? 'Hide Archived' : 'Show Archived';
+            renderAll();
+        }
+
+        async function archiveItem(itemId, currentArchived) {
+            const idx = appData.items.findIndex(i => i.id === itemId);
+            if (idx === -1) return;
+            
+            appData.items[idx].archived = !currentArchived;
+            
+            if (isTestMode) {
+                localStorage.setItem('expire_testData', JSON.stringify(appData));
+            } else {
+                await withLoading("Updating archive status...", async () => {
+                    await syncToCloud();
+                });
+            }
+            
+            const action = currentArchived ? 'unarchived' : 'archived';
+            showToast(`Item ${action}.`);
+            renderAll();
+        }
+
+        async function deleteItem(itemId, eventId) {
+            if (!confirm('Delete this item?')) return;
+        
+            await withLoading("Deleting item...", async () => {
+                if (eventId && !isTestMode) {
+                    await removeCalendarEvent(eventId).catch(() => {});
+                }
+        
+                appData.items = appData.items.filter(i => i.id !== itemId);
+        
+                if (isTestMode) {
+                    localStorage.setItem('expire_testData', JSON.stringify(appData));
+                } else {
+                    await syncToCloud();
+                }
+        
+                renderAll();
+            });
+        
+            toastSuccess("Deleted.");
+        }
+
         async function saveItem() {
             const name = document.getElementById('itemName').value.trim();
             const category = document.getElementById('itemCategory').value;
@@ -1585,7 +1644,8 @@ async function callGoogleAPI(url, options = {}) {
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
-                            eventId: newEventId || null
+                            eventId: newEventId || null,
+                            archived: old.archived || false
                         };
                     } else {
                         let newEventId = null;
@@ -1618,7 +1678,8 @@ async function callGoogleAPI(url, options = {}) {
                             notes,
                             tags: [...formTags],
                             reminders: formReminders,
-                            eventId: newEventId
+                            eventId: newEventId,
+                            archived: false
                         });
                     }
 
@@ -1640,28 +1701,6 @@ async function callGoogleAPI(url, options = {}) {
                 saveBtn.textContent = "Save";
             }
             showToast(wasEditing ? 'Updated.' : 'Added.');
-        }
-        
-        async function deleteItem(itemId, eventId) {
-            if (!confirm('Delete this item?')) return;
-        
-            await withLoading("Deleting item...", async () => {
-                if (eventId && !isTestMode) {
-                    await removeCalendarEvent(eventId).catch(() => {});
-                }
-        
-                appData.items = appData.items.filter(i => i.id !== itemId);
-        
-                if (isTestMode) {
-                    localStorage.setItem('expire_testData', JSON.stringify(appData));
-                } else {
-                    await syncToCloud();
-                }
-        
-                renderAll();
-            });
-        
-            toastSuccess("Deleted.");
         }
 
         function updateStatus(t) { syncStatus.textContent = t; }
@@ -1685,7 +1724,9 @@ async function callGoogleAPI(url, options = {}) {
 
         function renderCategoryChips() {
             const customCats = (appData.customCategories || []).map(c => c.name);
-            const itemCats = appData.items.map(i => i.category || 'Other');
+            const itemCats = appData.items
+                .filter(i => !i.archived || showArchived)
+                .map(i => i.category || 'Other');
             const builtinCats = BUILTIN_CATEGORIES.map(c => c.name);
             const allUniqueCats = [...new Set([...builtinCats, ...customCats, ...itemCats])];
             
@@ -1748,6 +1789,9 @@ async function callGoogleAPI(url, options = {}) {
         function filterItems() {
             const term = document.getElementById('searchInput').value.toLowerCase().trim();
             return appData.items.filter(i => {
+                // Filter archived items unless showArchived is true
+                if (!showArchived && i.archived) return false;
+                
                 const itemCategory = i.category || 'Other';
                 const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
                 const itemTags = (i.tags || []).map(t => t.toLowerCase());
@@ -1763,7 +1807,10 @@ async function callGoogleAPI(url, options = {}) {
 
         function renderItems() {
             const filtered = filterItems();
-            if (!filtered.length) return itemsList.innerHTML = '<p class="text-gray-400 dark:text-gray-500 text-center py-6">No items found.</p>';
+            if (!filtered.length) {
+                const msg = showArchived ? 'No archived items found.' : 'No items found. Add one above!';
+                return itemsList.innerHTML = `<p class="text-gray-400 dark:text-gray-500 text-center py-6">${msg}</p>`;
+            }
             // Sort: items with noExpiration go to the end, then by date ascending (and time if same date)
             filtered.sort((a, b) => {
                 // Sort by noExpiration: false (has date) first, true (no expiry) last
@@ -1823,10 +1870,16 @@ async function callGoogleAPI(url, options = {}) {
                     dateLineHtml = `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
                 }
 
-                return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm">
+                // Archive badge for archived items
+                const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
+
+                return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex justify-between items-start">
                         <div class="flex-1 min-w-0">
-                            <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
+                            <div class="flex items-center flex-wrap gap-1">
+                                <span class="text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
+                                ${archiveBadge}
+                            </div>
                             <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             ${tagsHtml}
                             ${dateLineHtml}
@@ -1840,6 +1893,11 @@ async function callGoogleAPI(url, options = {}) {
                                              class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                              title="Edit">
                                         <i class="fas fa-edit text-lg"></i>
+                                    </button>
+                                    <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
+                                             class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                             title="${item.archived ? 'Unarchive' : 'Archive'}">
+                                        <i class="fas fa-archive text-lg"></i>
                                     </button>
                                     <button onclick="deleteItem('${item.id}','${item.eventId||''}')" 
                                              class="text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
@@ -1883,10 +1941,10 @@ async function callGoogleAPI(url, options = {}) {
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30 },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false, time:'', durationMinutes:30 },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30 },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false, time:'', durationMinutes:30 }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30, archived: false },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30, archived: false },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
@@ -1977,6 +2035,7 @@ async function callGoogleAPI(url, options = {}) {
 
         addItemBtn.onclick = openAddModal;
         settingsBtn.onclick = openSettings;
+        showArchivedToggle.onclick = toggleShowArchived;
         document.getElementById('searchInput').addEventListener('input', renderAll);
         document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
         
