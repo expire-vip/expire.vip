@@ -444,12 +444,12 @@
             color: #fca5a5;
         }
         .item-bottom-row .bottom-left .time-left.gray {
-            background: #e5e7eb;
-            color: #374151;
+            color: #6b7280;
+            background: transparent;
+            font-weight: 500;
         }
         .dark .item-bottom-row .bottom-left .time-left.gray {
-            background: #374151;
-            color: #d1d5db;
+            color: #9ca3af;
         }
         .item-bottom-row .bottom-left .time-left.purple {
             background: #ede9fe;
@@ -2681,31 +2681,23 @@ async function callGoogleAPI(url, options = {}) {
 
         function updateStatus(t) { syncStatus.textContent = t; }
 
-        // ---------- FORMAT DURATION (for both future and past) ----------
-        function formatDuration(ms) {
-            if (ms < 0) ms = -ms; // absolute value
-            const seconds = Math.floor(ms / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const hours = Math.floor(minutes / 60);
-            const days = Math.floor(hours / 24);
+        // ---------- DATE DIFFERENCE HELPERS ----------
+        function getDateOnly(dateStr) {
+            const parts = dateStr.split('-');
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+
+        function formatDateDiff(startDate, endDate) {
+            // Returns a human-readable string for the difference between two Date objects (startDate <= endDate)
+            // We'll compute years, months, days properly
+            let years = endDate.getFullYear() - startDate.getFullYear();
+            let months = endDate.getMonth() - startDate.getMonth();
+            let days = endDate.getDate() - startDate.getDate();
             
-            if (days === 0) {
-                if (hours > 0) return `${hours}h ${minutes % 60}m`;
-                if (minutes > 0) return `${minutes}m`;
-                return `${seconds}s`;
-            }
-            
-            const targetDate = new Date(Date.now() + ms);
-            const nowDate = new Date();
-            
-            let years = targetDate.getFullYear() - nowDate.getFullYear();
-            let months = targetDate.getMonth() - nowDate.getMonth();
-            let days2 = targetDate.getDate() - nowDate.getDate();
-            
-            if (days2 < 0) {
+            if (days < 0) {
                 months--;
-                const prevMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 0);
-                days2 += prevMonth.getDate();
+                const prevMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+                days += prevMonth.getDate();
             }
             if (months < 0) {
                 years--;
@@ -2715,38 +2707,63 @@ async function callGoogleAPI(url, options = {}) {
             const parts = [];
             if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
             if (months > 0) parts.push(`${months} month${months > 1 ? 's' : ''}`);
-            if (days2 > 0) parts.push(`${days2} day${days2 > 1 ? 's' : ''}`);
+            if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
             
             if (parts.length === 0) {
-                if (days === 0) return 'Today';
-                if (days === 1) return '1 day';
-                return `${days} days`;
+                // Less than a day? compute hours/minutes from time difference
+                const diffMs = endDate - startDate;
+                if (diffMs < 60000) return 'just now';
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                if (hours > 0) return `${hours}h ${minutes}m`;
+                if (minutes > 0) return `${minutes}m`;
+                return 'just now';
             }
             return parts.join(' ');
         }
 
-        // ---------- TIME INFO (returns object with text, cssClass, days) ----------
         function getTimeInfo(dateString) {
             if (!dateString) return { text: 'No expiry', days: null, cssClass: 'purple' };
+            
             const now = new Date();
-            const target = new Date(dateString);
-            const diffMs = target - now;
+            // Use date-only comparison for day-level differences
+            const targetDate = getDateOnly(dateString);
+            const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            const diffMs = targetDate - todayDate; // positive if future, negative if past
             
             if (diffMs === 0) {
+                // Same day
+                // Check if time of day is provided to know if it's still future or already past within today
+                // For simplicity, we treat today as "Today"
                 return { text: 'Today', days: 0, cssClass: 'red' };
             }
             
             if (diffMs > 0) {
                 // Future
-                const duration = formatDuration(diffMs);
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                // Compute detailed difference using date objects
+                const duration = formatDateDiff(todayDate, targetDate);
                 let cssClass = 'green';
-                if (diffMs <= 7 * 24 * 60 * 60 * 1000) cssClass = 'red';
-                else if (diffMs <= 30 * 24 * 60 * 60 * 1000) cssClass = 'orange';
-                return { text: duration, days: Math.floor(diffMs / (1000 * 60 * 60 * 24)), cssClass };
+                if (diffDays <= 7) cssClass = 'red';
+                else if (diffDays <= 30) cssClass = 'orange';
+                return { text: duration, days: diffDays, cssClass };
             } else {
                 // Past
-                const ago = formatDuration(diffMs); // diffMs negative, formatDuration handles abs
-                return { text: `expired ${ago} ago`, days: -1, cssClass: 'gray' };
+                const diffDays = Math.floor(-diffMs / (1000 * 60 * 60 * 24));
+                let duration;
+                if (diffDays === 0) {
+                    // Less than a day ago? use time difference
+                    const timeDiff = now - targetDate;
+                    const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+                    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+                    if (hours > 0) duration = `${hours}h ${minutes}m`;
+                    else if (minutes > 0) duration = `${minutes}m`;
+                    else duration = 'just now';
+                } else {
+                    duration = formatDateDiff(targetDate, todayDate);
+                }
+                return { text: `${duration} ago`, days: -1, cssClass: 'gray' };
             }
         }
 
