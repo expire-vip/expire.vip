@@ -399,17 +399,34 @@
         .dark .item-bottom-row {
             border-top-color: #374151;
         }
-        .item-bottom-row .date-info {
+        .item-bottom-row .bottom-left {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem 0.75rem;
             font-size: 0.8rem;
             color: #6b7280;
         }
-        .dark .item-bottom-row .date-info {
+        .dark .item-bottom-row .bottom-left {
             color: #9ca3af;
+        }
+        .item-bottom-row .bottom-left .date-info {
+            white-space: nowrap;
+        }
+        .item-bottom-row .bottom-left .time-left {
+            font-weight: 500;
+            color: #374151;
+        }
+        .dark .item-bottom-row .bottom-left .time-left {
+            color: #e5e7eb;
         }
         .item-bottom-row .actions {
             display: flex;
             gap: 0.25rem;
             flex-shrink: 0;
+        }
+        .item-bottom-row .actions button {
+            padding: 0.3rem 0.5rem;
         }
     </style>
 </head>
@@ -1689,6 +1706,10 @@ async function callGoogleAPI(url, options = {}) {
             );
         
             if (!response.ok) {
+                // If file not found, ignore the error (it's already gone)
+                if (response.status === 404) {
+                    return;
+                }
                 throw new Error(await response.text());
             }
         }
@@ -2095,11 +2116,22 @@ async function callGoogleAPI(url, options = {}) {
             if (!confirm(`Delete attachment "${att.name}" from Drive?`)) return;
             try {
                 await deleteFile(att.driveFileId);
+                // Remove from formAttachments regardless of Drive success
                 formAttachments.splice(idx, 1);
                 renderAttachments();
+                // Auto-save item to update JSON
+                await autoSaveItem();
                 showToast('Attachment removed.');
             } catch (err) {
-                toastError('Delete failed: ' + err.message);
+                // If file not found on Drive, just remove it from the list
+                if (err.message.includes('404') || err.message.includes('not found')) {
+                    formAttachments.splice(idx, 1);
+                    renderAttachments();
+                    await autoSaveItem();
+                    showToast('Attachment removed (file already missing).');
+                } else {
+                    toastError('Delete failed: ' + err.message);
+                }
             }
         }
 
@@ -2612,39 +2644,61 @@ async function callGoogleAPI(url, options = {}) {
 
         // ---------- HUMAN-READABLE TIME ----------
         function getTimeLeft(dateString) {
-            if (!dateString) return '';
+            if (!dateString) return { text: '', days: null };
             const now = new Date();
             const target = new Date(dateString);
-            const diff = target - now;
-            if (diff < 0) return 'Expired';
+            const diffMs = target - now;
+            if (diffMs < 0) return { text: 'Expired', days: -1 };
             
-            const seconds = Math.floor(diff / 1000);
-            const minutes = Math.floor(seconds / 60);
-            const hours = Math.floor(minutes / 60);
-            const days = Math.floor(hours / 24);
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
             
-            if (days === 0) {
-                if (hours > 0) return `${hours}h ${minutes % 60}m`;
-                if (minutes > 0) return `${minutes}m`;
-                return `${seconds}s`;
+            // For less than a day, show hours/minutes
+            if (diffDays === 0) {
+                const hours = Math.floor(diffMs / (1000 * 60 * 60));
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                if (hours > 0) return { text: `${hours}h ${minutes}m`, days: 0 };
+                if (minutes > 0) return { text: `${minutes}m`, days: 0 };
+                return { text: 'Today', days: 0 };
             }
             
-            const years = Math.floor(days / 365);
-            const months = Math.floor((days % 365) / 30);
-            const remainingDays = days % 30;
+            // For 1+ days, compute years, months, days properly
+            const targetDate = new Date(target);
+            const nowDate = new Date(now);
+            
+            let years = targetDate.getFullYear() - nowDate.getFullYear();
+            let months = targetDate.getMonth() - nowDate.getMonth();
+            let days = targetDate.getDate() - nowDate.getDate();
+            
+            if (days < 0) {
+                months--;
+                const prevMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 0);
+                days += prevMonth.getDate();
+            }
+            if (months < 0) {
+                years--;
+                months += 12;
+            }
+            
+            // If the difference is less than a month, show days
+            if (years === 0 && months === 0) {
+                if (days === 0) return { text: 'Today', days: 0 };
+                if (days === 1) return { text: '1 day', days: 1 };
+                return { text: `${days} days`, days };
+            }
             
             const parts = [];
             if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
             if (months > 0) parts.push(`${months} month${months > 1 ? 's' : ''}`);
-            if (remainingDays > 0) parts.push(`${remainingDays} day${remainingDays > 1 ? 's' : ''}`);
+            if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
             
-            if (parts.length === 0 && days > 0) {
-                // Less than a month but more than 0 days
-                if (days === 1) return '1 day';
-                return `${days} days`;
+            // If no parts (shouldn't happen), show days
+            if (parts.length === 0) {
+                const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                if (totalDays === 1) return { text: '1 day', days: 1 };
+                return { text: `${totalDays} days`, days: totalDays };
             }
             
-            return parts.join(' ');
+            return { text: parts.join(' '), days: diffDays };
         }
 
         // ---------- SEARCH & FILTER ----------
@@ -2771,6 +2825,9 @@ async function callGoogleAPI(url, options = {}) {
             });
             itemsList.innerHTML = filtered.map(item => {
                 let status, color;
+                let daysLeft = null;
+                let timeLeftText = '';
+                
                 if (item.noExpiration) {
                     status = '∞ No expiry';
                     color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
@@ -2779,22 +2836,24 @@ async function callGoogleAPI(url, options = {}) {
                     status = '∞ No expiry';
                     color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
                 } else {
-                    const timeLeft = getTimeLeft(item.date);
-                    status = timeLeft;
-                    color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                    if (timeLeft === 'Expired') {
+                    const result = getTimeLeft(item.date);
+                    timeLeftText = result.text;
+                    daysLeft = result.days;
+                    if (daysLeft === -1) {
+                        status = 'Expired';
                         color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
-                    } else if (timeLeft.includes('day') || timeLeft.includes('days')) {
-                        // Check if days left is small
-                        const daysMatch = timeLeft.match(/(\d+)\s*(day|days)/);
-                        if (daysMatch) {
-                            const days = parseInt(daysMatch[1]);
-                            if (days <= 7) {
-                                color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-                            } else if (days <= 30) {
-                                color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-                            }
-                        }
+                    } else if (daysLeft === 0) {
+                        status = 'Today';
+                        color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                    } else if (daysLeft <= 7) {
+                        status = timeLeftText;
+                        color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                    } else if (daysLeft <= 30) {
+                        status = timeLeftText;
+                        color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+                    } else {
+                        status = timeLeftText;
+                        color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
                     }
                 }
                 const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
@@ -2870,7 +2929,10 @@ async function callGoogleAPI(url, options = {}) {
                         ${attachmentsHtml}
                         ${notesHtml}
                         <div class="item-bottom-row">
-                            ${dateLineHtml}
+                            <div class="bottom-left">
+                                ${dateLineHtml}
+                                ${!item.noExpiration && item.date && daysLeft !== null && daysLeft >= 0 ? `<span class="time-left">· ${timeLeftText}</span>` : ''}
+                            </div>
                             <div class="actions">
                                 <button onclick="openEditModal('${item.id}')" 
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
