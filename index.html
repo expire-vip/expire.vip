@@ -414,11 +414,50 @@
             white-space: nowrap;
         }
         .item-bottom-row .bottom-left .time-left {
-            font-weight: 500;
+            font-weight: 600;
+            padding: 0.125rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+        }
+        .item-bottom-row .bottom-left .time-left.green {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .dark .item-bottom-row .bottom-left .time-left.green {
+            background: #14532d;
+            color: #86efac;
+        }
+        .item-bottom-row .bottom-left .time-left.orange {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .dark .item-bottom-row .bottom-left .time-left.orange {
+            background: #78350f;
+            color: #fcd34d;
+        }
+        .item-bottom-row .bottom-left .time-left.red {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .dark .item-bottom-row .bottom-left .time-left.red {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+        .item-bottom-row .bottom-left .time-left.gray {
+            background: #e5e7eb;
             color: #374151;
         }
-        .dark .item-bottom-row .bottom-left .time-left {
-            color: #e5e7eb;
+        .dark .item-bottom-row .bottom-left .time-left.gray {
+            background: #374151;
+            color: #d1d5db;
+        }
+        .item-bottom-row .bottom-left .time-left.purple {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+        .dark .item-bottom-row .bottom-left .time-left.purple {
+            background: #4c1d95;
+            color: #a78bfa;
         }
         .item-bottom-row .actions {
             display: flex;
@@ -2643,12 +2682,12 @@ async function callGoogleAPI(url, options = {}) {
         function updateStatus(t) { syncStatus.textContent = t; }
 
         // ---------- HUMAN-READABLE TIME ----------
-        function getTimeLeft(dateString) {
-            if (!dateString) return { text: '', days: null };
+        function getTimeInfo(dateString) {
+            if (!dateString) return { text: '', days: null, cssClass: 'gray' };
             const now = new Date();
             const target = new Date(dateString);
             const diffMs = target - now;
-            if (diffMs < 0) return { text: 'Expired', days: -1 };
+            if (diffMs < 0) return { text: 'Expired', days: -1, cssClass: 'gray' };
             
             const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
             
@@ -2656,9 +2695,9 @@ async function callGoogleAPI(url, options = {}) {
             if (diffDays === 0) {
                 const hours = Math.floor(diffMs / (1000 * 60 * 60));
                 const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                if (hours > 0) return { text: `${hours}h ${minutes}m`, days: 0 };
-                if (minutes > 0) return { text: `${minutes}m`, days: 0 };
-                return { text: 'Today', days: 0 };
+                if (hours > 0) return { text: `${hours}h ${minutes}m`, days: 0, cssClass: 'red' };
+                if (minutes > 0) return { text: `${minutes}m`, days: 0, cssClass: 'red' };
+                return { text: 'Today', days: 0, cssClass: 'red' };
             }
             
             // For 1+ days, compute years, months, days properly
@@ -2681,9 +2720,9 @@ async function callGoogleAPI(url, options = {}) {
             
             // If the difference is less than a month, show days
             if (years === 0 && months === 0) {
-                if (days === 0) return { text: 'Today', days: 0 };
-                if (days === 1) return { text: '1 day', days: 1 };
-                return { text: `${days} days`, days };
+                if (days === 0) return { text: 'Today', days: 0, cssClass: 'red' };
+                if (days === 1) return { text: '1 day', days: 1, cssClass: diffDays <= 7 ? 'red' : (diffDays <= 30 ? 'orange' : 'green') };
+                return { text: `${days} days`, days, cssClass: diffDays <= 7 ? 'red' : (diffDays <= 30 ? 'orange' : 'green') };
             }
             
             const parts = [];
@@ -2694,11 +2733,15 @@ async function callGoogleAPI(url, options = {}) {
             // If no parts (shouldn't happen), show days
             if (parts.length === 0) {
                 const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                if (totalDays === 1) return { text: '1 day', days: 1 };
-                return { text: `${totalDays} days`, days: totalDays };
+                if (totalDays === 1) return { text: '1 day', days: 1, cssClass: 'green' };
+                return { text: `${totalDays} days`, days: totalDays, cssClass: 'green' };
             }
             
-            return { text: parts.join(' '), days: diffDays };
+            let cssClass = 'green';
+            if (diffDays <= 7) cssClass = 'red';
+            else if (diffDays <= 30) cssClass = 'orange';
+            
+            return { text: parts.join(' '), days: diffDays, cssClass };
         }
 
         // ---------- SEARCH & FILTER ----------
@@ -2824,38 +2867,24 @@ async function callGoogleAPI(url, options = {}) {
                 return aTime.localeCompare(bTime);
             });
             itemsList.innerHTML = filtered.map(item => {
-                let status, color;
-                let daysLeft = null;
-                let timeLeftText = '';
+                let status = '';
+                let colorClass = '';
+                let timeInfo = null;
+                let showTimeLeft = false;
                 
                 if (item.noExpiration) {
                     status = '∞ No expiry';
-                    color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
+                    colorClass = 'purple';
                 } else if (!item.date) {
-                    // fallback if no date and no flag
                     status = '∞ No expiry';
-                    color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
+                    colorClass = 'purple';
                 } else {
-                    const result = getTimeLeft(item.date);
-                    timeLeftText = result.text;
-                    daysLeft = result.days;
-                    if (daysLeft === -1) {
-                        status = 'Expired';
-                        color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
-                    } else if (daysLeft === 0) {
-                        status = 'Today';
-                        color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-                    } else if (daysLeft <= 7) {
-                        status = timeLeftText;
-                        color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-                    } else if (daysLeft <= 30) {
-                        status = timeLeftText;
-                        color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-                    } else {
-                        status = timeLeftText;
-                        color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                    }
+                    timeInfo = getTimeInfo(item.date);
+                    status = timeInfo.text;
+                    colorClass = timeInfo.cssClass;
+                    showTimeLeft = true;
                 }
+                
                 const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
                     ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' '))
                     : '';
@@ -2922,7 +2951,7 @@ async function callGoogleAPI(url, options = {}) {
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             </div>
-                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color} flex-shrink-0 ml-2">${status}</span>
+                            ${!item.noExpiration && item.date ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-full ${colorClass === 'red' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : colorClass === 'orange' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' : colorClass === 'green' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300'} flex-shrink-0 ml-2">${status}</span>` : `<span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 flex-shrink-0 ml-2">${status}</span>`}
                         </div>
                         ${tagsHtml}
                         <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
@@ -2931,7 +2960,6 @@ async function callGoogleAPI(url, options = {}) {
                         <div class="item-bottom-row">
                             <div class="bottom-left">
                                 ${dateLineHtml}
-                                ${!item.noExpiration && item.date && daysLeft !== null && daysLeft >= 0 ? `<span class="time-left">· ${timeLeftText}</span>` : ''}
                             </div>
                             <div class="actions">
                                 <button onclick="openEditModal('${item.id}')" 
