@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -385,6 +385,32 @@
         .back-to-top:hover {
             opacity: 0.8;
         }
+        /* Bottom row for date and actions */
+        .item-bottom-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #e5e7eb;
+        }
+        .dark .item-bottom-row {
+            border-top-color: #374151;
+        }
+        .item-bottom-row .date-info {
+            font-size: 0.8rem;
+            color: #6b7280;
+        }
+        .dark .item-bottom-row .date-info {
+            color: #9ca3af;
+        }
+        .item-bottom-row .actions {
+            display: flex;
+            gap: 0.25rem;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 transition-colors duration-300">
@@ -411,9 +437,7 @@
                 <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
             </div>
             <div class="flex items-center gap-2">
-                <button id="darkModeToggle" class="text-white/80 hover:text-white transition" title="Toggle dark mode">
-                    <i id="darkIcon" class="fas fa-moon text-lg"></i>
-                </button>
+                <!-- Dark mode toggle removed -->
                 <button id="settingsBtn" class="text-white/80 hover:text-white transition hidden-auth" title="Settings">
                     <i class="fas fa-cog text-lg"></i>
                 </button>
@@ -616,7 +640,7 @@
                     </div>
                 </div>
                 <!-- Time & Duration -->
-                <div>
+                <div id="timeSection">
                     <div class="flex items-center gap-2 mt-1">
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-sm font-medium text-gray-600 dark:text-gray-400 select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition">
                             <input type="checkbox" id="itemHasTime" onchange="toggleTimeFields()" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
@@ -970,29 +994,11 @@ async function callGoogleAPI(url, options = {}) {
 
 
         // ---------- DARK MODE ----------
-        const darkIcon = document.getElementById('darkIcon');
+        // Dark mode is always on – no toggle needed
         function applyDarkMode() {
-            if (localStorage.getItem('expire_darkMode') === 'true' ||
-                (!localStorage.getItem('expire_darkMode') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-                darkIcon.classList.remove('fa-moon'); darkIcon.classList.add('fa-sun');
-            } else {
-                document.documentElement.classList.remove('dark');
-                darkIcon.classList.remove('fa-sun'); darkIcon.classList.add('fa-moon');
-            }
+            document.documentElement.classList.add('dark');
         }
         applyDarkMode();
-        document.getElementById('darkModeToggle').addEventListener('click', () => {
-            if (document.documentElement.classList.contains('dark')) {
-                document.documentElement.classList.remove('dark');
-                localStorage.setItem('expire_darkMode', 'false');
-                darkIcon.classList.remove('fa-sun'); darkIcon.classList.add('fa-moon');
-            } else {
-                document.documentElement.classList.add('dark');
-                localStorage.setItem('expire_darkMode', 'true');
-                darkIcon.classList.remove('fa-moon'); darkIcon.classList.add('fa-sun');
-            }
-        });
 
         // ---------- TOAST ----------
         function showToastSimple(msg) {
@@ -2001,7 +2007,10 @@ async function callGoogleAPI(url, options = {}) {
             }
 
             try {
-                const fileId = await uploadFileToAppData(file, file.name);
+                let fileId;
+                await withLoading(`Uploading ${file.name}...`, async () => {
+                    fileId = await uploadFileToAppData(file, file.name);
+                });
                 formAttachments.push({
                     driveFileId: fileId,
                     name: file.name,
@@ -2009,6 +2018,8 @@ async function callGoogleAPI(url, options = {}) {
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
+                // Auto-save item
+                await autoSaveItem();
                 showToast(`Uploaded ${file.name}`);
             } catch (err) {
                 toastError('Upload failed: ' + err.message);
@@ -2023,7 +2034,10 @@ async function callGoogleAPI(url, options = {}) {
             const content = '';
             const blob = new Blob([content], { type: 'text/plain' });
             try {
-                const fileId = await uploadFileToAppData(blob, fileName);
+                let fileId;
+                await withLoading(`Creating ${fileName}...`, async () => {
+                    fileId = await uploadFileToAppData(blob, fileName);
+                });
                 formAttachments.push({
                     driveFileId: fileId,
                     name: fileName,
@@ -2031,6 +2045,8 @@ async function callGoogleAPI(url, options = {}) {
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
+                // Auto-save item
+                await autoSaveItem();
                 showToast(`Created ${fileName}`);
             } catch (err) {
                 toastError('Creation failed: ' + err.message);
@@ -2060,9 +2076,13 @@ async function callGoogleAPI(url, options = {}) {
             const newName = prompt('New file name:', att.name);
             if (!newName || newName === att.name) return;
             try {
-                await renameFile(att.driveFileId, newName);
+                await withLoading(`Renaming to ${newName}...`, async () => {
+                    await renameFile(att.driveFileId, newName);
+                });
                 att.name = newName;
                 renderAttachments();
+                // Auto-save item
+                await autoSaveItem();
                 showToast('Renamed attachment.');
             } catch (err) {
                 toastError('Rename failed: ' + err.message);
@@ -2081,6 +2101,68 @@ async function callGoogleAPI(url, options = {}) {
             } catch (err) {
                 toastError('Delete failed: ' + err.message);
             }
+        }
+
+        // ---------- AUTO-SAVE ITEM ----------
+        async function autoSaveItem() {
+            // If we're editing an existing item, update it
+            if (editingItemId !== null) {
+                const idx = appData.items.findIndex(i => i.id === editingItemId);
+                if (idx !== -1) {
+                    // Just update attachments on the existing item
+                    appData.items[idx].attachments = [...formAttachments];
+                    // Save to cloud
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+                    renderAll();
+                    return;
+                }
+            }
+
+            // Otherwise, create a new draft item
+            const name = document.getElementById('itemName').value.trim() || '(draft)';
+            const category = document.getElementById('itemCategory').value || 'Document';
+            const date = document.getElementById('itemDate').value || getTodayDateString();
+            const noExpiration = document.getElementById('itemNoDate').checked;
+            const hasTime = document.getElementById('itemHasTime').checked;
+            const time = hasTime ? document.getElementById('itemTime').value : '';
+            const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
+            const notes = document.getElementById('itemNotes').value.trim() || '';
+
+            // Create a new item with the current form data, but without a calendar event (it can be created later)
+            const newItem = {
+                id: Date.now().toString(),
+                name,
+                category,
+                date: noExpiration ? '' : date,
+                noExpiration: noExpiration,
+                time: hasTime ? time : '',
+                durationMinutes: hasTime ? durationMinutes : 30,
+                notes,
+                tags: [...formTags],
+                reminders: [...formReminders],
+                eventId: null,
+                archived: false,
+                attachments: [...formAttachments]
+            };
+
+            appData.items.push(newItem);
+            editingItemId = newItem.id;
+
+            if (isTestMode) {
+                localStorage.setItem('expire_testData', JSON.stringify(appData));
+            } else {
+                await syncToCloud();
+            }
+            renderAll();
+            // Update modal title to reflect we're now editing
+            document.getElementById('modalTitle').textContent = 'Edit Item';
+            // Update the Save button text
+            document.getElementById('saveItemButton').textContent = 'Save';
+            toastInfo('Draft item created. Add more details and click Save.');
         }
 
         // ---------- ITEM FORM ----------
@@ -2115,8 +2197,15 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('dateInputContainer').classList.toggle('hidden', noDate);
             document.getElementById('noDateMessage').classList.toggle('hidden', !noDate);
             document.getElementById('remindersSection').classList.toggle('hidden', noDate);
-            document.getElementById('timeFieldsContainer').classList.toggle('hidden', noDate || !document.getElementById('itemHasTime').checked);
-            // Do NOT clear the date input – keep the value for later use
+            // Also hide the time section when no date is checked
+            const timeSection = document.getElementById('timeSection');
+            if (timeSection) {
+                timeSection.style.display = noDate ? 'none' : 'block';
+            }
+            if (noDate) {
+                document.getElementById('itemHasTime').checked = false;
+                document.getElementById('timeFieldsContainer').classList.add('hidden');
+            }
         }
 
         function toggleTimeFields() {
@@ -2147,6 +2236,9 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('timeFieldsContainer').classList.add('hidden');
             document.getElementById('itemTime').value = '';
             document.getElementById('itemDuration').value = 30;
+            // Ensure time section is visible
+            const timeSection = document.getElementById('timeSection');
+            if (timeSection) timeSection.style.display = 'block';
             formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
             renderReminderChipsForm();
             formTags = [];
@@ -2172,6 +2264,8 @@ async function callGoogleAPI(url, options = {}) {
             document.getElementById('dateInputContainer').classList.toggle('hidden', noExpiration);
             document.getElementById('noDateMessage').classList.toggle('hidden', !noExpiration);
             document.getElementById('remindersSection').classList.toggle('hidden', noExpiration);
+            const timeSection = document.getElementById('timeSection');
+            if (timeSection) timeSection.style.display = noExpiration ? 'none' : 'block';
             document.getElementById('itemDate').value = item.date || '';
             document.getElementById('itemNotes').value = item.notes || '';
             updateNotesCharCount();
@@ -2516,6 +2610,43 @@ async function callGoogleAPI(url, options = {}) {
 
         function updateStatus(t) { syncStatus.textContent = t; }
 
+        // ---------- HUMAN-READABLE TIME ----------
+        function getTimeLeft(dateString) {
+            if (!dateString) return '';
+            const now = new Date();
+            const target = new Date(dateString);
+            const diff = target - now;
+            if (diff < 0) return 'Expired';
+            
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (days === 0) {
+                if (hours > 0) return `${hours}h ${minutes % 60}m`;
+                if (minutes > 0) return `${minutes}m`;
+                return `${seconds}s`;
+            }
+            
+            const years = Math.floor(days / 365);
+            const months = Math.floor((days % 365) / 30);
+            const remainingDays = days % 30;
+            
+            const parts = [];
+            if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
+            if (months > 0) parts.push(`${months} month${months > 1 ? 's' : ''}`);
+            if (remainingDays > 0) parts.push(`${remainingDays} day${remainingDays > 1 ? 's' : ''}`);
+            
+            if (parts.length === 0 && days > 0) {
+                // Less than a month but more than 0 days
+                if (days === 1) return '1 day';
+                return `${days} days`;
+            }
+            
+            return parts.join(' ');
+        }
+
         // ---------- SEARCH & FILTER ----------
         let activeCategory = 'All';
 
@@ -2648,12 +2779,23 @@ async function callGoogleAPI(url, options = {}) {
                     status = '∞ No expiry';
                     color = 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
                 } else {
-                    const diffDays = Math.ceil((new Date(item.date) - new Date())/(1000*60*60*24));
-                    status = `${diffDays} days left`;
+                    const timeLeft = getTimeLeft(item.date);
+                    status = timeLeft;
                     color = 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-                    if (diffDays <= 30) { status = `${diffDays} days`; color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200'; }
-                    if (diffDays <= 7) { status = `⚠️ ${diffDays} days`; color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'; }
-                    if (diffDays < 0) { status = 'Expired'; color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'; }
+                    if (timeLeft === 'Expired') {
+                        color = 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+                    } else if (timeLeft.includes('day') || timeLeft.includes('days')) {
+                        // Check if days left is small
+                        const daysMatch = timeLeft.match(/(\d+)\s*(day|days)/);
+                        if (daysMatch) {
+                            const days = parseInt(daysMatch[1]);
+                            if (days <= 7) {
+                                color = 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
+                            } else if (days <= 30) {
+                                color = 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+                            }
+                        }
+                    }
                 }
                 const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
                     ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' '))
@@ -2682,9 +2824,9 @@ async function callGoogleAPI(url, options = {}) {
                             timeStr += ` (${item.durationMinutes} minutes)`;
                         }
                     }
-                    dateLineHtml = `<p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">${item.date}${timeStr}</p>`;
+                    dateLineHtml = `<span class="date-info">${item.date}${timeStr}</span>`;
                 } else {
-                    dateLineHtml = `<p class="text-sm text-indigo-500 dark:text-indigo-400 mt-1.5 flex items-center gap-1"><i class="fas fa-infinity text-xs"></i> No expiry date</p>`;
+                    dateLineHtml = `<span class="date-info">No expiry date</span>`;
                 }
 
                 // Attachments display with preview
@@ -2724,26 +2866,28 @@ async function callGoogleAPI(url, options = {}) {
                             <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${color} flex-shrink-0 ml-2">${status}</span>
                         </div>
                         ${tagsHtml}
-                        ${dateLineHtml}
                         <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
                         ${attachmentsHtml}
                         ${notesHtml}
-                        <div class="flex justify-end gap-1 mt-3 pt-2 border-t border-gray-100 dark:border-gray-700">
-                            <button onclick="openEditModal('${item.id}')" 
-                                     class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                     title="Edit">
-                                <i class="fas fa-edit text-base"></i>
-                            </button>
-                            <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
-                                     class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                     title="${item.archived ? 'Unarchive' : 'Archive'}">
-                                <i class="fas fa-archive text-base"></i>
-                            </button>
-                            <button onclick="deleteItem('${item.id}')" 
-                                     class="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                     title="Delete">
-                                <i class="fas fa-trash text-base"></i>
-                            </button>
+                        <div class="item-bottom-row">
+                            ${dateLineHtml}
+                            <div class="actions">
+                                <button onclick="openEditModal('${item.id}')" 
+                                         class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="Edit">
+                                    <i class="fas fa-edit text-base"></i>
+                                </button>
+                                <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
+                                         class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="${item.archived ? 'Unarchive' : 'Archive'}">
+                                    <i class="fas fa-archive text-base"></i>
+                                </button>
+                                <button onclick="deleteItem('${item.id}')" 
+                                         class="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="Delete">
+                                    <i class="fas fa-trash text-base"></i>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>`;
