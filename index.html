@@ -2873,14 +2873,14 @@ async function callGoogleAPI(url, options = {}) {
                 let showTimeLeft = false;
                 
                 if (item.noExpiration) {
-                    status = '∞ No expiry';
+                    status = 'No expiry';
                     colorClass = 'purple';
                 } else if (!item.date) {
-                    status = '∞ No expiry';
+                    status = 'No expiry';
                     colorClass = 'purple';
                 } else {
                     timeInfo = getTimeInfo(item.date);
-                    status = timeInfo.text;
+                    status = 'Expires';
                     colorClass = timeInfo.cssClass;
                     showTimeLeft = true;
                 }
@@ -2941,6 +2941,12 @@ async function callGoogleAPI(url, options = {}) {
                 // Archive badge for archived items
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
 
+                // Top-right badge: show "Expires" or "No expiry"
+                const badgeColorClass = colorClass === 'red' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                       colorClass === 'orange' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
+                                       colorClass === 'green' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                                       'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
+                
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="flex items-start justify-between">
@@ -2951,7 +2957,7 @@ async function callGoogleAPI(url, options = {}) {
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             </div>
-                            ${!item.noExpiration && item.date ? `<span class="text-xs font-semibold px-2.5 py-1 rounded-full ${colorClass === 'red' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : colorClass === 'orange' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' : colorClass === 'green' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300'} flex-shrink-0 ml-2">${status}</span>` : `<span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300 flex-shrink-0 ml-2">${status}</span>`}
+                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${badgeColorClass} flex-shrink-0 ml-2">${status}</span>
                         </div>
                         ${tagsHtml}
                         <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
@@ -2960,6 +2966,7 @@ async function callGoogleAPI(url, options = {}) {
                         <div class="item-bottom-row">
                             <div class="bottom-left">
                                 ${dateLineHtml}
+                                ${showTimeLeft ? `<span class="time-left ${timeInfo.cssClass}">${timeInfo.text}</span>` : ''}
                             </div>
                             <div class="actions">
                                 <button onclick="openEditModal('${item.id}')" 
