@@ -2681,67 +2681,73 @@ async function callGoogleAPI(url, options = {}) {
 
         function updateStatus(t) { syncStatus.textContent = t; }
 
-        // ---------- HUMAN-READABLE TIME ----------
-        function getTimeInfo(dateString) {
-            if (!dateString) return { text: '', days: null, cssClass: 'gray' };
-            const now = new Date();
-            const target = new Date(dateString);
-            const diffMs = target - now;
-            if (diffMs < 0) return { text: 'Expired', days: -1, cssClass: 'gray' };
+        // ---------- FORMAT DURATION (for both future and past) ----------
+        function formatDuration(ms) {
+            if (ms < 0) ms = -ms; // absolute value
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
             
-            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-            
-            // For less than a day, show hours/minutes
-            if (diffDays === 0) {
-                const hours = Math.floor(diffMs / (1000 * 60 * 60));
-                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                if (hours > 0) return { text: `${hours}h ${minutes}m`, days: 0, cssClass: 'red' };
-                if (minutes > 0) return { text: `${minutes}m`, days: 0, cssClass: 'red' };
-                return { text: 'Today', days: 0, cssClass: 'red' };
+            if (days === 0) {
+                if (hours > 0) return `${hours}h ${minutes % 60}m`;
+                if (minutes > 0) return `${minutes}m`;
+                return `${seconds}s`;
             }
             
-            // For 1+ days, compute years, months, days properly
-            const targetDate = new Date(target);
-            const nowDate = new Date(now);
+            const targetDate = new Date(Date.now() + ms);
+            const nowDate = new Date();
             
             let years = targetDate.getFullYear() - nowDate.getFullYear();
             let months = targetDate.getMonth() - nowDate.getMonth();
-            let days = targetDate.getDate() - nowDate.getDate();
+            let days2 = targetDate.getDate() - nowDate.getDate();
             
-            if (days < 0) {
+            if (days2 < 0) {
                 months--;
                 const prevMonth = new Date(targetDate.getFullYear(), targetDate.getMonth(), 0);
-                days += prevMonth.getDate();
+                days2 += prevMonth.getDate();
             }
             if (months < 0) {
                 years--;
                 months += 12;
             }
             
-            // If the difference is less than a month, show days
-            if (years === 0 && months === 0) {
-                if (days === 0) return { text: 'Today', days: 0, cssClass: 'red' };
-                if (days === 1) return { text: '1 day', days: 1, cssClass: diffDays <= 7 ? 'red' : (diffDays <= 30 ? 'orange' : 'green') };
-                return { text: `${days} days`, days, cssClass: diffDays <= 7 ? 'red' : (diffDays <= 30 ? 'orange' : 'green') };
-            }
-            
             const parts = [];
             if (years > 0) parts.push(`${years} year${years > 1 ? 's' : ''}`);
             if (months > 0) parts.push(`${months} month${months > 1 ? 's' : ''}`);
-            if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
+            if (days2 > 0) parts.push(`${days2} day${days2 > 1 ? 's' : ''}`);
             
-            // If no parts (shouldn't happen), show days
             if (parts.length === 0) {
-                const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                if (totalDays === 1) return { text: '1 day', days: 1, cssClass: 'green' };
-                return { text: `${totalDays} days`, days: totalDays, cssClass: 'green' };
+                if (days === 0) return 'Today';
+                if (days === 1) return '1 day';
+                return `${days} days`;
+            }
+            return parts.join(' ');
+        }
+
+        // ---------- TIME INFO (returns object with text, cssClass, days) ----------
+        function getTimeInfo(dateString) {
+            if (!dateString) return { text: 'No expiry', days: null, cssClass: 'purple' };
+            const now = new Date();
+            const target = new Date(dateString);
+            const diffMs = target - now;
+            
+            if (diffMs === 0) {
+                return { text: 'Today', days: 0, cssClass: 'red' };
             }
             
-            let cssClass = 'green';
-            if (diffDays <= 7) cssClass = 'red';
-            else if (diffDays <= 30) cssClass = 'orange';
-            
-            return { text: parts.join(' '), days: diffDays, cssClass };
+            if (diffMs > 0) {
+                // Future
+                const duration = formatDuration(diffMs);
+                let cssClass = 'green';
+                if (diffMs <= 7 * 24 * 60 * 60 * 1000) cssClass = 'red';
+                else if (diffMs <= 30 * 24 * 60 * 60 * 1000) cssClass = 'orange';
+                return { text: duration, days: Math.floor(diffMs / (1000 * 60 * 60 * 24)), cssClass };
+            } else {
+                // Past
+                const ago = formatDuration(diffMs); // diffMs negative, formatDuration handles abs
+                return { text: `expired ${ago} ago`, days: -1, cssClass: 'gray' };
+            }
         }
 
         // ---------- SEARCH & FILTER ----------
@@ -2835,11 +2841,16 @@ async function callGoogleAPI(url, options = {}) {
                 const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
                 const itemTags = (i.tags || []).map(t => t.toLowerCase());
                 const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
+                
+                // Search in item name, notes, category, tags, AND attachment names
+                const attachmentNames = (i.attachments || []).map(a => a.name.toLowerCase());
                 const matchesTerm = !term || 
                     (i.name && i.name.toLowerCase().includes(term)) || 
                     (i.notes && i.notes.toLowerCase().includes(term)) ||
                     (itemCategory && itemCategory.toLowerCase().includes(term)) ||
-                    itemTags.some(t => t.includes(term));
+                    itemTags.some(t => t.includes(term)) ||
+                    attachmentNames.some(name => name.includes(term));
+                
                 return matchesCategory && matchesTag && matchesTerm;
             });
         }
@@ -2867,24 +2878,14 @@ async function callGoogleAPI(url, options = {}) {
                 return aTime.localeCompare(bTime);
             });
             itemsList.innerHTML = filtered.map(item => {
-                let status = '';
-                let colorClass = '';
+                // Determine time info (for bottom-left)
                 let timeInfo = null;
                 let showTimeLeft = false;
-                
-                if (item.noExpiration) {
-                    status = 'No expiry';
-                    colorClass = 'purple';
-                } else if (!item.date) {
-                    status = 'No expiry';
-                    colorClass = 'purple';
-                } else {
+                if (item.date && !item.noExpiration) {
                     timeInfo = getTimeInfo(item.date);
-                    status = 'Expires';
-                    colorClass = timeInfo.cssClass;
                     showTimeLeft = true;
                 }
-                
+
                 const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
                     ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' '))
                     : '';
@@ -2941,12 +2942,6 @@ async function callGoogleAPI(url, options = {}) {
                 // Archive badge for archived items
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
 
-                // Top-right badge: show "Expires" or "No expiry"
-                const badgeColorClass = colorClass === 'red' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                                       colorClass === 'orange' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' :
-                                       colorClass === 'green' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                                       'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300';
-                
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="flex items-start justify-between">
@@ -2957,7 +2952,6 @@ async function callGoogleAPI(url, options = {}) {
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             </div>
-                            <span class="text-xs font-semibold px-2.5 py-1 rounded-full ${badgeColorClass} flex-shrink-0 ml-2">${status}</span>
                         </div>
                         ${tagsHtml}
                         <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
