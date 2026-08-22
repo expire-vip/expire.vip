@@ -2328,7 +2328,13 @@ async function callGoogleAPI(url, options = {}) {
             renderAll();
         }
 
-        async function deleteItem(itemId, eventId, attachments) {
+        async function deleteItem(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            
+            const eventId = item.eventId;
+            const attachments = item.attachments || [];
+            
             let confirmMsg = 'Delete this item?';
             if (attachments && attachments.length > 0) {
                 confirmMsg += `\nThis item has ${attachments.length} attachment(s) that will also be permanently deleted from Drive.`;
@@ -2733,7 +2739,7 @@ async function callGoogleAPI(url, options = {}) {
                                      title="${item.archived ? 'Unarchive' : 'Archive'}">
                                 <i class="fas fa-archive text-base"></i>
                             </button>
-                            <button onclick="deleteItem('${item.id}','${item.eventId||''}', ${JSON.stringify(item.attachments || [])})" 
+                            <button onclick="deleteItem('${item.id}')" 
                                      class="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                      title="Delete">
                                 <i class="fas fa-trash text-base"></i>
