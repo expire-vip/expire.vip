@@ -515,14 +515,6 @@
             background: #312e81;
             color: #c7d2fe;
         }
-        .stats-bar .stat-chip.expired-recent {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        .dark .stats-bar .stat-chip.expired-recent {
-            background: #78350f;
-            color: #fcd34d;
-        }
         .stats-bar .stat-chip.expired-old {
             background: #e5e7eb;
             color: #374151;
@@ -530,6 +522,14 @@
         .dark .stats-bar .stat-chip.expired-old {
             background: #374151;
             color: #d1d5db;
+        }
+        .stats-bar .stat-chip.expired-recent {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .dark .stats-bar .stat-chip.expired-recent {
+            background: #78350f;
+            color: #fcd34d;
         }
         .stats-bar .stat-chip.urgent {
             background: #fee2e2;
@@ -2934,10 +2934,11 @@ async function callGoogleAPI(url, options = {}) {
             const baseItems = getBaseFilteredItems();
             const stats = computeStats(baseItems);
             
+            // Order: total, expiredOld, expiredRecent, urgent, upcoming, later, noExpiry
             const chips = [
                 { key: 'all', label: '📦 Total', count: stats.total, cssClass: 'total' },
-                { key: 'expiredRecent', label: '🟠 Expired (7d)', count: stats.expiredRecent, cssClass: 'expired-recent' },
                 { key: 'expiredOld', label: '🔴 Expired (>7d)', count: stats.expiredOld, cssClass: 'expired-old' },
+                { key: 'expiredRecent', label: '🟠 Expired (7d)', count: stats.expiredRecent, cssClass: 'expired-recent' },
                 { key: 'urgent', label: '🔴 Urgent (7d)', count: stats.urgent, cssClass: 'urgent' },
                 { key: 'upcoming', label: '🟡 Upcoming (30d)', count: stats.upcoming, cssClass: 'upcoming' },
                 { key: 'later', label: '🟢 Later (>30d)', count: stats.later, cssClass: 'later' },
@@ -3058,10 +3059,12 @@ async function callGoogleAPI(url, options = {}) {
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             
+            if (activeStatFilter === 'noExpiry') {
+                return baseItems.filter(i => !i.date || i.noExpiration);
+            }
+            
             return baseItems.filter(i => {
-                if (!i.date || i.noExpiration) {
-                    return activeStatFilter === 'noExpiry';
-                }
+                if (!i.date || i.noExpiration) return false;
                 const targetDate = getDateOnly(i.date);
                 const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
                 switch (activeStatFilter) {
