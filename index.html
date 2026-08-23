@@ -829,18 +829,24 @@
                     </div>
                     <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
                         <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Add another reminder in days
+                            Add another reminder
                         </p>
-
                         <div class="flex items-center gap-2">
                             <input
                                 type="number"
-                                id="reminderDays"
+                                id="reminderValue"
                                 min="1"
-                                max="28"
-                                value="10"
-                                placeholder="Days"
-                                class="w-20 flex-shrink-0 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm"> 
+                                max="999"
+                                value="1"
+                                placeholder="Value"
+                                class="w-16 flex-shrink-0 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                            <select
+                                id="reminderUnit"
+                                class="w-24 flex-shrink-0 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 box-border text-sm">
+                                <option value="minutes">Minutes</option>
+                                <option value="hours">Hours</option>
+                                <option value="days" selected>Days</option>
+                            </select>
                             <select
                                 id="reminderMethod"
                                 class="flex-1 min-w-0 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 box-border text-sm">
@@ -851,13 +857,12 @@
                             <button
                                 type="button"
                                 onclick="addReminderToForm()"
-                                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 h-10 rounded-xl transition flex-shrink-0 text-sm font-medium">
+                                class="bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 px-4 h-10 rounded-xl transition flex-shrink-0 text-sm font-medium border border-gray-300 dark:border-gray-500">
                                 + Add
                             </button>
                         </div>
+                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Max 5 reminders, each ≤ 28 days (40320 minutes).</p>
                     </div>
-
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Default: 28 days (email) & 7 days (email).</p>
                 </div>
 
                 <!-- Attachments Section -->
@@ -1050,6 +1055,9 @@
 
         // Form attachments (local list for modal)
         let formAttachments = [];
+
+        // For dirty check
+        let initialFormState = null;
 
         // Preview state
         let previewData = {};
@@ -1697,6 +1705,17 @@ async function callGoogleAPI(url, options = {}) {
                 if (item.archived === undefined) item.archived = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                // Migrate reminders to new format (value, unit, method)
+                if (item.reminders) {
+                    item.reminders = item.reminders.map(r => {
+                        // If it's the old format { days, method }
+                        if (r.days !== undefined && r.value === undefined) {
+                            return { value: r.days, unit: 'days', method: r.method };
+                        }
+                        // If it's already the new format or partially migrated, keep it
+                        return r;
+                    });
+                }
             });
         }
 
@@ -1710,7 +1729,7 @@ async function callGoogleAPI(url, options = {}) {
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
-                migrateItems(); // ensure noExpiration, time, archived, and attachments fields
+                migrateItems(); // ensure noExpiration, time, archived, and attachments fields, and migrate reminders
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
@@ -1736,6 +1755,17 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         // ---------- CALENDAR ----------
+        function getReminderMinutes(reminder) {
+            const value = reminder.value || 0;
+            const unit = reminder.unit || 'days';
+            switch (unit) {
+                case 'minutes': return value;
+                case 'hours': return value * 60;
+                case 'days': return value * 24 * 60;
+                default: return value * 24 * 60;
+            }
+        }
+
         async function addCalendarEvent(item) {
             const tz = appData.settings.timezone || 'UTC';
             let start, end;
@@ -1768,7 +1798,7 @@ async function callGoogleAPI(url, options = {}) {
                 end = { date: endDate.toISOString().split('T')[0] };
             }
 
-            const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: r.days * 24 * 60 }));
+            const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: getReminderMinutes(r) }));
             let desc = item.notes ? `${item.notes}\n\n` : '';
             if (item.tags && item.tags.length > 0) {
                 desc += `Tags: ${item.tags.map(t => '#' + t).join(' ')}\n\n`;
@@ -2390,6 +2420,56 @@ async function callGoogleAPI(url, options = {}) {
             }
         }
 
+        // ---------- DIRTY CHECK ----------
+        function captureInitialFormState() {
+            initialFormState = {
+                name: document.getElementById('itemName').value,
+                category: document.getElementById('itemCategory').value,
+                date: document.getElementById('itemDate').value,
+                noDate: document.getElementById('itemNoDate').checked,
+                hasTime: document.getElementById('itemHasTime').checked,
+                time: document.getElementById('itemTime').value,
+                duration: document.getElementById('itemDuration').value,
+                notes: document.getElementById('itemNotes').value,
+                tags: [...formTags],
+                reminders: JSON.stringify(formReminders),
+                attachments: JSON.stringify(formAttachments)
+            };
+        }
+
+        function isFormDirty() {
+            if (!initialFormState) return false;
+            const current = {
+                name: document.getElementById('itemName').value,
+                category: document.getElementById('itemCategory').value,
+                date: document.getElementById('itemDate').value,
+                noDate: document.getElementById('itemNoDate').checked,
+                hasTime: document.getElementById('itemHasTime').checked,
+                time: document.getElementById('itemTime').value,
+                duration: document.getElementById('itemDuration').value,
+                notes: document.getElementById('itemNotes').value,
+                tags: [...formTags],
+                reminders: JSON.stringify(formReminders),
+                attachments: JSON.stringify(formAttachments)
+            };
+            return JSON.stringify(initialFormState) !== JSON.stringify(current);
+        }
+
+        function resetFormDirty() {
+            initialFormState = null;
+        }
+
+        // ---------- MODAL CLOSE CONFIRMATION ----------
+        function tryCloseItemModal() {
+            if (isFormDirty()) {
+                if (confirm('You have unsaved changes. Are you sure you want to discard them?')) {
+                    closeItemModal();
+                }
+            } else {
+                closeItemModal();
+            }
+        }
+
         function openAddModal() {
             editingItemId = null;
             document.getElementById('modalTitle').textContent = 'Add New Item';
@@ -2411,7 +2491,7 @@ async function callGoogleAPI(url, options = {}) {
             // Ensure time section is visible
             const timeSection = document.getElementById('timeSection');
             if (timeSection) timeSection.style.display = 'block';
-            formReminders = [{ days: 28, method: 'email' }, { days: 7, method: 'email' }];
+            formReminders = [{ value: 28, unit: 'days', method: 'email' }, { value: 7, unit: 'days', method: 'email' }];
             renderReminderChipsForm();
             formTags = [];
             const tagInput = document.getElementById('tagInput');
@@ -2421,6 +2501,8 @@ async function callGoogleAPI(url, options = {}) {
             // Reset attachments
             formAttachments = [];
             renderAttachments();
+            // Reset dirty state
+            setTimeout(() => { captureInitialFormState(); }, 50);
             document.getElementById('itemModal').classList.remove('hidden');
         }
         function openEditModal(itemId) {
@@ -2457,9 +2539,14 @@ async function callGoogleAPI(url, options = {}) {
             // Attachments
             formAttachments = item.attachments ? [...item.attachments] : [];
             renderAttachments();
+            setTimeout(() => { captureInitialFormState(); }, 50);
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        function closeItemModal() { document.getElementById('itemModal').classList.add('hidden'); editingItemId = null; }
+        function closeItemModal() { 
+            document.getElementById('itemModal').classList.add('hidden'); 
+            editingItemId = null; 
+            resetFormDirty();
+        }
         
         function renderTagChipsForm() {
             const container = document.getElementById('tagChipsForm');
@@ -2534,34 +2621,49 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         function addReminderToForm() {
-            const days = parseInt(document.getElementById('reminderDays').value);
-            if (isNaN(days) || days < 1 || days > 28) { showToast('Days must be 1–28.'); return; }
+            const value = parseInt(document.getElementById('reminderValue').value);
+            const unit = document.getElementById('reminderUnit').value;
+            const method = document.getElementById('reminderMethod').value;
+            if (isNaN(value) || value < 1) { showToast('Please enter a positive number.'); return; }
+            // Convert to minutes for validation: max 28 days = 40320 minutes
+            let minutes = value;
+            if (unit === 'hours') minutes = value * 60;
+            else if (unit === 'days') minutes = value * 24 * 60;
+            if (minutes > 40320) { showToast('Each reminder cannot exceed 28 days (40320 minutes).'); return; }
             if (formReminders.length >= 5) { showToast('Max 5 reminders.'); return; }
-            formReminders.push({ days, method: document.getElementById('reminderMethod').value });
+            formReminders.push({ value, unit, method });
             renderReminderChipsForm();
-            document.getElementById('reminderDays').value = '';
+            // Reset fields
+            document.getElementById('reminderValue').value = '';
+            document.getElementById('reminderUnit').value = 'days';
+            document.getElementById('reminderMethod').value = 'email';
         }
         function removeReminderFromForm(idx) { formReminders.splice(idx, 1); renderReminderChipsForm(); }
         function renderReminderChipsForm() {
             const container = document.getElementById('reminderChipsForm');
-        
-            container.innerHTML = formReminders
-                .sort((a, b) => b.days - a.days)
-                .map((r, i) => `
-                    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-sm font-medium text-gray-800 dark:text-gray-200">
-                        ${r.method === 'email' ? '📧' : '🔔'}
-                        ${r.days} days
-                        <button
-                            type="button"
-                            onclick="removeReminderFromForm(${i})"
-                            class="text-gray-400 hover:text-red-500 transition ml-1"
-                            title="Remove reminder"
-                            aria-label="Remove reminder">
-                            &times;
-                        </button>
-                    </span>
-                `)
-                .join('');
+            // Group and sort by total minutes descending
+            const sorted = [...formReminders].sort((a, b) => {
+                const aMin = getReminderMinutes(a);
+                const bMin = getReminderMinutes(b);
+                return bMin - aMin;
+            });
+            container.innerHTML = sorted.map((r, i) => `
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-sm font-medium text-gray-800 dark:text-gray-200">
+                    ${r.method === 'email' ? '📧' : '🔔'}
+                    ${r.value} ${r.unit}
+                    <button
+                        type="button"
+                        onclick="removeReminderFromForm(${i})"
+                        class="text-gray-400 hover:text-red-500 transition ml-1"
+                        title="Remove reminder"
+                        aria-label="Remove reminder">
+                        &times;
+                    </button>
+                </span>
+            `).join('');
+            if (formReminders.length === 0) {
+                container.innerHTML = `<span class="text-xs text-gray-400 dark:text-gray-500 italic">No reminders added.</span>`;
+            }
         }
 
         // ---------- ARCHIVE ----------
@@ -3110,7 +3212,7 @@ async function callGoogleAPI(url, options = {}) {
                 }
 
                 const remindersHtml = (!item.noExpiration && item.date && item.reminders && item.reminders.length > 0)
-                    ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.days}d (${r.method})</span>`).join(' '))
+                    ? (item.reminders.map(r => `<span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full">⏰ ${r.value} ${r.unit} (${r.method})</span>`).join(' '))
                     : '';
                 
                 const tagsHtml = (item.tags && item.tags.length > 0)
@@ -3264,10 +3366,10 @@ async function callGoogleAPI(url, options = {}) {
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{days:28,method:'email'},{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{days:14,method:'email'},{days:3,method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{days:7,method:'popup'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{days:14,method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{value:28, unit:'days', method:'email'},{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{value:14, unit:'days', method:'email'},{value:3, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{value:14, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
@@ -3374,7 +3476,9 @@ async function callGoogleAPI(url, options = {}) {
 
         // Close modals when clicking backdrop
         document.getElementById('itemModal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('itemModal')) closeItemModal();
+            if (e.target === document.getElementById('itemModal')) {
+                tryCloseItemModal();
+            }
         });
         document.getElementById('settingsModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('settingsModal')) closeSettings();
@@ -3388,7 +3492,7 @@ async function callGoogleAPI(url, options = {}) {
         // Close modals with Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
-                closeItemModal();
+                tryCloseItemModal();
                 closeSettings();
             }
         });
