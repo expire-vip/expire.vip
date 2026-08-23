@@ -77,28 +77,57 @@
             padding: 14px 18px;
             position: fixed;
             z-index: 9999;
+        
             left: 50%;
             bottom: 30px;
             transform: translateX(-50%);
+        
             font-size: 14px;
             font-weight: 500;
             box-shadow: 0 10px 25px rgba(0,0,0,.25);
         }
+        
         .toast.show {
             visibility: visible;
             animation: fadein .25s, fadeout .25s 2.75s;
         }
-        .toast.success { background: #16a34a; }
-        .toast.error { background: #dc2626; }
-        .toast.info { background: #2563eb; }
-        .toast.warning { background: #d97706; }
-        @keyframes fadein {
-            from { opacity: 0; transform: translate(-50%, 20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
+        
+        .toast.success {
+            background: #16a34a;
         }
+        
+        .toast.error {
+            background: #dc2626;
+        }
+        
+        .toast.info {
+            background: #2563eb;
+        }
+        
+        .toast.warning {
+            background: #d97706;
+        }
+        
+        @keyframes fadein {
+            from {
+                opacity: 0;
+                transform: translate(-50%, 20px);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+        }
+        
         @keyframes fadeout {
-            from { opacity: 1; transform: translate(-50%, 0); }
-            to { opacity: 0; transform: translate(-50%, 20px); }
+            from {
+                opacity: 1;
+                transform: translate(-50%, 0);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, 20px);
+            }
         }
         /* Attachment list styles */
         .attachment-item {
@@ -114,7 +143,10 @@
             background: #1f2937;
             border-color: #374151;
         }
-        .attachment-item .file-icon { font-size: 1.2rem; flex-shrink: 0; }
+        .attachment-item .file-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
         .attachment-item .file-name {
             flex: 1;
             font-size: 0.9rem;
@@ -128,7 +160,9 @@
             text-decoration: underline;
             color: #2563eb;
         }
-        .dark .attachment-item .file-name:hover { color: #60a5fa; }
+        .dark .attachment-item .file-name:hover {
+            color: #60a5fa;
+        }
         .attachment-item .file-actions {
             display: flex;
             gap: 0.25rem;
@@ -152,10 +186,18 @@
             background: #374151;
             color: #f3f4f6;
         }
-        .attachment-item .file-actions .delete-attachment:hover { color: #dc2626; }
-        .attachment-item .file-actions .rename-attachment:hover { color: #2563eb; }
-        .attachment-item .file-actions .download-attachment:hover { color: #16a34a; }
-        .attachment-item .file-actions .preview-attachment:hover { color: #8b5cf6; }
+        .attachment-item .file-actions .delete-attachment:hover {
+            color: #dc2626;
+        }
+        .attachment-item .file-actions .rename-attachment:hover {
+            color: #2563eb;
+        }
+        .attachment-item .file-actions .download-attachment:hover {
+            color: #16a34a;
+        }
+        .attachment-item .file-actions .preview-attachment:hover {
+            color: #8b5cf6;
+        }
         /* Preview Modal */
         #previewModal {
             display: none;
@@ -167,7 +209,9 @@
             justify-content: center;
             padding: 1rem;
         }
-        #previewModal.show { display: flex; }
+        #previewModal.show {
+            display: flex;
+        }
         #previewModal .preview-content {
             background: white;
             border-radius: 1rem;
@@ -192,7 +236,9 @@
             border-bottom: 1px solid #e5e7eb;
             flex-shrink: 0;
         }
-        .dark #previewModal .preview-header { border-bottom-color: #374151; }
+        .dark #previewModal .preview-header {
+            border-bottom-color: #374151;
+        }
         #previewModal .preview-header .header-top {
             display: flex;
             justify-content: space-between;
@@ -237,8 +283,12 @@
             font-size: 1.5rem;
             padding: 0 0.5rem;
         }
-        #previewModal .preview-header .preview-actions .close-preview:hover { color: #1f2937; }
-        .dark #previewModal .preview-header .preview-actions .close-preview:hover { color: #f3f4f6; }
+        #previewModal .preview-header .preview-actions .close-preview:hover {
+            color: #1f2937;
+        }
+        .dark #previewModal .preview-header .preview-actions .close-preview:hover {
+            color: #f3f4f6;
+        }
         #previewModal .preview-header .preview-actions .save-edit-btn {
             background: #2563eb;
             color: white;
@@ -258,7 +308,9 @@
             color: #6b7280;
             margin-top: 0.25rem;
         }
-        .dark #previewModal .preview-header .preview-meta { color: #9ca3af; }
+        .dark #previewModal .preview-header .preview-meta {
+            color: #9ca3af;
+        }
         #previewModal .preview-body {
             flex: 1;
             overflow: auto;
@@ -320,16 +372,24 @@
             text-align: center;
         }
         /* Notes full width on mobile */
-        .notes-wrapper { width: 100%; }
-        .notes-wrapper .fa-sticky-note { flex-shrink: 0; }
+        .notes-wrapper {
+            width: 100%;
+        }
+        .notes-wrapper .fa-sticky-note {
+            flex-shrink: 0;
+        }
         .notes-wrapper .notes-text {
             flex: 1;
             min-width: 0;
             word-break: break-word;
         }
         /* Back to top button */
-        .back-to-top { cursor: pointer; }
-        .back-to-top:hover { opacity: 0.8; }
+        .back-to-top {
+            cursor: pointer;
+        }
+        .back-to-top:hover {
+            opacity: 0.8;
+        }
         /* Bottom row for date and actions */
         .item-bottom-row {
             display: flex;
@@ -341,7 +401,9 @@
             padding-top: 0.5rem;
             border-top: 1px solid #e5e7eb;
         }
-        .dark .item-bottom-row { border-top-color: #374151; }
+        .dark .item-bottom-row {
+            border-top-color: #374151;
+        }
         .item-bottom-row .bottom-left {
             display: flex;
             flex-wrap: wrap;
@@ -350,8 +412,12 @@
             font-size: 0.8rem;
             color: #6b7280;
         }
-        .dark .item-bottom-row .bottom-left { color: #9ca3af; }
-        .item-bottom-row .bottom-left .date-info { white-space: nowrap; }
+        .dark .item-bottom-row .bottom-left {
+            color: #9ca3af;
+        }
+        .item-bottom-row .bottom-left .date-info {
+            white-space: nowrap;
+        }
         .item-bottom-row .bottom-left .time-left {
             font-weight: 600;
             padding: 0.125rem 0.5rem;
@@ -387,7 +453,9 @@
             background: transparent;
             font-weight: 500;
         }
-        .dark .item-bottom-row .bottom-left .time-left.gray { color: #9ca3af; }
+        .dark .item-bottom-row .bottom-left .time-left.gray {
+            color: #9ca3af;
+        }
         .item-bottom-row .bottom-left .time-left.purple {
             background: #ede9fe;
             color: #5b21b6;
@@ -401,7 +469,9 @@
             gap: 0.25rem;
             flex-shrink: 0;
         }
-        .item-bottom-row .actions button { padding: 0.3rem 0.5rem; }
+        .item-bottom-row .actions button {
+            padding: 0.3rem 0.5rem;
+        }
         /* Stats bar */
         .stats-bar {
             display: flex;
@@ -524,6 +594,7 @@
                 <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
             </div>
             <div class="flex items-center gap-2">
+                <!-- Dark mode toggle removed -->
                 <button id="settingsBtn" class="text-white/80 hover:text-white transition hidden-auth" title="Settings">
                     <i class="fas fa-cog text-lg"></i>
                 </button>
@@ -952,10 +1023,18 @@
 
     <div id="loadingOverlay"
          class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[9999] flex items-center justify-center">
+    
         <div class="bg-gray-800 border border-gray-700 rounded-2xl px-8 py-6 text-center shadow-xl">
+    
             <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p id="loadingText" class="text-gray-100 font-medium">Loading...</p>
+    
+            <p id="loadingText"
+               class="text-gray-100 font-medium">
+                Loading...
+            </p>
+    
         </div>
+    
     </div>
 
     <script>
@@ -1014,21 +1093,6 @@
         const previewMeta = document.getElementById('previewMeta');
         const statsBar = document.getElementById('statsBar');
         
-        // ---------- JWT DECODER ----------
-        function decodeJWT(token) {
-            try {
-                const base64Url = token.split('.')[1];
-                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }).join(''));
-                return JSON.parse(jsonPayload);
-            } catch(e) {
-                return null;
-            }
-        }
-
-        // ---------- LOADING OVERLAY ----------
         function showLoading(message = "Loading...") {
             isLoading = true;
             document.getElementById("loadingText").textContent = message;
@@ -1042,110 +1106,69 @@
 
         async function withLoading(message, callback) {
             showLoading(message);
+        
             try {
                 return await callback();
-            } finally {
+            }
+            finally {
                 hideLoading();
             }
         }
         
-        // ---------- TOKEN MANAGEMENT ----------
-        function ensureValidToken() {
-            if (accessToken && Date.now() < tokenExpiry) {
-                return Promise.resolve(accessToken);
-            }
+function ensureValidToken() {
+    if (accessToken && Date.now() < tokenExpiry) {
+        return Promise.resolve(accessToken);
+    }
 
-            const userEmail = localStorage.getItem('expire_userEmail') || '';
+    if (!silentRefreshPromise) {
+        silentRefreshPromise = new Promise((resolve, reject) => {
+            tokenClient.requestAccessToken({ prompt: '' });
 
-            if (!silentRefreshPromise) {
-                silentRefreshPromise = new Promise((resolve, reject) => {
-                    const options = { prompt: '' };
-                    if (userEmail) {
-                        options.login_hint = userEmail;
-                    }
-                    tokenClient.requestAccessToken(options);
-
-                    const originalCallback = tokenClient.callback;
-                    tokenClient.callback = (response) => {
-                        tokenClient.callback = originalCallback; // restore
-                        if (response.error) {
-                            // Silent refresh failed – no popup, just reject
-                            reject(new Error('Silent refresh failed: ' + response.error));
-                        } else {
-                            accessToken = response.access_token;
-                            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-                            saveToken(response.access_token, response.expires_in);
-                            // Store email if present
-                            if (response.id_token) {
-                                const payload = decodeJWT(response.id_token);
-                                if (payload && payload.email) {
-                                    localStorage.setItem('expire_userEmail', payload.email);
-                                }
-                            }
-                            resolve(accessToken);
-                        }
-                        silentRefreshPromise = null;
-                    };
-                });
-            }
-            return silentRefreshPromise;
-        }
-
-        function saveToken(token, expiresIn) {
-            localStorage.setItem('expire_accessToken', token);
-            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
-        }
-
-        function handleTokenResponse(response) {
-            if (response.error !== undefined) {
-                if (response.error === 'popup_closed_by_user') {
-                    // User closed the popup, do nothing.
-                } else if (loginTriggeredByUser) {
-                    alert('Login failed. Please try again.');
-                    loginTriggeredByUser = false;
+            // Temporary callback overwrite
+            const originalCallback = tokenClient.callback;
+            tokenClient.callback = (response) => {
+                tokenClient.callback = originalCallback; // restore
+                if (response.error) {
+                    // Silent refresh failed – ask user to log in again
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                    reject(new Error('Silent refresh failed, consent required'));
+                } else {
+                    accessToken = response.access_token;
+                    tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+                    resolve(accessToken);
                 }
-                return;
-            }
-            accessToken = response.access_token;
-            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-            saveToken(response.access_token, response.expires_in);
-            // Decode id_token to get email
-            if (response.id_token) {
-                const payload = decodeJWT(response.id_token);
-                if (payload && payload.email) {
-                    localStorage.setItem('expire_userEmail', payload.email);
-                }
-            }
-            // If we are on landing page, init app
-            if (landingPage.style.display !== 'none') {
-                initAppData();
-            }
-        }
-
-        // ---------- GOOGLE API CALL (with automatic token refresh on 401) ----------
-        async function callGoogleAPI(url, options = {}) {
-            // Ensure we have a valid token before making request
-            const token = await ensureValidToken();
-            options.headers = {
-                ...options.headers,
-                'Authorization': `Bearer ${token}`,
+                silentRefreshPromise = null;
             };
-            let response = await fetch(url, options);
-            if (response.status === 401) {
-                // Token may be invalid; try to refresh once
-                try {
-                    const newToken = await ensureValidToken(); // This may reject if silent refresh fails
-                    options.headers['Authorization'] = `Bearer ${newToken}`;
-                    response = await fetch(url, options);
-                    if (response.status === 401) {
-                        throw new Error('Unauthorized after refresh');
-                    }
-                } catch (e) {
-                    throw new Error('Authentication failed: ' + e.message);
-                }
-            }
-            return response;
+        });
+    }
+    return silentRefreshPromise;
+}
+
+async function callGoogleAPI(url, options = {}) {
+    const token = await ensureValidToken();
+    options.headers = {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+    };
+    const response = await fetch(url, options);
+    if (response.status === 401) {
+        // Token may be invalid (e.g., user revoked permission)
+        // Force a full re‑consent
+        accessToken = null;
+        tokenExpiry = 0;
+        await tokenClient.requestAccessToken({ prompt: 'consent' });
+        throw new Error('Re‑authenticated');
+    }
+    return response;
+}
+
+
+        // ---------- DARK MODE ----------
+        // Dark mode is always on – no toggle needed
+        function applyDarkMode() {
+            document.documentElement.classList.add('dark');
         }
+        applyDarkMode();
 
         // ---------- TOAST ----------
         function showToastSimple(msg) {
@@ -1157,6 +1180,7 @@
 
         function showToast(message, type = "info") {
             const toast = document.getElementById("toast");
+        
             const icons = {
                 success: "✅",
                 error: "❌",
@@ -1171,10 +1195,21 @@
             }, 3000);
         }
 
-        function toastSuccess(msg) { showToast(msg, "success"); }
-        function toastError(msg) { showToast(msg, "error"); }
-        function toastWarning(msg) { showToast(msg, "warning"); }
-        function toastInfo(msg) { showToast(msg, "info"); }
+        function toastSuccess(msg) {
+            showToast(msg, "success");
+        }
+        
+        function toastError(msg) {
+            showToast(msg, "error");
+        }
+        
+        function toastWarning(msg) {
+            showToast(msg, "warning");
+        }
+        
+        function toastInfo(msg) {
+            showToast(msg, "info");
+        }
 
         // ---------- TEST MODE ----------
         window.enableTestMode = () => { localStorage.setItem('expire_testMode', 'true'); location.reload(); };
@@ -1659,21 +1694,30 @@
         }
 
         // ---------- CLOUD STORAGE (Google Drive) ----------
+        // Migration function to add noExpiration flag and ensure date is a string
         function migrateItems() {
             appData.items.forEach(item => {
                 if (item.noExpiration === undefined) {
+                    // If date is empty or null, treat as no expiration
                     item.noExpiration = !item.date || item.date.trim() === '';
                 }
+                // Ensure date is a string (could be empty)
                 item.date = item.date || '';
+                // Ensure time and duration exist (optional)
                 if (item.time === undefined) item.time = '';
                 if (item.durationMinutes === undefined) item.durationMinutes = 30;
+                // Ensure archived field exists
                 if (item.archived === undefined) item.archived = false;
+                // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                // Migrate reminders to new format (value, unit, method)
                 if (item.reminders) {
                     item.reminders = item.reminders.map(r => {
+                        // If it's the old format { days, method }
                         if (r.days !== undefined && r.value === undefined) {
                             return { value: r.days, unit: 'days', method: r.method };
                         }
+                        // If it's already the new format or partially migrated, keep it
                         return r;
                     });
                 }
@@ -1690,7 +1734,7 @@
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
-                migrateItems();
+                migrateItems(); // ensure noExpiration, time, archived, and attachments fields, and migrate reminders
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
@@ -1731,13 +1775,16 @@
             const tz = appData.settings.timezone || 'UTC';
             let start, end;
             if (item.time && item.time.length > 0 && !item.noExpiration) {
+                // Timed event – construct both start and end in local time to avoid timezone issues
                 const [year, month, day] = item.date.split('-').map(Number);
                 const [hour, minute] = item.time.split(':').map(Number);
                 const startDate = new Date(year, month - 1, day, hour, minute);
                 const duration = item.durationMinutes || 30;
                 const endDate = new Date(startDate.getTime() + duration * 60000);
                 
+                // Format start as local dateTime string
                 const startDateTime = `${item.date}T${item.time}:00`;
+                // Format end as local dateTime string
                 const endYear = endDate.getFullYear();
                 const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
                 const endDay = String(endDate.getDate()).padStart(2, '0');
@@ -1748,6 +1795,7 @@
                 start = { dateTime: startDateTime, timeZone: tz };
                 end = { dateTime: endDateTime, timeZone: tz };
             } else {
+                // All-day event
                 const [y, m, d] = item.date.split('-');
                 const endDate = new Date(y, m - 1, d);
                 endDate.setDate(endDate.getDate() + 1);
@@ -1821,20 +1869,29 @@
 
         async function deleteFile(fileId) {
             const token = await ensureValidToken();
+        
             const response = await fetch(
                 `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
                 {
                     method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
                 }
             );
-            if (!response.ok && response.status !== 404) {
+        
+            if (!response.ok) {
+                // If file not found, ignore the error (it's already gone)
+                if (response.status === 404) {
+                    return;
+                }
                 throw new Error(await response.text());
             }
         }
 
         async function renameFile(fileId, newName) {
             const token = await ensureValidToken();
+        
             const response = await fetch(
                 `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
                 {
@@ -1843,10 +1900,16 @@
                         Authorization: `Bearer ${token}`,
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ name: newName })
+                    body: JSON.stringify({
+                        name: newName
+                    })
                 }
             );
-            if (!response.ok) throw new Error(await response.text());
+        
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+        
             return await response.json();
         }
 
@@ -1881,7 +1944,9 @@
             const titleEl = document.getElementById('previewTitle');
             const meta = document.getElementById('previewMeta');
             
+            // Reset zoom
             currentZoom = 1;
+            // Hide all dynamic buttons
             jsonToggleBtn.style.display = 'none';
             editToggleBtn.style.display = 'none';
             zoomOutBtn.style.display = 'none';
@@ -1896,6 +1961,7 @@
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
             modal.classList.add('show');
 
+            // Fetch metadata first
             getFileMetadata(fileId)
                 .then(metaData => {
                     if (metaData.createdTime) {
@@ -1905,6 +1971,7 @@
                 })
                 .catch(err => console.warn('Failed to fetch metadata:', err));
 
+            // Fetch the file content
             downloadFile(fileId)
                 .then(async (response) => {
                     const contentType = response.headers.get('Content-Type') || mimeType || '';
@@ -1914,6 +1981,7 @@
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
                         body.innerHTML = `<img src="${url}" alt="${title}" id="previewImage" />`;
+                        // Show zoom controls
                         zoomOutBtn.style.display = 'inline-block';
                         zoomResetBtn.style.display = 'inline-block';
                         zoomInBtn.style.display = 'inline-block';
@@ -1921,6 +1989,7 @@
                         previewData.isVideo = true;
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
+                        // Map video/quicktime to video/mp4 for better browser compatibility
                         const mappedType = contentType === 'video/quicktime' ? 'video/mp4' : contentType;
                         const videoHtml = `
                             <video controls autoplay playsinline preload="metadata" onerror="this.style.display='none'; document.getElementById('videoFallback').style.display='flex';">
@@ -1935,6 +2004,7 @@
                             </div>
                         `;
                         body.innerHTML = videoHtml;
+                        // No zoom controls for video
                     } else if (contentType === 'application/pdf') {
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
@@ -1950,9 +2020,11 @@
                             previewData.parsed = parsed;
                             jsonToggleBtn.style.display = 'inline-block';
                             jsonToggleBtn.textContent = 'Pretty JSON';
-                            showJsonPreview(false);
+                            showJsonPreview(false); // raw by default
                         } catch (e) {
+                            // Not valid JSON – show as plain text
                             body.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+                            // Show edit button for text files (including .txt)
                             if (contentType.includes('text/plain')) {
                                 editToggleBtn.style.display = 'inline-block';
                                 previewData.isTextFile = true;
@@ -2005,12 +2077,15 @@
             if (!previewData.isTextFile) return;
 
             if (!isEditMode) {
+                // Enter edit mode
                 isEditMode = true;
                 const currentText = previewData.rawText || '';
                 body.innerHTML = `<textarea id="editTextarea">${escapeHtml(currentText)}</textarea>`;
                 editBtn.textContent = 'Cancel Edit';
+                // Show Save button in header
                 saveEditBtn.style.display = 'inline-block';
             } else {
+                // Exit edit mode without saving
                 cancelEdit();
             }
         }
@@ -2020,6 +2095,7 @@
             const editBtn = document.getElementById('editToggleBtn');
             editBtn.textContent = 'Edit';
             saveEditBtn.style.display = 'none';
+            // Re-render the original content
             const body = document.getElementById('previewBody');
             body.innerHTML = `<pre>${escapeHtml(previewData.originalContent)}</pre>`;
         }
@@ -2030,8 +2106,10 @@
             const newContent = textarea.value;
             try {
                 await updateFileContent(previewData.fileId, newContent, previewData.mimeType || 'text/plain');
+                // Update stored content
                 previewData.rawText = newContent;
                 previewData.originalContent = newContent;
+                // Exit edit mode and show updated content
                 isEditMode = false;
                 const editBtn = document.getElementById('editToggleBtn');
                 editBtn.textContent = 'Edit';
@@ -2057,9 +2135,13 @@
 
         function closePreview() {
             document.getElementById('previewModal').classList.remove('show');
+            // Clean up any blob URLs
             const iframe = document.querySelector('#previewBody iframe');
-            if (iframe && iframe.src && iframe.src.startsWith('blob:')) {
-                URL.revokeObjectURL(iframe.src);
+            if (iframe) {
+                const src = iframe.src;
+                if (src.startsWith('blob:')) {
+                    URL.revokeObjectURL(src);
+                }
             }
             const img = document.querySelector('#previewBody img');
             if (img && img.src && img.src.startsWith('blob:')) {
@@ -2139,6 +2221,7 @@
             const file = fileInput.files[0];
             if (!file) return;
 
+            // Warn if file > 5 MB
             if (file.size > 5 * 1024 * 1024) {
                 if (!confirm(`File is ${(file.size / (1024*1024)).toFixed(1)} MB, which exceeds the recommended 5 MB limit. Continue?`)) {
                     fileInput.value = '';
@@ -2158,6 +2241,7 @@
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
+                // Auto-save item
                 await autoSaveItem();
                 showToast(`Uploaded ${file.name}`);
             } catch (err) {
@@ -2184,6 +2268,7 @@
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
+                // Auto-save item
                 await autoSaveItem();
                 showToast(`Created ${fileName}`);
             } catch (err) {
@@ -2219,6 +2304,7 @@
                 });
                 att.name = newName;
                 renderAttachments();
+                // Auto-save item
                 await autoSaveItem();
                 showToast('Renamed attachment.');
             } catch (err) {
@@ -2232,11 +2318,14 @@
             if (!confirm(`Delete attachment "${att.name}" from Drive?`)) return;
             try {
                 await deleteFile(att.driveFileId);
+                // Remove from formAttachments regardless of Drive success
                 formAttachments.splice(idx, 1);
                 renderAttachments();
+                // Auto-save item to update JSON
                 await autoSaveItem();
                 showToast('Attachment removed.');
             } catch (err) {
+                // If file not found on Drive, just remove it from the list
                 if (err.message.includes('404') || err.message.includes('not found')) {
                     formAttachments.splice(idx, 1);
                     renderAttachments();
@@ -2250,10 +2339,13 @@
 
         // ---------- AUTO-SAVE ITEM ----------
         async function autoSaveItem() {
+            // If we're editing an existing item, update it
             if (editingItemId !== null) {
                 const idx = appData.items.findIndex(i => i.id === editingItemId);
                 if (idx !== -1) {
+                    // Just update attachments on the existing item
                     appData.items[idx].attachments = [...formAttachments];
+                    // Save to cloud
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
@@ -2264,6 +2356,7 @@
                 }
             }
 
+            // Otherwise, create a new draft item
             const name = document.getElementById('itemName').value.trim() || '(draft)';
             const category = document.getElementById('itemCategory').value || 'Document';
             const date = document.getElementById('itemDate').value || getTodayDateString();
@@ -2273,6 +2366,7 @@
             const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
             const notes = document.getElementById('itemNotes').value.trim() || '';
 
+            // Create a new item with the current form data, but without a calendar event (it can be created later)
             const newItem = {
                 id: Date.now().toString(),
                 name,
@@ -2298,7 +2392,9 @@
                 await syncToCloud();
             }
             renderAll();
+            // Update modal title to reflect we're now editing
             document.getElementById('modalTitle').textContent = 'Edit Item';
+            // Update the Save button text
             document.getElementById('saveItemButton').textContent = 'Save';
             toastInfo('Draft item created. Add more details and click Save.');
         }
@@ -2335,6 +2431,7 @@
             document.getElementById('dateInputContainer').classList.toggle('hidden', noDate);
             document.getElementById('noDateMessage').classList.toggle('hidden', !noDate);
             document.getElementById('remindersSection').classList.toggle('hidden', noDate);
+            // Also hide the time section when no date is checked
             const timeSection = document.getElementById('timeSection');
             if (timeSection) {
                 timeSection.style.display = noDate ? 'none' : 'block';
@@ -2348,6 +2445,7 @@
         function toggleTimeFields() {
             const hasTime = document.getElementById('itemHasTime').checked;
             const noDate = document.getElementById('itemNoDate').checked;
+            // Only show time fields if not no-date and hasTime checked
             document.getElementById('timeFieldsContainer').classList.toggle('hidden', !hasTime || noDate);
             if (!hasTime) {
                 document.getElementById('itemTime').value = '';
@@ -2409,6 +2507,7 @@
             document.getElementById('modalTitle').textContent = 'Add New Item';
             document.getElementById('itemName').value = '';
             populateItemCategorySelect('Document');
+            // Reset no-date state (unchecked, show date, hide message, show reminders)
             document.getElementById('itemNoDate').checked = false;
             document.getElementById('dateInputContainer').classList.remove('hidden');
             document.getElementById('noDateMessage').classList.add('hidden');
@@ -2416,10 +2515,12 @@
             document.getElementById('itemDate').value = getTodayDateString();
             document.getElementById('itemNotes').value = '';
             updateNotesCharCount();
+            // Reset time fields
             document.getElementById('itemHasTime').checked = false;
             document.getElementById('timeFieldsContainer').classList.add('hidden');
             document.getElementById('itemTime').value = '';
             document.getElementById('itemDuration').value = 30;
+            // Ensure time section is visible
             const timeSection = document.getElementById('timeSection');
             if (timeSection) timeSection.style.display = 'block';
             formReminders = [{ value: 28, unit: 'days', method: 'email' }, { value: 7, unit: 'days', method: 'email' }];
@@ -2429,8 +2530,10 @@
             if (tagInput) tagInput.value = '';
             renderTagChipsForm();
             updateTagSuggestions();
+            // Reset attachments
             formAttachments = [];
             renderAttachments();
+            // Reset dirty state
             setTimeout(() => { captureInitialFormState(); }, 50);
             document.getElementById('itemModal').classList.remove('hidden');
         }
@@ -2441,6 +2544,7 @@
             document.getElementById('modalTitle').textContent = 'Edit Item';
             document.getElementById('itemName').value = item.name;
             populateItemCategorySelect(item.category);
+            // Use noExpiration flag, fallback to !date for backward compatibility
             const noExpiration = item.noExpiration || false;
             document.getElementById('itemNoDate').checked = noExpiration;
             document.getElementById('dateInputContainer').classList.toggle('hidden', noExpiration);
@@ -2451,6 +2555,7 @@
             document.getElementById('itemDate').value = item.date || '';
             document.getElementById('itemNotes').value = item.notes || '';
             updateNotesCharCount();
+            // Time fields
             const hasTime = item.time && item.time.length > 0 && !noExpiration;
             document.getElementById('itemHasTime').checked = hasTime;
             document.getElementById('timeFieldsContainer').classList.toggle('hidden', !hasTime || noExpiration);
@@ -2463,6 +2568,7 @@
             if (tagInput) tagInput.value = '';
             renderTagChipsForm();
             updateTagSuggestions();
+            // Attachments
             formAttachments = item.attachments ? [...item.attachments] : [];
             renderAttachments();
             setTimeout(() => { captureInitialFormState(); }, 50);
@@ -2551,6 +2657,7 @@
             const unit = document.getElementById('reminderUnit').value;
             const method = document.getElementById('reminderMethod').value;
             if (isNaN(value) || value < 1) { showToast('Please enter a positive number.'); return; }
+            // Convert to minutes for validation: max 28 days = 40320 minutes
             let minutes = value;
             if (unit === 'hours') minutes = value * 60;
             else if (unit === 'days') minutes = value * 24 * 60;
@@ -2558,6 +2665,7 @@
             if (formReminders.length >= 5) { showToast('Max 5 reminders.'); return; }
             formReminders.push({ value, unit, method });
             renderReminderChipsForm();
+            // Reset fields
             document.getElementById('reminderValue').value = '';
             document.getElementById('reminderUnit').value = 'days';
             document.getElementById('reminderMethod').value = 'email';
@@ -2565,6 +2673,7 @@
         function removeReminderFromForm(idx) { formReminders.splice(idx, 1); renderReminderChipsForm(); }
         function renderReminderChipsForm() {
             const container = document.getElementById('reminderChipsForm');
+            // Group and sort by total minutes descending
             const sorted = [...formReminders].sort((a, b) => {
                 const aMin = getReminderMinutes(a);
                 const bMin = getReminderMinutes(b);
@@ -2633,6 +2742,7 @@
             if (!confirm(confirmMsg)) return;
         
             await withLoading("Deleting item and attachments...", async () => {
+                // Delete attachments from Drive
                 if (attachments && attachments.length > 0 && !isTestMode) {
                     for (const att of attachments) {
                         try {
@@ -2671,6 +2781,7 @@
             const time = hasTime ? document.getElementById('itemTime').value : '';
             const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
 
+            // If user typed tag text without pressing Enter before clicking save, add it automatically
             const tagInput = document.getElementById('tagInput');
             if (tagInput && tagInput.value.trim()) {
                 addTagToForm();
@@ -2694,100 +2805,108 @@
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
             try {
-                await withLoading(
-                    wasEditing ? "Updating item..." : "Creating item...",
-                    async () => {
-                        if (wasEditing) {
-                            const idx = appData.items.findIndex(i => i.id === editingItemId);
-                            if (idx === -1) return;
+              await withLoading(
+                wasEditing ? "Updating item..." : "Creating item...",
+                async () => {
         
-                            const old = appData.items[idx];
+                    if (wasEditing) {
+                        const idx = appData.items.findIndex(i => i.id === editingItemId);
+                        if (idx === -1) return;
         
-                            if (old.eventId && !isTestMode) {
-                                await removeCalendarEvent(old.eventId).catch(() => {});
-                            }
+                        const old = appData.items[idx];
+        
+                        // Remove old calendar event if it exists (regardless of new state)
+                        if (old.eventId && !isTestMode) {
+                            showLoading("Removing calendar event");
+                            await removeCalendarEvent(old.eventId).catch(() => {});
+                            showLoading("Done removing calendar event");
+                        }
 
-                            let newEventId = null;
-                            if (date && !noExpiration) {
-                                const eventData = {
-                                    name,
-                                    category,
-                                    date,
-                                    time: hasTime ? time : '',
-                                    durationMinutes: hasTime ? durationMinutes : 30,
-                                    notes,
-                                    tags: formTags,
-                                    reminders: formReminders,
-                                    noExpiration: false
-                                };
-                                newEventId = isTestMode
-                                    ? `test-${Date.now()}`
-                                    : await addCalendarEvent(eventData);
-                            }
-        
-                            appData.items[idx] = {
-                                ...old,
+                        let newEventId = null;
+                        // Only create a new event if we have a date, not noExpiration, and (time is optional)
+                        if (date && !noExpiration) {
+                            showLoading("Adding new calendar event");
+                            const eventData = {
                                 name,
                                 category,
                                 date,
-                                noExpiration: noExpiration,
                                 time: hasTime ? time : '',
                                 durationMinutes: hasTime ? durationMinutes : 30,
                                 notes,
-                                tags: [...formTags],
+                                tags: formTags,
                                 reminders: formReminders,
-                                eventId: newEventId || null,
-                                archived: old.archived || false,
-                                attachments: [...formAttachments]
+                                noExpiration: false
                             };
-                        } else {
-                            let newEventId = null;
-                            if (date && !noExpiration) {
-                                const eventData = {
-                                    name,
-                                    category,
-                                    date,
-                                    time: hasTime ? time : '',
-                                    durationMinutes: hasTime ? durationMinutes : 30,
-                                    notes,
-                                    tags: formTags,
-                                    reminders: formReminders,
-                                    noExpiration: false
-                                };
-                                newEventId = isTestMode
-                                    ? `test-${Date.now()}`
-                                    : await addCalendarEvent(eventData);
-                            }
+                            newEventId = isTestMode
+                                ? `test-${Date.now()}`
+                                : await addCalendarEvent(eventData);
+                        }
         
-                            appData.items.push({
-                                id: Date.now().toString(),
+                        appData.items[idx] = {
+                            ...old,
+                            name,
+                            category,
+                            date,                 // keep the date even if noExpiration is true
+                            noExpiration: noExpiration,
+                            time: hasTime ? time : '',
+                            durationMinutes: hasTime ? durationMinutes : 30,
+                            notes,
+                            tags: [...formTags],
+                            reminders: formReminders,
+                            eventId: newEventId || null,
+                            archived: old.archived || false,
+                            attachments: [...formAttachments]
+                        };
+                    } else {
+                        let newEventId = null;
+                        if (date && !noExpiration) {
+                            showLoading("Adding new calendar event");
+                            const eventData = {
                                 name,
                                 category,
                                 date,
-                                noExpiration: noExpiration,
                                 time: hasTime ? time : '',
                                 durationMinutes: hasTime ? durationMinutes : 30,
                                 notes,
-                                tags: [...formTags],
+                                tags: formTags,
                                 reminders: formReminders,
-                                eventId: newEventId,
-                                archived: false,
-                                attachments: [...formAttachments]
-                            });
-                        }
-
-                        registerKnownTags(formTags);
-        
-                        if (isTestMode) {
-                            localStorage.setItem('expire_testData', JSON.stringify(appData));
-                        } else {
-                            await syncToCloud();
+                                noExpiration: false
+                            };
+                            newEventId = isTestMode
+                                ? `test-${Date.now()}`
+                                : await addCalendarEvent(eventData);
                         }
         
-                        closeItemModal();
-                        renderAll();
+                        appData.items.push({
+                            id: Date.now().toString(),
+                            name,
+                            category,
+                            date,
+                            noExpiration: noExpiration,
+                            time: hasTime ? time : '',
+                            durationMinutes: hasTime ? durationMinutes : 30,
+                            notes,
+                            tags: [...formTags],
+                            reminders: formReminders,
+                            eventId: newEventId,
+                            archived: false,
+                            attachments: [...formAttachments]
+                        });
                     }
-                );
+
+                    registerKnownTags(formTags);
+        
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        showLoading("Syncing data to cloud");
+                        await syncToCloud();
+                    }
+        
+                    closeItemModal();
+                    renderAll();
+                }
+              );
             } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = "Save";
@@ -2804,6 +2923,8 @@
         }
 
         function formatDateDiff(startDate, endDate) {
+            // Returns a human-readable string for the difference between two Date objects (startDate <= endDate)
+            // We'll compute years, months, days properly
             let years = endDate.getFullYear() - startDate.getFullYear();
             let months = endDate.getMonth() - startDate.getMonth();
             let days = endDate.getDate() - startDate.getDate();
@@ -2824,6 +2945,7 @@
             if (days > 0) parts.push(`${days} day${days > 1 ? 's' : ''}`);
             
             if (parts.length === 0) {
+                // Less than a day? compute hours/minutes from time difference
                 const diffMs = endDate - startDate;
                 if (diffMs < 60000) return 'just now';
                 const hours = Math.floor(diffMs / (1000 * 60 * 60));
@@ -2839,26 +2961,34 @@
             if (!dateString) return { text: 'No expiry', days: null, cssClass: 'purple' };
             
             const now = new Date();
+            // Use date-only comparison for day-level differences
             const targetDate = getDateOnly(dateString);
             const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             
-            const diffMs = targetDate - todayDate;
+            const diffMs = targetDate - todayDate; // positive if future, negative if past
             
             if (diffMs === 0) {
+                // Same day
+                // Check if time of day is provided to know if it's still future or already past within today
+                // For simplicity, we treat today as "Today"
                 return { text: 'Today', days: 0, cssClass: 'red' };
             }
             
             if (diffMs > 0) {
+                // Future
                 const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                // Compute detailed difference using date objects
                 const duration = formatDateDiff(todayDate, targetDate);
                 let cssClass = 'green';
                 if (diffDays <= 7) cssClass = 'red';
                 else if (diffDays <= 30) cssClass = 'orange';
                 return { text: duration, days: diffDays, cssClass };
             } else {
+                // Past
                 const diffDays = Math.floor(-diffMs / (1000 * 60 * 60 * 24));
                 let duration;
                 if (diffDays === 0) {
+                    // Less than a day ago? use time difference
                     const timeDiff = now - targetDate;
                     const hours = Math.floor(timeDiff / (1000 * 60 * 60));
                     const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
@@ -2874,8 +3004,10 @@
 
         // ---------- STATS ----------
         function getBaseFilteredItems() {
+            // Apply all filters EXCEPT stat filter
             const term = document.getElementById('searchInput').value.toLowerCase().trim();
             const filtered = appData.items.filter(i => {
+                // Filter archived items unless showArchived is true
                 if (!showArchived && i.archived) return false;
                 
                 const itemCategory = i.category || 'Other';
@@ -2883,6 +3015,7 @@
                 const itemTags = (i.tags || []).map(t => t.toLowerCase());
                 const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
                 
+                // Search in item name, notes, category, tags, AND attachment names
                 const attachmentNames = (i.attachments || []).map(a => a.name.toLowerCase());
                 const matchesTerm = !term || 
                     (i.name && i.name.toLowerCase().includes(term)) || 
@@ -2935,6 +3068,7 @@
             const baseItems = getBaseFilteredItems();
             const stats = computeStats(baseItems);
             
+            // Order: total, expiredOld, expiredRecent, urgent, upcoming, later, noExpiry
             const chips = [
                 { key: 'all', label: '📦 Total', count: stats.total, cssClass: 'total' },
                 { key: 'expiredOld', label: '🔴 Expired (>7d)', count: stats.expiredOld, cssClass: 'expired-old' },
@@ -2945,6 +3079,7 @@
                 { key: 'noExpiry', label: '♾️ No expiry', count: stats.noExpiry, cssClass: 'no-expiry' }
             ];
             
+            // Only show chips with count > 0, except "all" which always shows
             const visibleChips = chips.filter(chip => chip.key === 'all' || chip.count > 0);
             
             if (visibleChips.length === 0) {
@@ -3007,6 +3142,7 @@
                 container.innerHTML = html;
             }
 
+            // Render Tag Filter Chips
             const tagContainer = document.getElementById('tagFilterChips');
             if (tagContainer) {
                 const allTags = getAllKnownTags();
@@ -3051,6 +3187,7 @@
 
         function filterItems() {
             const baseItems = getBaseFilteredItems();
+            // Apply stat filter on top
             if (activeStatFilter === 'all') return baseItems;
             
             const now = new Date();
@@ -3081,19 +3218,24 @@
                 const msg = showArchived ? 'No archived items found.' : 'No items found. Add one above!';
                 return itemsList.innerHTML = `<p class="text-gray-400 dark:text-gray-500 text-center py-6">${msg}</p>`;
             }
+            // Sort: items with noExpiration go to the end, then by date ascending (and time if same date)
             filtered.sort((a, b) => {
+                // Sort by noExpiration: false (has date) first, true (no expiry) last
                 if (a.noExpiration && !b.noExpiration) return 1;
                 if (!a.noExpiration && b.noExpiration) return -1;
+                // Both have same noExpiration status
                 if (!a.date && !b.date) return 0;
                 if (!a.date) return 1;
                 if (!b.date) return -1;
                 const dateCompare = new Date(a.date) - new Date(b.date);
                 if (dateCompare !== 0) return dateCompare;
+                // If same date, sort by time (earlier first)
                 const aTime = a.time || '00:00';
                 const bTime = b.time || '00:00';
                 return aTime.localeCompare(bTime);
             });
             itemsList.innerHTML = filtered.map(item => {
+                // Determine time info (for bottom-left)
                 let timeInfo = null;
                 let showTimeLeft = false;
                 if (item.date && !item.noExpiration) {
@@ -3133,6 +3275,7 @@
                     dateLineHtml = `<span class="date-info">No expiry date</span>`;
                 }
 
+                // Attachments display with preview
                 let attachmentsHtml = '';
                 if (item.attachments && item.attachments.length > 0) {
                     attachmentsHtml = `
@@ -3153,6 +3296,7 @@
                     `;
                 }
 
+                // Archive badge for archived items
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
 
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
@@ -3198,10 +3342,12 @@
             }).join('');
         }
 
+        // Helper to preview from item card
         function previewFileById(fileId, fileName, mimeType) {
             openPreview(fileName, fileId, mimeType);
         }
 
+        // Helper to download attachment from item card
         async function downloadFileById(fileId, fileName) {
             try {
                 const response = await downloadFile(fileId);
@@ -3230,6 +3376,7 @@
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
             reminderBanner.style.display = 'block';
             renderAll();
+            // Update sync status if we have a valid token
             if (accessToken && Date.now() < tokenExpiry) {
                 syncStatus.textContent = '✅ Connected';
             }
@@ -3247,26 +3394,54 @@
             return false;
         }
 
+        function saveToken(token, expiresIn) {
+            localStorage.setItem('expire_accessToken', token);
+            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
+        }
+
+        function handleTokenResponse(response) {
+            if (response.error !== undefined) {
+                if (loginTriggeredByUser) {
+                    alert('Login failed. Please try again.');
+                    loginTriggeredByUser = false;
+                }
+                // If silent refresh failed, we might want to clear token
+                if (response.error === 'popup_closed_by_user') {
+                    // User closed the popup, do nothing.
+                }
+                return;
+            }
+            accessToken = response.access_token;
+            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+            saveToken(response.access_token, response.expires_in);
+            // If we were in a silent refresh, resolve the promise
+            if (silentRefreshPromise) {
+                // The token client callback will handle it
+            }
+            // If we are on landing page, init app
+            if (landingPage.style.display !== 'none') {
+                initAppData();
+            }
+        }
+
         // ---------- INIT ----------
         async function initAppData() {
             updateStatus("Syncing cloud data...");
-            try { 
-                await withLoading("Loading data...", async () => {await loadFromCloud();});
-                updateStatus("✅ Cloud Synced"); 
-                showAppUI(); 
-            } catch(e) { 
+            try { await withLoading("Loading data...", async () => {await loadFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
+            catch(e) { 
                 console.error(e); 
                 updateStatus("❌ Sync Error"); 
-                // If authentication failed, show login
-                if (e.message && (e.message.includes('Unauthorized') || e.message.includes('Authentication failed'))) {
+                if (e.message && e.message.includes('Re‑authenticated')) {
+                    // Token refresh triggered, will retry
+                } else {
+                    alert("Failed to load from Google Drive. Please try logging in again.");
+                    // Clear token and show landing page
                     accessToken = null;
                     tokenExpiry = 0;
                     localStorage.removeItem('expire_accessToken');
                     localStorage.removeItem('expire_tokenExpiry');
                     landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
-                } else {
-                    alert("Failed to load from Google Drive. Please try logging in again.");
                 }
             }
         }
@@ -3316,36 +3491,25 @@
                 callback: handleTokenResponse
             });
 
-            // Check for cached token
-            const cachedToken = localStorage.getItem('expire_accessToken');
-            const userEmail = localStorage.getItem('expire_userEmail');
+            // Try to restore cached token
+            const hasValidToken = restoreCachedToken();
 
-            if (cachedToken && userEmail) {
-                // We have a cached token and email – try to get a valid token (silent refresh if needed)
-                ensureValidToken()
-                    .then(() => {
-                        // Token is valid now
-                        initAppData();
-                    })
-                    .catch(() => {
-                        // Silent refresh failed – show login without popup
-                        landingPage.style.display = 'flex';
-                        document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
-                        accessToken = null;
-                        tokenExpiry = 0;
-                        localStorage.removeItem('expire_accessToken');
-                        localStorage.removeItem('expire_tokenExpiry');
-                        localStorage.removeItem('expire_userEmail');
-                    });
+            if (hasValidToken) {
+                // We have a valid token, load the app
+                initAppData();
+                // Optionally, we can try to refresh silently in the background (but not needed if token is valid)
+                // We'll rely on ensureValidToken to refresh when needed.
             } else {
-                // No token or email – show login
+                // No valid token, show landing page
                 landingPage.style.display = 'flex';
                 document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                // Clear any leftover token
                 accessToken = null;
                 tokenExpiry = 0;
                 localStorage.removeItem('expire_accessToken');
                 localStorage.removeItem('expire_tokenExpiry');
-                localStorage.removeItem('expire_userEmail');
+                // Remove any stored credentials (optional)
+                // Note: We don't clear the token client's state; user will need to click login.
             }
         };
 
@@ -3358,13 +3522,15 @@
 
         logoutBtn.onclick = () => { 
             loginTriggeredByUser = false;
+            // Clear local token
             localStorage.removeItem('expire_accessToken');
             localStorage.removeItem('expire_tokenExpiry');
-            localStorage.removeItem('expire_userEmail');
             accessToken = null;
             tokenExpiry = 0;
+            // Revoke token with Google
             if (accessToken) {
                 google.accounts.oauth2.revoke(accessToken, () => {
+                    // After revoke, show landing page
                     landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
                 });
@@ -3372,6 +3538,7 @@
                 landingPage.style.display = 'flex';
                 document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
             }
+            // Also reset app data
             appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
             driveFileId = null;
         };
@@ -3393,6 +3560,7 @@
             });
         }
 
+        // Close modals when clicking backdrop
         document.getElementById('itemModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('itemModal')) {
                 tryCloseItemModal();
@@ -3401,11 +3569,13 @@
         document.getElementById('settingsModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('settingsModal')) closeSettings();
         });
+        // Close preview with Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closePreview();
             }
         });
+        // Close modals with Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 tryCloseItemModal();
