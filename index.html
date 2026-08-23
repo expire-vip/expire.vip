@@ -904,6 +904,45 @@
         </div>
     </div>
 
+    <!-- Duplicate Item Modal -->
+    <div id="duplicateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Duplicate Item</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Create a new item with the same reusable settings.</p>
+                </div>
+                <button type="button" onclick="closeDuplicateModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Close" aria-label="Close duplicate dialog">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item name</label>
+                    <div id="duplicateItemName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100 font-medium">
+                        —
+                    </div>
+                </div>
+                <div>
+                    <label for="duplicateDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New expiration date</label>
+                    <input type="date" id="duplicateDate" class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
+                </div>
+                <div class="p-3 bg-indigo-50 dark:bg-indigo-950/50 rounded-xl border border-indigo-100 dark:border-indigo-800/60">
+                    <div class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Original event</div>
+                    <div id="duplicateOriginalDetails" class="text-sm text-indigo-900 dark:text-indigo-100">—</div>
+                </div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                    Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.
+                </div>
+            </div>
+            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80">
+                <button type="button" onclick="closeDuplicateModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Cancel</button>
+                <button type="button" id="confirmDuplicateBtn" onclick="confirmDuplicateItem()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Duplicate</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4 overflow-y-auto">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden">
@@ -1053,6 +1092,7 @@
         let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
+        let duplicatingItemId = null;
         let formReminders = [];
         let formTags = [];
         let activeTag = null;
@@ -1094,6 +1134,11 @@
         const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
         const statsBar = document.getElementById('statsBar');
+        const duplicateModal = document.getElementById('duplicateModal');
+        const duplicateItemNameEl = document.getElementById('duplicateItemName');
+        const duplicateOriginalDetailsEl = document.getElementById('duplicateOriginalDetails');
+        const duplicateDateEl = document.getElementById('duplicateDate');
+        const confirmDuplicateBtn = document.getElementById('confirmDuplicateBtn');
         
         function showLoading(message = "Loading...") {
             isLoading = true;
@@ -2751,6 +2796,143 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        // ---------- DUPLICATE ITEM ----------
+        function formatDuplicateOriginalDetails(item) {
+            if (!item.date || item.noExpiration) {
+                return 'Original item has no expiration date.' + (item.time ? ` Original time: ${item.time}${item.durationMinutes ? ` (${item.durationMinutes} minutes)` : ''}.` : '');
+            }
+
+            let details = `Expiration: ${item.date}`;
+            if (item.time) {
+                details += ` at ${item.time}`;
+                if (item.durationMinutes) details += ` (${item.durationMinutes} minutes)`;
+            } else {
+                details += ' (all day)';
+            }
+            return details;
+        }
+
+        function buildDuplicateNotes(item) {
+            let original = 'Original expiration: ';
+            if (item.date && !item.noExpiration) {
+                original += item.date;
+                if (item.time) {
+                    original += ` at ${item.time}`;
+                    if (item.durationMinutes) original += ` (${item.durationMinutes} minutes)`;
+                } else {
+                    original += ' (all day)';
+                }
+            } else {
+                original += 'No expiration date';
+                if (item.time) {
+                    original += `; original time ${item.time}`;
+                    if (item.durationMinutes) original += ` (${item.durationMinutes} minutes)`;
+                }
+            }
+            return `Duplicated from "${item.name}". ${original}`.slice(0, 500);
+        }
+
+        function openDuplicateModal(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+
+            duplicatingItemId = itemId;
+            duplicateItemNameEl.textContent = item.name || '(Unnamed item)';
+            duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
+            duplicateDateEl.value = getTodayDateString();
+            confirmDuplicateBtn.disabled = false;
+            confirmDuplicateBtn.textContent = 'Duplicate';
+            duplicateModal.classList.remove('hidden');
+            setTimeout(() => duplicateDateEl.focus(), 50);
+        }
+
+        function closeDuplicateModal() {
+            duplicatingItemId = null;
+            duplicateModal.classList.add('hidden');
+            if (duplicateDateEl) duplicateDateEl.value = '';
+            if (confirmDuplicateBtn) {
+                confirmDuplicateBtn.disabled = false;
+                confirmDuplicateBtn.textContent = 'Duplicate';
+            }
+        }
+
+        async function confirmDuplicateItem() {
+            const sourceId = duplicatingItemId;
+            const item = appData.items.find(i => i.id === sourceId);
+            const newDate = duplicateDateEl.value;
+            if (!item) {
+                closeDuplicateModal();
+                return;
+            }
+            if (!newDate) {
+                showToast('Please choose an expiration date.');
+                duplicateDateEl.focus();
+                return;
+            }
+
+            confirmDuplicateBtn.disabled = true;
+            confirmDuplicateBtn.textContent = 'Duplicating...';
+
+            try {
+                await withLoading('Creating duplicate...', async () => {
+                    const hasTime = !!item.time;
+                    const newItem = {
+                        id: Date.now().toString(),
+                        name: item.name,
+                        category: item.category,
+                        date: newDate,
+                        noExpiration: false,
+                        time: hasTime ? item.time : '',
+                        durationMinutes: hasTime ? (item.durationMinutes || 30) : 30,
+                        notes: buildDuplicateNotes(item),
+                        tags: [...(item.tags || [])],
+                        reminders: (item.reminders || []).map(r => ({ ...r })),
+                        eventId: null,
+                        archived: false,
+                        attachments: []
+                    };
+
+                    if (newItem.date && !newItem.noExpiration) {
+                        const eventData = {
+                            name: newItem.name,
+                            category: newItem.category,
+                            date: newItem.date,
+                            time: newItem.time,
+                            durationMinutes: newItem.durationMinutes,
+                            notes: newItem.notes,
+                            tags: newItem.tags,
+                            reminders: newItem.reminders,
+                            noExpiration: false
+                        };
+                        showLoading('Adding new calendar event');
+                        newItem.eventId = isTestMode
+                            ? `test-${Date.now()}`
+                            : await addCalendarEvent(eventData);
+                    }
+
+                    appData.items.push(newItem);
+                    registerKnownTags(newItem.tags);
+
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        showLoading('Syncing duplicate to cloud');
+                        await syncToCloud();
+                    }
+
+                    renderAll();
+                    closeDuplicateModal();
+                });
+
+                toastSuccess('Duplicate created.');
+            } catch (error) {
+                console.error('Failed to duplicate item:', error);
+                showToast(`Could not duplicate item: ${error.message || error}`, 'error');
+                confirmDuplicateBtn.disabled = false;
+                confirmDuplicateBtn.textContent = 'Duplicate';
+            }
+        }
+
         // ---------- ARCHIVE ----------
         function toggleShowArchived() {
             showArchived = !showArchived;
@@ -3378,6 +3560,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          title="Edit">
                                     <i class="fas fa-edit text-base"></i>
                                 </button>
+                                <button onclick="openDuplicateModal('${item.id}')" 
+                                         class="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="Duplicate">
+                                    <i class="fas fa-copy text-base"></i>
+                                </button>
                                 <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
                                          class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="${item.archived ? 'Unarchive' : 'Archive'}">
@@ -3661,6 +3848,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         document.getElementById('settingsModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('settingsModal')) closeSettings();
         });
+        duplicateModal.addEventListener('click', (e) => {
+            if (e.target === duplicateModal) closeDuplicateModal();
+        });
         // Close preview with Escape
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -3672,6 +3862,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (e.key === 'Escape') {
                 tryCloseItemModal();
                 closeSettings();
+                if (!duplicateModal.classList.contains('hidden')) closeDuplicateModal();
             }
         });
 
