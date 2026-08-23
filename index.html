@@ -516,12 +516,12 @@
             color: #c7d2fe;
         }
         .stats-bar .stat-chip.expired-recent {
-            background: #fee2e2;
-            color: #991b1b;
+            background: #fef3c7;
+            color: #92400e;
         }
         .dark .stats-bar .stat-chip.expired-recent {
-            background: #7f1d1d;
-            color: #fca5a5;
+            background: #78350f;
+            color: #fcd34d;
         }
         .stats-bar .stat-chip.expired-old {
             background: #e5e7eb;
@@ -532,12 +532,12 @@
             color: #d1d5db;
         }
         .stats-bar .stat-chip.urgent {
-            background: #fef3c7;
-            color: #92400e;
+            background: #fee2e2;
+            color: #991b1b;
         }
         .dark .stats-bar .stat-chip.urgent {
-            background: #78350f;
-            color: #fcd34d;
+            background: #7f1d1d;
+            color: #fca5a5;
         }
         .stats-bar .stat-chip.upcoming {
             background: #fef3c7;
@@ -2869,6 +2869,32 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         // ---------- STATS ----------
+        function getBaseFilteredItems() {
+            // Apply all filters EXCEPT stat filter
+            const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            const filtered = appData.items.filter(i => {
+                // Filter archived items unless showArchived is true
+                if (!showArchived && i.archived) return false;
+                
+                const itemCategory = i.category || 'Other';
+                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
+                const itemTags = (i.tags || []).map(t => t.toLowerCase());
+                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
+                
+                // Search in item name, notes, category, tags, AND attachment names
+                const attachmentNames = (i.attachments || []).map(a => a.name.toLowerCase());
+                const matchesTerm = !term || 
+                    (i.name && i.name.toLowerCase().includes(term)) || 
+                    (i.notes && i.notes.toLowerCase().includes(term)) ||
+                    (itemCategory && itemCategory.toLowerCase().includes(term)) ||
+                    itemTags.some(t => t.includes(term)) ||
+                    attachmentNames.some(name => name.includes(term));
+                
+                return matchesCategory && matchesTag && matchesTerm;
+            });
+            return filtered;
+        }
+
         function computeStats(items) {
             const stats = {
                 total: 0,
@@ -2905,14 +2931,14 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         function renderStatsBar() {
-            const items = appData.items.filter(i => !i.archived || showArchived);
-            const stats = computeStats(items);
+            const baseItems = getBaseFilteredItems();
+            const stats = computeStats(baseItems);
             
             const chips = [
                 { key: 'all', label: '📦 Total', count: stats.total, cssClass: 'total' },
-                { key: 'expiredRecent', label: '🔴 Expired (7d)', count: stats.expiredRecent, cssClass: 'expired-recent' },
+                { key: 'expiredRecent', label: '🟠 Expired (7d)', count: stats.expiredRecent, cssClass: 'expired-recent' },
                 { key: 'expiredOld', label: '🔴 Expired (>7d)', count: stats.expiredOld, cssClass: 'expired-old' },
-                { key: 'urgent', label: '🟠 Urgent (7d)', count: stats.urgent, cssClass: 'urgent' },
+                { key: 'urgent', label: '🔴 Urgent (7d)', count: stats.urgent, cssClass: 'urgent' },
                 { key: 'upcoming', label: '🟡 Upcoming (30d)', count: stats.upcoming, cssClass: 'upcoming' },
                 { key: 'later', label: '🟢 Later (>30d)', count: stats.later, cssClass: 'later' },
                 { key: 'noExpiry', label: '♾️ No expiry', count: stats.noExpiry, cssClass: 'no-expiry' }
@@ -3025,49 +3051,27 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         function filterItems() {
-            const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            const baseItems = getBaseFilteredItems();
+            // Apply stat filter on top
+            if (activeStatFilter === 'all') return baseItems;
+            
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             
-            return appData.items.filter(i => {
-                // Filter archived items unless showArchived is true
-                if (!showArchived && i.archived) return false;
-                
-                const itemCategory = i.category || 'Other';
-                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
-                const itemTags = (i.tags || []).map(t => t.toLowerCase());
-                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
-                
-                // Search in item name, notes, category, tags, AND attachment names
-                const attachmentNames = (i.attachments || []).map(a => a.name.toLowerCase());
-                const matchesTerm = !term || 
-                    (i.name && i.name.toLowerCase().includes(term)) || 
-                    (i.notes && i.notes.toLowerCase().includes(term)) ||
-                    (itemCategory && itemCategory.toLowerCase().includes(term)) ||
-                    itemTags.some(t => t.includes(term)) ||
-                    attachmentNames.some(name => name.includes(term));
-                
-                if (!matchesCategory || !matchesTag || !matchesTerm) return false;
-                
-                // Stat filter
-                if (activeStatFilter !== 'all') {
-                    if (!i.date || i.noExpiration) {
-                        if (activeStatFilter !== 'noExpiry') return false;
-                    } else {
-                        const targetDate = getDateOnly(i.date);
-                        const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
-                        switch (activeStatFilter) {
-                            case 'expiredRecent': if (diffDays >= 0 || diffDays < -7) return false; break;
-                            case 'expiredOld': if (diffDays >= -7) return false; break;
-                            case 'urgent': if (diffDays < 0 || diffDays > 7) return false; break;
-                            case 'upcoming': if (diffDays < 8 || diffDays > 30) return false; break;
-                            case 'later': if (diffDays <= 30) return false; break;
-                            default: break;
-                        }
-                    }
+            return baseItems.filter(i => {
+                if (!i.date || i.noExpiration) {
+                    return activeStatFilter === 'noExpiry';
                 }
-                
-                return true;
+                const targetDate = getDateOnly(i.date);
+                const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                switch (activeStatFilter) {
+                    case 'expiredRecent': return diffDays < 0 && diffDays >= -7;
+                    case 'expiredOld': return diffDays < -7;
+                    case 'urgent': return diffDays >= 0 && diffDays <= 7;
+                    case 'upcoming': return diffDays >= 8 && diffDays <= 30;
+                    case 'later': return diffDays > 30;
+                    default: return true;
+                }
             });
         }
 
