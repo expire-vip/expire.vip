@@ -3376,14 +3376,76 @@ async function callGoogleAPI(url, options = {}) {
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
             reminderBanner.style.display = 'block';
             renderAll();
+            // Update sync status if we have a valid token
+            if (accessToken && Date.now() < tokenExpiry) {
+                syncStatus.textContent = '✅ Connected';
+            }
+        }
+
+        // ---------- AUTH ----------
+        function restoreCachedToken() {
+            const token = localStorage.getItem('expire_accessToken');
+            const expiry = Number(localStorage.getItem('expire_tokenExpiry'));
+            if (token && expiry && Date.now() < expiry) {
+                accessToken = token;
+                tokenExpiry = expiry;
+                return true;
+            }
+            return false;
+        }
+
+        function saveToken(token, expiresIn) {
+            localStorage.setItem('expire_accessToken', token);
+            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
+        }
+
+        function handleTokenResponse(response) {
+            if (response.error !== undefined) {
+                if (loginTriggeredByUser) {
+                    alert('Login failed. Please try again.');
+                    loginTriggeredByUser = false;
+                }
+                // If silent refresh failed, we might want to clear token
+                if (response.error === 'popup_closed_by_user') {
+                    // User closed the popup, do nothing.
+                }
+                return;
+            }
+            accessToken = response.access_token;
+            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+            saveToken(response.access_token, response.expires_in);
+            // If we were in a silent refresh, resolve the promise
+            if (silentRefreshPromise) {
+                // The token client callback will handle it
+            }
+            // If we are on landing page, init app
+            if (landingPage.style.display !== 'none') {
+                initAppData();
+            }
         }
 
         // ---------- INIT ----------
         async function initAppData() {
             updateStatus("Syncing cloud data...");
             try { await withLoading("Loading data...", async () => {await loadFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
-            catch(e) { console.error(e); updateStatus("❌ Sync Error"); alert("Failed to load from Google Drive."); }
+            catch(e) { 
+                console.error(e); 
+                updateStatus("❌ Sync Error"); 
+                if (e.message && e.message.includes('Re‑authenticated')) {
+                    // Token refresh triggered, will retry
+                } else {
+                    alert("Failed to load from Google Drive. Please try logging in again.");
+                    // Clear token and show landing page
+                    accessToken = null;
+                    tokenExpiry = 0;
+                    localStorage.removeItem('expire_accessToken');
+                    localStorage.removeItem('expire_tokenExpiry');
+                    landingPage.style.display = 'flex';
+                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                }
+            }
         }
+
         function loadTestData() {
             const stored = localStorage.getItem('expire_testData');
             if (stored) {
@@ -3415,81 +3477,73 @@ async function callGoogleAPI(url, options = {}) {
         }
 
         window.onload = function () {
-            if (isTestMode) { loadTestData(); showAppUI(); updateStatus("Test Mode (localStorage)"); return; }
-            const cached = restoreCachedToken();
-            
+            if (isTestMode) { 
+                loadTestData(); 
+                showAppUI(); 
+                updateStatus("Test Mode (localStorage)"); 
+                return; 
+            }
+
+            // Initialize token client
             tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID, scope: SCOPES,
+                client_id: CLIENT_ID,
+                scope: SCOPES,
                 callback: handleTokenResponse
             });
-            if (cached) {
-                // We have a valid cached token – use it immediately
+
+            // Try to restore cached token
+            const hasValidToken = restoreCachedToken();
+
+            if (hasValidToken) {
+                // We have a valid token, load the app
                 initAppData();
-                // Then try to upgrade it silently in the background
-                tokenClient.requestAccessToken({ prompt: '' });
+                // Optionally, we can try to refresh silently in the background (but not needed if token is valid)
+                // We'll rely on ensureValidToken to refresh when needed.
             } else {
-                // No cached token, try silent login (may fail, that’s fine)
-                tokenClient.requestAccessToken({ prompt: '' });
+                // No valid token, show landing page
+                landingPage.style.display = 'flex';
+                document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                // Clear any leftover token
+                accessToken = null;
+                tokenExpiry = 0;
+                localStorage.removeItem('expire_accessToken');
+                localStorage.removeItem('expire_tokenExpiry');
+                // Remove any stored credentials (optional)
+                // Note: We don't clear the token client's state; user will need to click login.
             }
         };
 
-        function restoreCachedToken() {
-            const token = localStorage.getItem('expire_accessToken');
-            const expiry = Number(localStorage.getItem('expire_tokenExpiry'));
-            if (token && expiry) {
-                accessToken = token;
-                tokenExpiry = expiry;
-            }
-            if (token && expiry && Date.now() < expiry){
-                return true;
-            }
-            return false;
-        }
-        
-        function saveToken(token, expiresIn) {
-            localStorage.setItem('expire_accessToken', token);
-            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
-        }
-        
-        function handleTokenResponse(response) {
-            if (response.error !== undefined) {
-                // The request failed (no session, user revoked, etc.)
-                if (loginTriggeredByUser) {
-                    // Only alert if the user clicked the login button
-                    alert('Login failed. Please try again.');
-                    loginTriggeredByUser = false;
-                }
-                // Otherwise, do nothing – stay on the landing page
-                return;
-            }
-            // Success! Save the token and show the app
-            accessToken = response.access_token;
-            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-            saveToken(response.access_token, response.expires_in);
-            initAppData();
-        }
-        
+        // ---------- LOGIN / LOGOUT ----------
         loginBtn.onclick = () => {
             if (isTestMode) return;
             loginTriggeredByUser = true;
             tokenClient.requestAccessToken({ prompt: 'consent' });
         };
+
         logoutBtn.onclick = () => { 
             loginTriggeredByUser = false;
-            saveToken(null, 0);
+            // Clear local token
+            localStorage.removeItem('expire_accessToken');
+            localStorage.removeItem('expire_tokenExpiry');
+            accessToken = null;
+            tokenExpiry = 0;
+            // Revoke token with Google
             if (accessToken) {
                 google.accounts.oauth2.revoke(accessToken, () => {
-                    accessToken = null;
-                    driveFileId = null;
-                    expiryItems =[];
-                    // Show landing page, hide app
+                    // After revoke, show landing page
                     landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
                 });
+            } else {
+                landingPage.style.display = 'flex';
+                document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
             }
+            // Also reset app data
+            appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
+            driveFileId = null;
         };
-        exitTestBtn.onclick = () => { if (confirm('Exit test mode?')) window.disableTestMode(); };
 
+        // ---------- OTHER INITIALIZATIONS ----------
         addItemBtn.onclick = openAddModal;
         settingsBtn.onclick = openSettings;
         showArchivedToggle.onclick = toggleShowArchived;
