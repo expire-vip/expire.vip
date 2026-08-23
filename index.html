@@ -467,6 +467,102 @@
         .item-bottom-row .actions button {
             padding: 0.3rem 0.5rem;
         }
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            padding: 0.5rem 0.75rem;
+            background: #f8fafc;
+            border-radius: 0.75rem;
+            border: 1px solid #e5e7eb;
+            margin-bottom: 0.75rem;
+        }
+        .dark .stats-bar {
+            background: #1f2937;
+            border-color: #374151;
+        }
+        .stats-bar .stat-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1.5px solid transparent;
+            white-space: nowrap;
+        }
+        .stats-bar .stat-chip:hover {
+            opacity: 0.8;
+            transform: scale(0.97);
+        }
+        .stats-bar .stat-chip.active {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3);
+        }
+        .stats-bar .stat-chip .count {
+            font-weight: 700;
+            font-size: 0.75rem;
+        }
+        .stats-bar .stat-chip.total {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+        .dark .stats-bar .stat-chip.total {
+            background: #312e81;
+            color: #c7d2fe;
+        }
+        .stats-bar .stat-chip.expired-recent {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .dark .stats-bar .stat-chip.expired-recent {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+        .stats-bar .stat-chip.expired-old {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        .dark .stats-bar .stat-chip.expired-old {
+            background: #374151;
+            color: #d1d5db;
+        }
+        .stats-bar .stat-chip.urgent {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .dark .stats-bar .stat-chip.urgent {
+            background: #78350f;
+            color: #fcd34d;
+        }
+        .stats-bar .stat-chip.upcoming {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .dark .stats-bar .stat-chip.upcoming {
+            background: #78350f;
+            color: #fcd34d;
+        }
+        .stats-bar .stat-chip.later {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .dark .stats-bar .stat-chip.later {
+            background: #14532d;
+            color: #86efac;
+        }
+        .stats-bar .stat-chip.no-expiry {
+            background: #ede9fe;
+            color: #5b21b6;
+        }
+        .dark .stats-bar .stat-chip.no-expiry {
+            background: #4c1d95;
+            color: #a78bfa;
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 transition-colors duration-300">
@@ -608,6 +704,9 @@
                 <button id="addItemBtn" class="w-full mb-5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-2">
                     <i class="fas fa-plus"></i> Add New Item
                 </button>
+
+                <!-- Stats Bar -->
+                <div id="statsBar" class="stats-bar"></div>
 
                 <!-- Items List -->
                 <div class="flex items-center justify-between mb-3">
@@ -947,6 +1046,7 @@
         let activeTag = null;
         let isLoading = false;
         let showArchived = false;
+        let activeStatFilter = 'all';
 
         // Form attachments (local list for modal)
         let formAttachments = [];
@@ -978,6 +1078,7 @@
         const zoomInBtn = document.getElementById('zoomInBtn');
         const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
+        const statsBar = document.getElementById('statsBar');
         
         function showLoading(message = "Loading...") {
             isLoading = true;
@@ -2767,6 +2868,81 @@ async function callGoogleAPI(url, options = {}) {
             }
         }
 
+        // ---------- STATS ----------
+        function computeStats(items) {
+            const stats = {
+                total: 0,
+                expiredRecent: 0,
+                expiredOld: 0,
+                urgent: 0,
+                upcoming: 0,
+                later: 0,
+                noExpiry: 0
+            };
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            items.forEach(item => {
+                stats.total++;
+                if (!item.date || item.noExpiration) {
+                    stats.noExpiry++;
+                    return;
+                }
+                const targetDate = getDateOnly(item.date);
+                const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0) {
+                    if (diffDays >= -7) stats.expiredRecent++;
+                    else stats.expiredOld++;
+                } else if (diffDays <= 7) {
+                    stats.urgent++;
+                } else if (diffDays <= 30) {
+                    stats.upcoming++;
+                } else {
+                    stats.later++;
+                }
+            });
+            return stats;
+        }
+
+        function renderStatsBar() {
+            const items = appData.items.filter(i => !i.archived || showArchived);
+            const stats = computeStats(items);
+            
+            const chips = [
+                { key: 'all', label: '📦 Total', count: stats.total, cssClass: 'total' },
+                { key: 'expiredRecent', label: '🔴 Expired (7d)', count: stats.expiredRecent, cssClass: 'expired-recent' },
+                { key: 'expiredOld', label: '🔴 Expired (>7d)', count: stats.expiredOld, cssClass: 'expired-old' },
+                { key: 'urgent', label: '🟠 Urgent (7d)', count: stats.urgent, cssClass: 'urgent' },
+                { key: 'upcoming', label: '🟡 Upcoming (30d)', count: stats.upcoming, cssClass: 'upcoming' },
+                { key: 'later', label: '🟢 Later (>30d)', count: stats.later, cssClass: 'later' },
+                { key: 'noExpiry', label: '♾️ No expiry', count: stats.noExpiry, cssClass: 'no-expiry' }
+            ];
+            
+            // Only show chips with count > 0, except "all" which always shows
+            const visibleChips = chips.filter(chip => chip.key === 'all' || chip.count > 0);
+            
+            if (visibleChips.length === 0) {
+                statsBar.innerHTML = `<span class="text-xs text-gray-400 dark:text-gray-500">No items to show</span>`;
+                return;
+            }
+            
+            statsBar.innerHTML = visibleChips.map(chip => {
+                const isActive = activeStatFilter === chip.key;
+                return `<span class="stat-chip ${chip.cssClass} ${isActive ? 'active' : ''}" onclick="setStatFilter('${chip.key}')">
+                    <span class="count">${chip.count}</span> ${chip.label}
+                </span>`;
+            }).join('');
+        }
+
+        function setStatFilter(key) {
+            if (activeStatFilter === key) {
+                activeStatFilter = 'all';
+            } else {
+                activeStatFilter = key;
+            }
+            renderAll();
+        }
+
         // ---------- SEARCH & FILTER ----------
         let activeCategory = 'All';
 
@@ -2850,6 +3026,9 @@ async function callGoogleAPI(url, options = {}) {
 
         function filterItems() {
             const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
             return appData.items.filter(i => {
                 // Filter archived items unless showArchived is true
                 if (!showArchived && i.archived) return false;
@@ -2868,7 +3047,27 @@ async function callGoogleAPI(url, options = {}) {
                     itemTags.some(t => t.includes(term)) ||
                     attachmentNames.some(name => name.includes(term));
                 
-                return matchesCategory && matchesTag && matchesTerm;
+                if (!matchesCategory || !matchesTag || !matchesTerm) return false;
+                
+                // Stat filter
+                if (activeStatFilter !== 'all') {
+                    if (!i.date || i.noExpiration) {
+                        if (activeStatFilter !== 'noExpiry') return false;
+                    } else {
+                        const targetDate = getDateOnly(i.date);
+                        const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                        switch (activeStatFilter) {
+                            case 'expiredRecent': if (diffDays >= 0 || diffDays < -7) return false; break;
+                            case 'expiredOld': if (diffDays >= -7) return false; break;
+                            case 'urgent': if (diffDays < 0 || diffDays > 7) return false; break;
+                            case 'upcoming': if (diffDays < 8 || diffDays > 30) return false; break;
+                            case 'later': if (diffDays <= 30) return false; break;
+                            default: break;
+                        }
+                    }
+                }
+                
+                return true;
             });
         }
 
@@ -3023,7 +3222,12 @@ async function callGoogleAPI(url, options = {}) {
             }
         }
 
-        function renderAll() { renderCategoryChips(); renderItems(); }
+        function renderAll() { 
+            renderCategoryChips(); 
+            renderStatsBar();
+            renderItems(); 
+        }
+        
         function showAppUI() {
             landingPage.style.display = 'none';
             document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
