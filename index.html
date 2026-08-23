@@ -1040,12 +1040,14 @@
     <script>
         // ---------- GLOBAL STATE ----------
         const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
-        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events';
+        const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events openid email';
 
         let tokenClient;
         let loginTriggeredByUser = false;
         let accessToken = null;
         let silentRefreshPromise = null;
+        let pendingTokenResolve = null;
+        let pendingTokenReject = null;
         let tokenExpiry = 0;
         let driveFileId = null;
         let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
@@ -1115,50 +1117,101 @@
             }
         }
         
-function ensureValidToken() {
+function requestGoogleToken({ prompt = '', loginHint = '' } = {}) {
+    if (!tokenClient) {
+        return Promise.reject(new Error('Google authentication is not ready yet.'));
+    }
+
+    return new Promise((resolve, reject) => {
+        pendingTokenResolve = resolve;
+        pendingTokenReject = reject;
+
+        const request = { prompt };
+        if (loginHint) request.login_hint = loginHint;
+
+        try {
+            tokenClient.requestAccessToken(request);
+        } catch (error) {
+            pendingTokenResolve = null;
+            pendingTokenReject = null;
+            reject(error);
+        }
+    });
+}
+
+async function fetchGoogleAccountEmail(token) {
+    try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Google account lookup failed (${response.status})`);
+        }
+
+        const profile = await response.json();
+        const email = typeof profile.email === 'string' ? profile.email.trim().toLowerCase() : '';
+        if (email) {
+            localStorage.setItem('expire_googleEmail', email);
+            return email;
+        }
+    } catch (error) {
+        console.warn('Could not determine Google account email:', error);
+    }
+
+    return localStorage.getItem('expire_googleEmail') || '';
+}
+
+async function ensureValidToken() {
     if (accessToken && Date.now() < tokenExpiry) {
-        return Promise.resolve(accessToken);
+        return accessToken;
     }
 
     if (!silentRefreshPromise) {
-        silentRefreshPromise = new Promise((resolve, reject) => {
-            tokenClient.requestAccessToken({ prompt: '' });
-
-            // Temporary callback overwrite
-            const originalCallback = tokenClient.callback;
-            tokenClient.callback = (response) => {
-                tokenClient.callback = originalCallback; // restore
-                if (response.error) {
-                    // Silent refresh failed – ask user to log in again
-                    tokenClient.requestAccessToken({ prompt: 'consent' });
-                    reject(new Error('Silent refresh failed, consent required'));
-                } else {
-                    accessToken = response.access_token;
-                    tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
-                    resolve(accessToken);
-                }
+        const loginHint = localStorage.getItem('expire_googleEmail') || '';
+        silentRefreshPromise = requestGoogleToken({ prompt: '', loginHint })
+            .catch(error => {
+                accessToken = null;
+                tokenExpiry = 0;
+                throw new Error('Silent refresh failed, consent required');
+            })
+            .finally(() => {
                 silentRefreshPromise = null;
-            };
-        });
+            });
     }
+
     return silentRefreshPromise;
 }
 
-async function callGoogleAPI(url, options = {}) {
+async function callGoogleAPI(url, options = {}, retry = true) {
     const token = await ensureValidToken();
-    options.headers = {
-        ...options.headers,
-        'Authorization': `Bearer ${token}`,
+    const requestOptions = {
+        ...options,
+        headers: {
+            ...(options.headers || {}),
+            'Authorization': `Bearer ${token}`,
+        },
     };
-    const response = await fetch(url, options);
-    if (response.status === 401) {
-        // Token may be invalid (e.g., user revoked permission)
-        // Force a full re‑consent
+
+    const response = await fetch(url, requestOptions);
+
+    if (response.status === 401 && retry) {
+        // Token may have been revoked or expired earlier than expected.
+        // Re-authenticate silently first, falling back to consent only when
+        // Google cannot restore the existing account session.
         accessToken = null;
         tokenExpiry = 0;
-        await tokenClient.requestAccessToken({ prompt: 'consent' });
-        throw new Error('Re‑authenticated');
+
+        const loginHint = localStorage.getItem('expire_googleEmail') || '';
+        try {
+            await requestGoogleToken({ prompt: '', loginHint });
+        } catch (silentError) {
+            await requestGoogleToken({ prompt: 'consent', loginHint });
+        }
+
+        return callGoogleAPI(url, options, false);
     }
+
     return response;
 }
 
@@ -3391,36 +3444,46 @@ async function callGoogleAPI(url, options = {}) {
                 tokenExpiry = expiry;
                 return true;
             }
+
+            // An expired access token is expected. Keep the remembered account email
+            // and let Google issue a fresh token silently below.
+            accessToken = null;
+            tokenExpiry = 0;
+            localStorage.removeItem('expire_accessToken');
+            localStorage.removeItem('expire_tokenExpiry');
             return false;
         }
 
         function saveToken(token, expiresIn) {
+            accessToken = token;
+            tokenExpiry = Date.now() + Math.max(1, (expiresIn || 3600) - 60) * 1000;
             localStorage.setItem('expire_accessToken', token);
-            localStorage.setItem('expire_tokenExpiry', Date.now() + (expiresIn - 60) * 1000);
+            localStorage.setItem('expire_tokenExpiry', String(tokenExpiry));
         }
 
-        function handleTokenResponse(response) {
+        async function handleTokenResponse(response) {
             if (response.error !== undefined) {
-                if (loginTriggeredByUser) {
+                const error = new Error(response.error_description || response.error || 'Google login failed');
+                if (pendingTokenReject) {
+                    const reject = pendingTokenReject;
+                    pendingTokenResolve = null;
+                    pendingTokenReject = null;
+                    reject(error);
+                } else if (loginTriggeredByUser && response.error !== 'popup_closed_by_user') {
                     alert('Login failed. Please try again.');
-                    loginTriggeredByUser = false;
                 }
-                // If silent refresh failed, we might want to clear token
-                if (response.error === 'popup_closed_by_user') {
-                    // User closed the popup, do nothing.
-                }
+                loginTriggeredByUser = false;
                 return;
             }
-            accessToken = response.access_token;
-            tokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+
             saveToken(response.access_token, response.expires_in);
-            // If we were in a silent refresh, resolve the promise
-            if (silentRefreshPromise) {
-                // The token client callback will handle it
-            }
-            // If we are on landing page, init app
-            if (landingPage.style.display !== 'none') {
-                initAppData();
+            await fetchGoogleAccountEmail(response.access_token);
+
+            if (pendingTokenResolve) {
+                const resolve = pendingTokenResolve;
+                pendingTokenResolve = null;
+                pendingTokenReject = null;
+                resolve(response.access_token);
             }
         }
 
@@ -3476,7 +3539,7 @@ async function callGoogleAPI(url, options = {}) {
             }
         }
 
-        window.onload = function () {
+        window.onload = async function () {
             if (isTestMode) { 
                 loadTestData(); 
                 showAppUI(); 
@@ -3491,53 +3554,82 @@ async function callGoogleAPI(url, options = {}) {
                 callback: handleTokenResponse
             });
 
-            // Try to restore cached token
             const hasValidToken = restoreCachedToken();
+            const rememberedEmail = localStorage.getItem('expire_googleEmail') || '';
 
             if (hasValidToken) {
-                // We have a valid token, load the app
-                initAppData();
-                // Optionally, we can try to refresh silently in the background (but not needed if token is valid)
-                // We'll rely on ensureValidToken to refresh when needed.
-            } else {
-                // No valid token, show landing page
-                landingPage.style.display = 'flex';
-                document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
-                // Clear any leftover token
-                accessToken = null;
-                tokenExpiry = 0;
-                localStorage.removeItem('expire_accessToken');
-                localStorage.removeItem('expire_tokenExpiry');
-                // Remove any stored credentials (optional)
-                // Note: We don't clear the token client's state; user will need to click login.
+                // Existing token is still valid: use it immediately.
+                await initAppData();
+                return;
             }
+
+            // No usable local token. If we know the previously authenticated
+            // Google account, silently ask Google for a new token for that account.
+            if (rememberedEmail) {
+                try {
+                    updateStatus('Restoring your Google session...');
+                    await requestGoogleToken({ prompt: '', loginHint: rememberedEmail });
+                    await initAppData();
+                    return;
+                } catch (error) {
+                    console.warn('Automatic Google login failed:', error);
+                    localStorage.removeItem('expire_accessToken');
+                    localStorage.removeItem('expire_tokenExpiry');
+                }
+            }
+
+            // No remembered session, or Google did not allow silent login.
+            landingPage.style.display = 'flex';
+            document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
         };
 
         // ---------- LOGIN / LOGOUT ----------
-        loginBtn.onclick = () => {
+        loginBtn.onclick = async () => {
             if (isTestMode) return;
             loginTriggeredByUser = true;
-            tokenClient.requestAccessToken({ prompt: 'consent' });
+
+            try {
+                const rememberedEmail = localStorage.getItem('expire_googleEmail') || '';
+                await requestGoogleToken({ prompt: 'consent', loginHint: rememberedEmail });
+                await initAppData();
+            } catch (error) {
+                console.error('Login failed:', error);
+                if (error.message !== 'popup_closed_by_user') {
+                    alert('Login failed. Please try again.');
+                }
+            } finally {
+                loginTriggeredByUser = false;
+            }
         };
 
         logoutBtn.onclick = () => { 
             loginTriggeredByUser = false;
-            // Clear local token
+
+            // Save the token before clearing it so it can actually be revoked.
+            const tokenToRevoke = accessToken;
+
             localStorage.removeItem('expire_accessToken');
             localStorage.removeItem('expire_tokenExpiry');
+            localStorage.removeItem('expire_googleEmail');
             accessToken = null;
             tokenExpiry = 0;
-            // Revoke token with Google
-            if (accessToken) {
-                google.accounts.oauth2.revoke(accessToken, () => {
-                    // After revoke, show landing page
-                    landingPage.style.display = 'flex';
-                    document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
-                });
-            } else {
+
+            const finishLogout = () => {
                 landingPage.style.display = 'flex';
                 document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+            };
+
+            if (tokenToRevoke) {
+                try {
+                    google.accounts.oauth2.revoke(tokenToRevoke, finishLogout);
+                } catch (error) {
+                    console.warn('Token revoke failed:', error);
+                    finishLogout();
+                }
+            } else {
+                finishLogout();
             }
+
             // Also reset app data
             appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
             driveFileId = null;
