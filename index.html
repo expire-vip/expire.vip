@@ -390,6 +390,11 @@
         .back-to-top:hover {
             opacity: 0.8;
         }
+
+        #floatingHomeBtn.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
         /* Bottom row for date and actions */
         .item-bottom-row {
             display: flex;
@@ -590,7 +595,7 @@
         <!-- Header -->
         <header class="bg-indigo-600 dark:bg-indigo-800 text-white p-5 shadow-md flex justify-between items-center rounded-b-xl">
             <div>
-                <h1 class="text-2xl font-bold tracking-tight">📅 Expire.vip</h1>
+                <button id="homeTitleBtn" type="button" class="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90 transition-opacity text-left" title="Refresh Expire.vip">📅 Expire.vip</button>
                 <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
             </div>
             <div class="flex items-center gap-2">
@@ -729,8 +734,9 @@
 
         <!-- Footer -->
         <footer class="p-5 mt-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-center">
-            <button onclick="window.scrollTo({top:0,behavior:'smooth'})" class="back-to-top inline-flex items-center justify-center w-full bg-yellow-400 hover:bg-yellow-500 text-yellow-900 font-semibold py-2.5 px-4 rounded-xl transition duration-200 mb-4">
-                ⭐ Back to the top ⭐
+            <button id="footerHomeBtn" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})" class="back-to-top inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition duration-200 mb-4" title="Go to top">
+                <i class="fas fa-home text-sm" aria-hidden="true"></i>
+                <span>Home</span>
             </button>
             <div class="text-xs text-gray-400 dark:text-gray-500 flex justify-center items-center gap-2">
                 <span>&copy; 2026 Expire.vip</span>
@@ -1113,6 +1119,13 @@
             </div>
         </div>
     </div>
+
+    <!-- Floating scroll-to-top button -->
+    <button id="floatingHomeBtn" type="button"
+            class="fixed bottom-5 right-5 z-40 hidden w-11 h-11 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg border border-indigo-500/50 transition-all duration-200 opacity-0 translate-y-2"
+            title="Go to top" aria-label="Go to top">
+        <i class="fas fa-arrow-up text-sm" aria-hidden="true"></i>
+    </button>
 
     <div id="loadingOverlay"
          class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[9999] flex items-center justify-center">
@@ -4123,6 +4136,32 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!duplicateModal.classList.contains('hidden')) closeDuplicateModal();
             }
         });
+
+        // ---------- PAGE NAVIGATION ----------
+        const homeTitleBtn = document.getElementById('homeTitleBtn');
+        const floatingHomeBtn = document.getElementById('floatingHomeBtn');
+
+        if (homeTitleBtn) {
+            homeTitleBtn.addEventListener('click', () => {
+                location.reload();
+            });
+        }
+
+        function updateFloatingHomeButton() {
+            if (!floatingHomeBtn) return;
+            const shouldShow = window.scrollY > 450;
+            floatingHomeBtn.classList.toggle('hidden', !shouldShow);
+            floatingHomeBtn.classList.toggle('flex', shouldShow);
+            floatingHomeBtn.classList.toggle('is-visible', shouldShow);
+        }
+
+        if (floatingHomeBtn) {
+            floatingHomeBtn.addEventListener('click', () => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+            window.addEventListener('scroll', updateFloatingHomeButton, { passive: true });
+            updateFloatingHomeButton();
+        }
 
         console.log('ℹ️ To test without login, call enableTestMode() in the console.');
     </script>
