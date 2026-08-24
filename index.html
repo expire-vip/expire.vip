@@ -787,17 +787,35 @@
                     <div class="flex items-center justify-between mb-1">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Expiration Date</label>
                         <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-400 select-none hover:text-indigo-600 dark:hover:text-indigo-400 transition">
-                            <input type="checkbox" id="itemNoDate" onchange="toggleNoDateMode()" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                            <input type="checkbox" id="itemNoDate" onchange="toggleNoDateMode(); updateLifetimePreview()" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
                             <span>No expiry date</span>
                         </label>
                     </div>
                     <div id="dateInputContainer">
-                        <input type="date" id="itemDate" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                        <input type="date" id="itemDate" onchange="updateLifetimePreview()" class="w-full max-w-full block h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                     </div>
                     <div id="noDateMessage" class="hidden p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-xl border border-indigo-100 dark:border-indigo-800/50 text-xs text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
                         <i class="fas fa-infinity text-indigo-500 text-sm flex-shrink-0"></i>
                         <span>This item has no expiration date — saved in your vault without calendar alerts.</span>
                     </div>
+                </div>
+                <!-- Lifetime / Reference Dates -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Lifetime / Reference Date</label>
+                        <span id="itemLifetimePreview" class="text-xs font-medium text-indigo-600 dark:text-indigo-400">—</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="itemReferenceDate" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Reference date (optional)</label>
+                            <input type="date" id="itemReferenceDate" oninput="updateLifetimePreview()" class="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                        </div>
+                        <div>
+                            <label for="itemEndDate" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End date (optional)</label>
+                            <input type="date" id="itemEndDate" oninput="updateLifetimePreview()" class="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">If a reference date is set and no end date is supplied, the expiration date is used automatically as the lifetime end.</p>
                 </div>
                 <!-- Time & Duration -->
                 <div id="timeSection">
@@ -904,39 +922,75 @@
         </div>
     </div>
 
-    <!-- Duplicate Item Modal -->
-    <div id="duplicateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4">
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60">
+    <!-- Duplicate / Renew Item Modal -->
+    <div id="duplicateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4 overflow-y-auto">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
                 <div>
-                    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Duplicate Item</h3>
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Create a new item with the same reusable settings.</p>
+                    <h3 id="duplicateModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Duplicate Item</h3>
+                    <p id="duplicateModalSubtitle" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Create a new item with the same reusable settings.</p>
                 </div>
                 <button type="button" onclick="closeDuplicateModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Close" aria-label="Close duplicate dialog">
                     <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
-            <div class="p-5 sm:p-6 space-y-4">
+            <div class="p-5 sm:p-6 space-y-4 overflow-y-auto">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Item name</label>
-                    <div id="duplicateItemName" class="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/60 text-gray-900 dark:text-gray-100 font-medium">
-                        —
-                    </div>
+                    <label for="duplicateItemNameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New item name</label>
+                    <input type="text" id="duplicateItemNameInput" maxlength="120" class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Defaults to the original item name. You can rename the new item.</p>
                 </div>
                 <div>
                     <label for="duplicateDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New expiration date</label>
                     <input type="date" id="duplicateDate" class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
+                    <p id="duplicateDateHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
+                </div>
+                <div id="renewOptions" class="hidden space-y-4">
+                    <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Renewal interval</label>
+                        <div class="flex items-center gap-2">
+                            <input type="number" id="renewIntervalValue" min="1" max="999" value="1" class="w-20 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                            <select id="renewIntervalUnit" class="flex-1 h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                                <option value="months">Months</option>
+                                <option value="years" selected>Years</option>
+                                <option value="days">Days</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Apply interval from</label>
+                        <div class="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="renewBase" value="previous" checked class="text-indigo-600 focus:ring-indigo-500">
+                                <span>Previous expiration date</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="renewBase" value="current" class="text-indigo-600 focus:ring-indigo-500">
+                                <span>Current date</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reference date for lifetime (optional)</label>
+                        <select id="renewReferenceMode" class="w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                            <option value="none">No reference date</option>
+                            <option value="today">Today</option>
+                            <option value="previous">Previous expiration date</option>
+                            <option value="custom">Custom date</option>
+                        </select>
+                        <input type="date" id="renewReferenceDate" class="hidden mt-2 w-full h-10 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">The reference date is optional and is used only to calculate lifetime/age.</p>
+                    </div>
                 </div>
                 <div class="p-3 bg-indigo-50 dark:bg-indigo-950/50 rounded-xl border border-indigo-100 dark:border-indigo-800/60">
-                    <div class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Original event</div>
+                    <div id="duplicateOriginalLabel" class="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Original event</div>
                     <div id="duplicateOriginalDetails" class="text-sm text-indigo-900 dark:text-indigo-100">—</div>
                 </div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                <div id="duplicateDescription" class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                     Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.
                 </div>
             </div>
-            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80">
+            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80 flex-shrink-0">
                 <button type="button" onclick="closeDuplicateModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Cancel</button>
                 <button type="button" id="confirmDuplicateBtn" onclick="confirmDuplicateItem()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Duplicate</button>
             </div>
@@ -1135,9 +1189,19 @@
         const previewMeta = document.getElementById('previewMeta');
         const statsBar = document.getElementById('statsBar');
         const duplicateModal = document.getElementById('duplicateModal');
-        const duplicateItemNameEl = document.getElementById('duplicateItemName');
+        const duplicateModalTitleEl = document.getElementById('duplicateModalTitle');
+        const duplicateModalSubtitleEl = document.getElementById('duplicateModalSubtitle');
+        const duplicateItemNameEl = document.getElementById('duplicateItemNameInput');
         const duplicateOriginalDetailsEl = document.getElementById('duplicateOriginalDetails');
         const duplicateDateEl = document.getElementById('duplicateDate');
+        const duplicateDateHintEl = document.getElementById('duplicateDateHint');
+        const duplicateDescriptionEl = document.getElementById('duplicateDescription');
+        const duplicateOriginalLabelEl = document.getElementById('duplicateOriginalLabel');
+        const renewOptionsEl = document.getElementById('renewOptions');
+        const renewIntervalValueEl = document.getElementById('renewIntervalValue');
+        const renewIntervalUnitEl = document.getElementById('renewIntervalUnit');
+        const renewReferenceModeEl = document.getElementById('renewReferenceMode');
+        const renewReferenceDateEl = document.getElementById('renewReferenceDate');
         const confirmDuplicateBtn = document.getElementById('confirmDuplicateBtn');
         
         function showLoading(message = "Loading...") {
@@ -1808,6 +1872,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.archived === undefined) item.archived = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                // Optional lineage and lifetime fields
+                if (item.original_event_id === undefined) item.original_event_id = null;
+                if (item.referenceDate === undefined) item.referenceDate = '';
+                if (item.endDate === undefined) item.endDate = '';
+                if (item.renewal === undefined || item.renewal === null || typeof item.renewal !== 'object') {
+                    item.renewal = { enabled: false, value: 1, unit: 'years', base: 'previous' };
+                } else {
+                    if (item.renewal.enabled === undefined) item.renewal.enabled = false;
+                    if (item.renewal.value === undefined) item.renewal.value = 1;
+                    if (!item.renewal.unit) item.renewal.unit = 'years';
+                    if (!item.renewal.base) item.renewal.base = 'previous';
+                }
                 // Migrate reminders to new format (value, unit, method)
                 if (item.reminders) {
                     item.reminders = item.reminders.map(r => {
@@ -2560,6 +2636,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 hasTime: document.getElementById('itemHasTime').checked,
                 time: document.getElementById('itemTime').value,
                 duration: document.getElementById('itemDuration').value,
+                referenceDate: document.getElementById('itemReferenceDate').value,
+                endDate: document.getElementById('itemEndDate').value,
                 notes: document.getElementById('itemNotes').value,
                 tags: [...formTags],
                 reminders: JSON.stringify(formReminders),
@@ -2577,6 +2655,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 hasTime: document.getElementById('itemHasTime').checked,
                 time: document.getElementById('itemTime').value,
                 duration: document.getElementById('itemDuration').value,
+                referenceDate: document.getElementById('itemReferenceDate').value,
+                endDate: document.getElementById('itemEndDate').value,
                 notes: document.getElementById('itemNotes').value,
                 tags: [...formTags],
                 reminders: JSON.stringify(formReminders),
@@ -2618,6 +2698,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.getElementById('timeFieldsContainer').classList.add('hidden');
             document.getElementById('itemTime').value = '';
             document.getElementById('itemDuration').value = 30;
+            document.getElementById('itemReferenceDate').value = '';
+            document.getElementById('itemEndDate').value = '';
+            updateLifetimePreview();
             // Ensure time section is visible
             const timeSection = document.getElementById('timeSection');
             if (timeSection) timeSection.style.display = 'block';
@@ -2659,6 +2742,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.getElementById('timeFieldsContainer').classList.toggle('hidden', !hasTime || noExpiration);
             document.getElementById('itemTime').value = hasTime ? item.time : '';
             document.getElementById('itemDuration').value = hasTime ? (item.durationMinutes || 30) : 30;
+            document.getElementById('itemReferenceDate').value = item.referenceDate || '';
+            document.getElementById('itemEndDate').value = item.endDate || '';
+            updateLifetimePreview();
             formReminders = item.reminders ? [...item.reminders] : [];
             renderReminderChipsForm();
             formTags = item.tags ? [...item.tags] : [];
@@ -2796,12 +2882,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
-        // ---------- DUPLICATE ITEM ----------
+        // ---------- DUPLICATE / RENEW ITEM ----------
+        let duplicateMode = 'duplicate';
+
         function formatDuplicateOriginalDetails(item) {
             if (!item.date || item.noExpiration) {
                 return 'Original item has no expiration date.' + (item.time ? ` Original time: ${item.time}${item.durationMinutes ? ` (${item.durationMinutes} minutes)` : ''}.` : '');
             }
-
             let details = `Expiration: ${item.date}`;
             if (item.time) {
                 details += ` at ${item.time}`;
@@ -2824,32 +2911,117 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
             } else {
                 original += 'No expiration date';
-                if (item.time) {
-                    original += `; original time ${item.time}`;
-                    if (item.durationMinutes) original += ` (${item.durationMinutes} minutes)`;
-                }
             }
             return `Duplicated from "${item.name}". ${original}`.slice(0, 500);
+        }
+
+        function addIntervalToDate(dateString, value, unit) {
+            const d = getDateOnly(dateString || getTodayDateString());
+            if (unit === 'days') d.setDate(d.getDate() + value);
+            else if (unit === 'months') d.setMonth(d.getMonth() + value);
+            else if (unit === 'years') d.setFullYear(d.getFullYear() + value);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        function getRenewBaseDate(item) {
+            const base = document.querySelector('input[name="renewBase"]:checked')?.value || 'previous';
+            return base === 'previous' && item.date && !item.noExpiration ? item.date : getTodayDateString();
+        }
+
+        function updateRenewDatePreview() {
+            if (duplicateMode !== 'renew') return;
+            const source = appData.items.find(i => i.id === duplicatingItemId);
+            if (!source) return;
+            const value = Math.max(1, parseInt(renewIntervalValueEl.value, 10) || 1);
+            const unit = renewIntervalUnitEl.value || 'years';
+            const baseDate = getRenewBaseDate(source);
+            duplicateDateEl.value = addIntervalToDate(baseDate, value, unit);
+        }
+
+        function updateRenewReferenceDate() {
+            if (duplicateMode !== 'renew') return;
+            const source = appData.items.find(i => i.id === duplicatingItemId);
+            if (!source) return;
+            const mode = renewReferenceModeEl.value;
+            renewReferenceDateEl.classList.toggle('hidden', mode !== 'custom');
+            if (mode === 'today') renewReferenceDateEl.value = getTodayDateString();
+            else if (mode === 'previous') renewReferenceDateEl.value = source.date || '';
+            else if (mode === 'none') renewReferenceDateEl.value = '';
+        }
+
+        function getRenewReferenceDate(source) {
+            const mode = renewReferenceModeEl.value;
+            if (mode === 'today') return getTodayDateString();
+            if (mode === 'previous') return source.date || '';
+            if (mode === 'custom') return renewReferenceDateEl.value || '';
+            return '';
         }
 
         function openDuplicateModal(itemId) {
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
-
+            duplicateMode = 'duplicate';
             duplicatingItemId = itemId;
-            duplicateItemNameEl.textContent = item.name || '(Unnamed item)';
+            duplicateModalTitleEl.textContent = 'Duplicate Item';
+            duplicateModalSubtitleEl.textContent = 'Create a new item with the same reusable settings.';
+            duplicateItemNameEl.value = item.name || '';
             duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
+            duplicateOriginalLabelEl.textContent = 'Original event';
             duplicateDateEl.value = getTodayDateString();
-            confirmDuplicateBtn.disabled = false;
+            duplicateDateHintEl.textContent = 'Defaults to today. The original item remains unchanged.';
+            duplicateDescriptionEl.textContent = 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
+            renewOptionsEl.classList.add('hidden');
             confirmDuplicateBtn.textContent = 'Duplicate';
+            confirmDuplicateBtn.disabled = false;
             duplicateModal.classList.remove('hidden');
-            setTimeout(() => duplicateDateEl.focus(), 50);
+            setTimeout(() => duplicateItemNameEl.focus(), 50);
+        }
+
+        function openRenewModal(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            duplicateMode = 'renew';
+            duplicatingItemId = itemId;
+            duplicateModalTitleEl.textContent = 'Renew Item';
+            duplicateModalSubtitleEl.textContent = 'Create the next independent event in this item chain.';
+            duplicateItemNameEl.value = item.name || '';
+            duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
+            duplicateOriginalLabelEl.textContent = 'Current event';
+            duplicateDateHintEl.textContent = 'Suggested from the renewal interval. You can still change the date manually.';
+            duplicateDescriptionEl.textContent = 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
+            renewOptionsEl.classList.remove('hidden');
+            const renewal = item.renewal || {};
+            renewIntervalValueEl.value = renewal.value || 1;
+            renewIntervalUnitEl.value = renewal.unit || 'years';
+            const baseRadio = document.querySelector(`input[name="renewBase"][value="${renewal.base || 'previous'}"]`);
+            if (baseRadio) baseRadio.checked = true;
+            if (item.referenceDate) {
+                renewReferenceModeEl.value = 'custom';
+                renewReferenceDateEl.value = item.referenceDate;
+            } else {
+                renewReferenceModeEl.value = 'none';
+                renewReferenceDateEl.value = '';
+            }
+            updateRenewReferenceDate();
+            if (item.referenceDate) renewReferenceDateEl.value = item.referenceDate;
+            updateRenewDatePreview();
+            confirmDuplicateBtn.textContent = 'Renew';
+            confirmDuplicateBtn.disabled = false;
+            duplicateModal.classList.remove('hidden');
+            setTimeout(() => duplicateItemNameEl.focus(), 50);
         }
 
         function closeDuplicateModal() {
             duplicatingItemId = null;
+            duplicateMode = 'duplicate';
             duplicateModal.classList.add('hidden');
+            if (duplicateItemNameEl) duplicateItemNameEl.value = '';
             if (duplicateDateEl) duplicateDateEl.value = '';
+            if (renewReferenceDateEl) renewReferenceDateEl.value = '';
+            if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
             if (confirmDuplicateBtn) {
                 confirmDuplicateBtn.disabled = false;
                 confirmDuplicateBtn.textContent = 'Duplicate';
@@ -2860,8 +3032,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const sourceId = duplicatingItemId;
             const item = appData.items.find(i => i.id === sourceId);
             const newDate = duplicateDateEl.value;
+            const newName = duplicateItemNameEl.value.trim();
             if (!item) {
                 closeDuplicateModal();
+                return;
+            }
+            if (!newName) {
+                showToast('Please enter an item name.');
+                duplicateItemNameEl.focus();
                 return;
             }
             if (!newDate) {
@@ -2870,66 +3048,71 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
 
+            const isRenew = duplicateMode === 'renew';
             confirmDuplicateBtn.disabled = true;
-            confirmDuplicateBtn.textContent = 'Duplicating...';
+            confirmDuplicateBtn.textContent = isRenew ? 'Renewing...' : 'Duplicating...';
 
             try {
-                await withLoading('Creating duplicate...', async () => {
+                await withLoading(isRenew ? 'Creating renewed item...' : 'Creating duplicate...', async () => {
                     const hasTime = !!item.time;
+                    const referenceDate = isRenew ? getRenewReferenceDate(item) : (item.referenceDate || '');
+                    const renewalValue = isRenew ? Math.max(1, parseInt(renewIntervalValueEl.value, 10) || 1) : (item.renewal?.value || 1);
+                    const renewalUnit = isRenew ? (renewIntervalUnitEl.value || 'years') : (item.renewal?.unit || 'years');
+                    const renewalBase = isRenew ? (document.querySelector('input[name="renewBase"]:checked')?.value || 'previous') : (item.renewal?.base || 'previous');
+                    if (isRenew) {
+                        item.renewal = { enabled: true, value: renewalValue, unit: renewalUnit, base: renewalBase };
+                    }
                     const newItem = {
                         id: Date.now().toString(),
-                        name: item.name,
+                        name: newName,
                         category: item.category,
                         date: newDate,
                         noExpiration: false,
                         time: hasTime ? item.time : '',
                         durationMinutes: hasTime ? (item.durationMinutes || 30) : 30,
-                        notes: buildDuplicateNotes(item),
+                        notes: isRenew ? `Renewed from "${item.name}". Original expiration: ${formatDuplicateOriginalDetails(item).replace(/^Expiration: /, '')}`.slice(0, 500) : buildDuplicateNotes(item),
                         tags: [...(item.tags || [])],
                         reminders: (item.reminders || []).map(r => ({ ...r })),
                         eventId: null,
+                        original_event_id: item.id,
                         archived: false,
-                        attachments: []
+                        attachments: [],
+                        referenceDate,
+                        endDate: '',
+                        renewal: { enabled: isRenew || !!item.renewal?.enabled, value: renewalValue, unit: renewalUnit, base: renewalBase }
                     };
 
-                    if (newItem.date && !newItem.noExpiration) {
-                        const eventData = {
-                            name: newItem.name,
-                            category: newItem.category,
-                            date: newItem.date,
-                            time: newItem.time,
-                            durationMinutes: newItem.durationMinutes,
-                            notes: newItem.notes,
-                            tags: newItem.tags,
-                            reminders: newItem.reminders,
-                            noExpiration: false
-                        };
-                        showLoading('Adding new calendar event');
-                        newItem.eventId = isTestMode
-                            ? `test-${Date.now()}`
-                            : await addCalendarEvent(eventData);
-                    }
+                    const eventData = {
+                        name: newItem.name,
+                        category: newItem.category,
+                        date: newItem.date,
+                        time: newItem.time,
+                        durationMinutes: newItem.durationMinutes,
+                        notes: newItem.notes,
+                        tags: newItem.tags,
+                        reminders: newItem.reminders,
+                        noExpiration: false
+                    };
+                    showLoading('Adding new calendar event');
+                    newItem.eventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent(eventData);
 
                     appData.items.push(newItem);
                     registerKnownTags(newItem.tags);
-
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
-                        showLoading('Syncing duplicate to cloud');
+                        showLoading(isRenew ? 'Syncing renewed item to cloud' : 'Syncing duplicate to cloud');
                         await syncToCloud();
                     }
-
                     renderAll();
                     closeDuplicateModal();
                 });
-
-                toastSuccess('Duplicate created.');
+                toastSuccess(isRenew ? 'Renewed item created.' : 'Duplicate created.');
             } catch (error) {
-                console.error('Failed to duplicate item:', error);
-                showToast(`Could not duplicate item: ${error.message || error}`, 'error');
+                console.error(isRenew ? 'Failed to renew item:' : 'Failed to duplicate item:', error);
+                showToast(`Could not ${isRenew ? 'renew' : 'duplicate'} item: ${error.message || error}`, 'error');
                 confirmDuplicateBtn.disabled = false;
-                confirmDuplicateBtn.textContent = 'Duplicate';
+                confirmDuplicateBtn.textContent = isRenew ? 'Renew' : 'Duplicate';
             }
         }
 
@@ -3015,6 +3198,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const hasTime = document.getElementById('itemHasTime').checked;
             const time = hasTime ? document.getElementById('itemTime').value : '';
             const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
+            const referenceDate = document.getElementById('itemReferenceDate').value || '';
+            const endDate = document.getElementById('itemEndDate').value || '';
 
             // If user typed tag text without pressing Enter before clicking save, add it automatically
             const tagInput = document.getElementById('tagInput');
@@ -3032,6 +3217,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             if (hasTime && !time) {
                 showToast('Please enter a time, or uncheck "Set specific time".');
+                return;
+            }
+            if (referenceDate && endDate && getDateOnly(endDate) < getDateOnly(referenceDate)) {
+                showToast('End date must be on or after the reference date.');
                 return;
             }
         
@@ -3090,7 +3279,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             reminders: formReminders,
                             eventId: newEventId || null,
                             archived: old.archived || false,
-                            attachments: [...formAttachments]
+                            attachments: [...formAttachments],
+                            original_event_id: old.original_event_id || null,
+                            referenceDate,
+                            endDate,
+                            renewal: old.renewal || { enabled: false, value: 1, unit: 'years', base: 'previous' }
                         };
                     } else {
                         let newEventId = null;
@@ -3125,7 +3318,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             reminders: formReminders,
                             eventId: newEventId,
                             archived: false,
-                            attachments: [...formAttachments]
+                            attachments: [...formAttachments],
+                            original_event_id: null,
+                            referenceDate,
+                            endDate,
+                            renewal: { enabled: false, value: 1, unit: 'years', base: 'previous' }
                         });
                     }
 
@@ -3447,6 +3644,46 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
+        function getEffectiveLifetimeEndDate(item) {
+            if (!item || !item.referenceDate) return '';
+            if (item.endDate) return item.endDate;
+            if (item.date && !item.noExpiration) return item.date;
+            return '';
+        }
+
+        function getLifetimeInfo(item) {
+            const start = item?.referenceDate;
+            const end = getEffectiveLifetimeEndDate(item);
+            if (!start) return null;
+            const effectiveEnd = end || getTodayDateString();
+            if (getDateOnly(effectiveEnd) < getDateOnly(start)) return null;
+            return {
+                text: formatDateDiff(getDateOnly(start), getDateOnly(effectiveEnd)),
+                ongoing: !end,
+                referenceDate: start,
+                endDate: end
+            };
+        }
+
+        function updateLifetimePreview() {
+            const el = document.getElementById('itemLifetimePreview');
+            if (!el) return;
+            const reference = document.getElementById('itemReferenceDate')?.value || '';
+            const explicitEnd = document.getElementById('itemEndDate')?.value || '';
+            const noExpiration = document.getElementById('itemNoDate')?.checked;
+            const expiry = document.getElementById('itemDate')?.value || '';
+            if (!reference) {
+                el.textContent = '—';
+                return;
+            }
+            const end = explicitEnd || ((!noExpiration && expiry) ? expiry : getTodayDateString());
+            if (getDateOnly(end) < getDateOnly(reference)) {
+                el.textContent = 'Invalid date range';
+                return;
+            }
+            el.textContent = explicitEnd || (!noExpiration && expiry) ? formatDateDiff(getDateOnly(reference), getDateOnly(end)) : `${formatDateDiff(getDateOnly(reference), getDateOnly(end))} (ongoing)`;
+        }
+
         function renderItems() {
             const filtered = filterItems();
             if (!filtered.length) {
@@ -3510,6 +3747,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     dateLineHtml = `<span class="date-info">No expiry date</span>`;
                 }
 
+                const lifetimeInfo = getLifetimeInfo(item);
+                const lifetimeHtml = lifetimeInfo
+                    ? `<span class="text-xs text-indigo-600 dark:text-indigo-400" title="Reference: ${escapeHtml(lifetimeInfo.referenceDate)}${lifetimeInfo.endDate ? `; End: ${escapeHtml(lifetimeInfo.endDate)}` : ''}">⏳ ${escapeHtml(lifetimeInfo.text)}${lifetimeInfo.ongoing ? ' (ongoing)' : ''}</span>`
+                    : '';
+
                 // Attachments display with preview
                 let attachmentsHtml = '';
                 if (item.attachments && item.attachments.length > 0) {
@@ -3553,6 +3795,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             <div class="bottom-left">
                                 ${dateLineHtml}
                                 ${showTimeLeft ? `<span class="time-left ${timeInfo.cssClass}">${timeInfo.text}</span>` : ''}
+                                ${lifetimeHtml}
                             </div>
                             <div class="actions">
                                 <button onclick="openEditModal('${item.id}')" 
@@ -3564,6 +3807,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          class="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="Duplicate">
                                     <i class="fas fa-copy text-base"></i>
+                                </button>
+                                <button onclick="openRenewModal('${item.id}')" 
+                                         class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="Renew">
+                                    <i class="fas fa-rotate-right text-base"></i>
                                 </button>
                                 <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
                                          class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
@@ -3838,6 +4086,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
             });
         }
+
+        if (renewIntervalValueEl) renewIntervalValueEl.addEventListener('input', updateRenewDatePreview);
+        if (renewIntervalUnitEl) renewIntervalUnitEl.addEventListener('change', updateRenewDatePreview);
+        if (renewReferenceModeEl) renewReferenceModeEl.addEventListener('change', updateRenewReferenceDate);
+        document.querySelectorAll('input[name="renewBase"]').forEach(el => el.addEventListener('change', updateRenewDatePreview));
+        if (duplicateDateEl) duplicateDateEl.addEventListener('change', () => {
+            if (duplicateMode === 'renew') {
+                // A manually chosen date is allowed and will be respected when renewing.
+            }
+        });
 
         // Close modals when clicking backdrop
         document.getElementById('itemModal').addEventListener('click', (e) => {
