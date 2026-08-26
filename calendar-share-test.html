@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📅 Calendar Share Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 p-6 flex justify-center">
+    <div class="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 space-y-6">
+
+        <!-- Header -->
+        <div class="flex justify-between items-center border-b pb-4">
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">📅 Calendar Share Test</h1>
+            <div id="authStatus" class="text-sm text-gray-500 dark:text-gray-400">Not signed in</div>
+        </div>
+
+        <!-- Auth Section -->
+        <div class="flex flex-wrap items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl">
+            <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-medium transition flex items-center gap-2">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                Sign in with Google
+            </button>
+            <button id="logoutBtn" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-xl font-medium transition hidden">Sign Out</button>
+            <span id="userEmail" class="text-sm font-medium text-gray-600 dark:text-gray-300 hidden"></span>
+        </div>
+
+        <!-- SENDER PANEL -->
+        <div class="border border-blue-200 dark:border-blue-800 rounded-xl p-5 bg-blue-50/30 dark:bg-blue-950/20">
+            <h2 class="text-lg font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-2">✉️ Sender (User A)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Email (User B)</label>
+                    <input type="email" id="recipientEmail" placeholder="friend@gmail.com" class="w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-800 dark:border-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Event Title (for search)</label>
+                    <input type="text" id="eventTitle" value="📦 Shared Data (Test)" class="w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-800 dark:border-gray-600">
+                </div>
+            </div>
+            <div class="mt-3">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Text to Share (JSON, plain text, etc.)</label>
+                <textarea id="shareText" rows="3" class="w-full px-4 py-2 border rounded-xl bg-white dark:bg-gray-800 dark:border-gray-600 font-mono text-sm" placeholder='{"items": [{"name":"Passport","date":"2026-12-01"}]}'>{"shared_by": "User A", "items": ["Passport", "Car Insurance", "Netflix"], "timestamp": "2026-08-26"}</textarea>
+            </div>
+            <button id="sendInviteBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold transition disabled:opacity-50 disabled:cursor-not-allowed">
+                📤 Send Invite with Data
+            </button>
+            <div id="senderResult" class="mt-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 p-2 rounded-xl border hidden"></div>
+        </div>
+
+        <!-- RECEIVER PANEL -->
+        <div class="border border-green-200 dark:border-green-800 rounded-xl p-5 bg-green-50/30 dark:bg-green-950/20">
+            <h2 class="text-lg font-semibold text-green-800 dark:text-green-300 flex items-center gap-2">📥 Receiver (User B)</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                ⚠️ <strong>Manual Step Required:</strong> After User A sends the invite, open <strong>Gmail / Google Calendar</strong> and <strong>click "Yes" / "Add to Calendar"</strong> to accept it. 
+                <br>Then click <strong>"Fetch Shared Events"</strong> below to pull it via the API.
+            </p>
+            <div class="flex flex-wrap gap-3">
+                <button id="fetchEventsBtn" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded-xl font-medium transition">🔄 Fetch Shared Events</button>
+                <input type="text" id="searchQuery" placeholder="Search title (e.g. Shared Data)" value="📦 Shared Data (Test)" class="flex-1 min-w-[200px] px-4 py-2 border rounded-xl bg-white dark:bg-gray-800 dark:border-gray-600">
+            </div>
+            <div id="receiverEventsList" class="mt-3 space-y-2 max-h-60 overflow-y-auto"></div>
+            <div id="receiverResult" class="mt-3 text-sm text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 p-3 rounded-xl border hidden whitespace-pre-wrap"></div>
+        </div>
+
+        <!-- Debug Log -->
+        <div class="border-t pt-3">
+            <details>
+                <summary class="cursor-pointer text-sm font-medium text-gray-500 dark:text-gray-400">📋 Debug Log</summary>
+                <div id="debugLog" class="text-xs font-mono bg-gray-100 dark:bg-gray-900 p-3 rounded-xl mt-2 max-h-40 overflow-y-auto text-gray-800 dark:text-gray-300"></div>
+            </details>
+        </div>
+    </div>
+
+    <script>
+        // ---------- CONFIG ----------
+        const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
+        const SCOPES = 'https://www.googleapis.com/auth/calendar.events openid email';
+
+        let tokenClient;
+        let accessToken = null;
+        let tokenExpiry = 0;
+        let currentUserEmail = '';
+
+        // ---------- DOM refs ----------
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const authStatus = document.getElementById('authStatus');
+        const userEmailSpan = document.getElementById('userEmail');
+        const recipientEmail = document.getElementById('recipientEmail');
+        const eventTitle = document.getElementById('eventTitle');
+        const shareText = document.getElementById('shareText');
+        const sendInviteBtn = document.getElementById('sendInviteBtn');
+        const senderResult = document.getElementById('senderResult');
+        const fetchEventsBtn = document.getElementById('fetchEventsBtn');
+        const searchQuery = document.getElementById('searchQuery');
+        const receiverEventsList = document.getElementById('receiverEventsList');
+        const receiverResult = document.getElementById('receiverResult');
+        const debugLog = document.getElementById('debugLog');
+
+        function log(msg) {
+            const time = new Date().toLocaleTimeString();
+            debugLog.innerHTML += `[${time}] ${msg}\n`;
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        // ---------- AUTH ----------
+        function saveToken(token, expiresIn) {
+            accessToken = token;
+            tokenExpiry = Date.now() + (expiresIn || 3600) * 1000;
+            localStorage.setItem('test_calendar_token', token);
+            localStorage.setItem('test_calendar_expiry', String(tokenExpiry));
+        }
+
+        function restoreToken() {
+            const token = localStorage.getItem('test_calendar_token');
+            const expiry = Number(localStorage.getItem('test_calendar_expiry'));
+            if (token && expiry && Date.now() < expiry) {
+                accessToken = token;
+                tokenExpiry = expiry;
+                return true;
+            }
+            accessToken = null;
+            localStorage.removeItem('test_calendar_token');
+            localStorage.removeItem('test_calendar_expiry');
+            return false;
+        }
+
+        function updateUIForAuth() {
+            if (accessToken && Date.now() < tokenExpiry) {
+                authStatus.textContent = `✅ Signed in (${currentUserEmail || 'Google'})`;
+                authStatus.className = 'text-sm text-green-600 dark:text-green-400';
+                loginBtn.classList.add('hidden');
+                logoutBtn.classList.remove('hidden');
+                userEmailSpan.textContent = currentUserEmail || 'Authenticated';
+                userEmailSpan.classList.remove('hidden');
+                sendInviteBtn.disabled = false;
+                fetchEventsBtn.disabled = false;
+                log('✅ Authenticated successfully.');
+            } else {
+                authStatus.textContent = '🔴 Not signed in';
+                authStatus.className = 'text-sm text-red-600 dark:text-red-400';
+                loginBtn.classList.remove('hidden');
+                logoutBtn.classList.add('hidden');
+                userEmailSpan.classList.add('hidden');
+                sendInviteBtn.disabled = true;
+                fetchEventsBtn.disabled = true;
+            }
+        }
+
+        async function ensureValidToken() {
+            if (accessToken && Date.now() < tokenExpiry) return accessToken;
+            // Try to refresh silently
+            return new Promise((resolve, reject) => {
+                tokenClient.requestAccessToken({ prompt: '' });
+                // The callback will handle the rest, but we need to listen for it.
+                // Since GSI callback is global, we set a temporary resolve.
+                window._pendingTokenResolve = resolve;
+                window._pendingTokenReject = reject;
+            });
+        }
+
+        // GSI Callback
+        function handleTokenResponse(response) {
+            if (response.error) {
+                const err = new Error(response.error_description || response.error);
+                if (window._pendingTokenReject) {
+                    window._pendingTokenReject(err);
+                    window._pendingTokenResolve = null;
+                    window._pendingTokenReject = null;
+                } else {
+                    alert('Login failed: ' + err.message);
+                }
+                return;
+            }
+            saveToken(response.access_token, response.expires_in);
+            // Fetch email
+            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${response.access_token}` }
+            }).then(res => res.json())
+              .then(profile => {
+                  if (profile.email) {
+                      currentUserEmail = profile.email;
+                      localStorage.setItem('test_calendar_email', profile.email);
+                  }
+                  updateUIForAuth();
+                  if (window._pendingTokenResolve) {
+                      window._pendingTokenResolve(response.access_token);
+                      window._pendingTokenResolve = null;
+                      window._pendingTokenReject = null;
+                  }
+              }).catch(() => {
+                  if (window._pendingTokenResolve) {
+                      window._pendingTokenResolve(response.access_token);
+                      window._pendingTokenResolve = null;
+                      window._pendingTokenReject = null;
+                  }
+                  updateUIForAuth();
+              });
+        }
+
+        function initAuth() {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: handleTokenResponse
+            });
+
+            const hasToken = restoreToken();
+            if (hasToken) {
+                // Verify token by fetching email
+                fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                }).then(res => {
+                    if (!res.ok) throw new Error('Invalid token');
+                    return res.json();
+                }).then(profile => {
+                    currentUserEmail = profile.email || localStorage.getItem('test_calendar_email') || 'Google User';
+                    localStorage.setItem('test_calendar_email', currentUserEmail);
+                    updateUIForAuth();
+                }).catch(() => {
+                    accessToken = null;
+                    localStorage.removeItem('test_calendar_token');
+                    updateUIForAuth();
+                });
+            } else {
+                updateUIForAuth();
+            }
+
+            loginBtn.onclick = () => {
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            };
+
+            logoutBtn.onclick = () => {
+                const token = accessToken;
+                accessToken = null;
+                localStorage.removeItem('test_calendar_token');
+                localStorage.removeItem('test_calendar_expiry');
+                localStorage.removeItem('test_calendar_email');
+                currentUserEmail = '';
+                if (token) {
+                    google.accounts.oauth2.revoke(token, () => {});
+                }
+                updateUIForAuth();
+                log('🔓 Logged out.');
+            };
+        }
+
+        // ---------- API HELPERS ----------
+        async function callApi(url, options = {}) {
+            const token = await ensureValidToken();
+            const res = await fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(`API Error (${res.status}): ${text}`);
+            }
+            return res.json();
+        }
+
+        // ---------- SENDER: Send Invite ----------
+        sendInviteBtn.onclick = async () => {
+            const email = recipientEmail.value.trim();
+            const title = eventTitle.value.trim() || 'Shared Data';
+            const text = shareText.value || 'No data provided.';
+
+            if (!email) {
+                alert('Please enter a recipient email.');
+                return;
+            }
+            if (!email.includes('@')) {
+                alert('Please enter a valid email address.');
+                return;
+            }
+
+            senderResult.classList.add('hidden');
+            sendInviteBtn.disabled = true;
+            sendInviteBtn.textContent = '⏳ Sending...';
+
+            try {
+                // Tomorrow's date
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                const dateStr = tomorrow.toISOString().split('T')[0];
+
+                const eventBody = {
+                    summary: title,
+                    description: `---SHARED-DATA-START---\n${text}\n---SHARED-DATA-END---\n\nSent via Calendar Share Test.`,
+                    start: { date: dateStr },
+                    end: { date: dateStr },
+                    attendees: [{ email: email }],
+                    sendNotifications: true,
+                    reminders: { useDefault: false }
+                };
+
+                log(`📤 Sending invite to ${email}...`);
+                const result = await callApi(
+                    'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+                    { method: 'POST', body: JSON.stringify(eventBody) }
+                );
+
+                senderResult.classList.remove('hidden');
+                senderResult.innerHTML = `
+                    ✅ <strong>Invite sent successfully!</strong><br>
+                    Event ID: <code class="text-xs bg-gray-200 dark:bg-gray-700 px-1 rounded">${result.id}</code><br>
+                    <span class="text-xs text-gray-500">The recipient will receive an email. They must accept the invite for the event to appear in their calendar.</span>
+                `;
+                senderResult.className = 'mt-3 text-sm text-green-700 dark:text-green-300 bg-white dark:bg-gray-800 p-3 rounded-xl border border-green-300 dark:border-green-700';
+                log(`✅ Invite sent! Event ID: ${result.id}`);
+            } catch (err) {
+                log(`❌ Error: ${err.message}`);
+                senderResult.classList.remove('hidden');
+                senderResult.innerHTML = `❌ Failed: ${err.message}`;
+                senderResult.className = 'mt-3 text-sm text-red-700 dark:text-red-300 bg-white dark:bg-gray-800 p-3 rounded-xl border border-red-300 dark:border-red-700';
+            } finally {
+                sendInviteBtn.disabled = false;
+                sendInviteBtn.textContent = '📤 Send Invite with Data';
+            }
+        };
+
+        // ---------- RECEIVER: Fetch & Extract ----------
+        async function fetchSharedEvents() {
+            const query = searchQuery.value.trim() || 'Shared Data';
+            receiverEventsList.innerHTML = '<div class="text-gray-400 text-sm py-2">⏳ Loading...</div>';
+            receiverResult.classList.add('hidden');
+
+            try {
+                log(`🔍 Searching for events with title: "${query}"`);
+                const data = await callApi(
+                    `https://www.googleapis.com/calendar/v3/calendars/primary/events?q=${encodeURIComponent(query)}&maxResults=10&orderBy=startTime&singleEvents=true`
+                );
+
+                const items = data.items || [];
+                if (items.length === 0) {
+                    receiverEventsList.innerHTML = '<div class="text-gray-500 text-sm py-2">No events found. Make sure you accepted the invite in Gmail/Google Calendar first!</div>';
+                    log('⚠️ No events found.');
+                    return;
+                }
+
+                let html = '';
+                items.forEach((ev, idx) => {
+                    const summary = ev.summary || '(No title)';
+                    const status = ev.attendees?.find(a => a.self)?.responseStatus || 'unknown';
+                    const desc = ev.description || '';
+                    const match = desc.match(/---SHARED-DATA-START---\n([\s\S]*?)\n---SHARED-DATA-END---/);
+                    const hasData = !!match;
+
+                    html += `
+                        <div class="border border-gray-200 dark:border-gray-700 rounded-xl p-3 bg-white dark:bg-gray-800 flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <strong class="text-gray-800 dark:text-white">${escapeHtml(summary)}</strong>
+                                <span class="text-xs ml-2 px-2 py-0.5 rounded-full ${status === 'accepted' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
+                                    ${status}
+                                </span>
+                                <div class="text-xs text-gray-500 mt-0.5">${hasData ? '✅ Contains shared data' : '❌ No data marker found'}</div>
+                            </div>
+                            ${hasData ? `<button onclick="extractDataFromEvent('${ev.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition">📥 Extract Text</button>` : ''}
+                        </div>
+                    `;
+                });
+                receiverEventsList.innerHTML = html;
+                log(`📥 Found ${items.length} event(s).`);
+            } catch (err) {
+                log(`❌ Fetch error: ${err.message}`);
+                receiverEventsList.innerHTML = `<div class="text-red-500 text-sm">Error: ${err.message}</div>`;
+            }
+        }
+
+        // Extract function (exposed globally for onclick)
+        window.extractDataFromEvent = async function(eventId) {
+            receiverResult.classList.add('hidden');
+            try {
+                log(`📄 Fetching details for event ${eventId}`);
+                const ev = await callApi(
+                    `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`
+                );
+                const desc = ev.description || '';
+                const match = desc.match(/---SHARED-DATA-START---\n([\s\S]*?)\n---SHARED-DATA-END---/);
+                if (match) {
+                    receiverResult.classList.remove('hidden');
+                    receiverResult.innerHTML = `<strong>Extracted Text:</strong>\n${escapeHtml(match[1])}`;
+                    receiverResult.className = 'mt-3 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 p-3 rounded-xl border border-green-300 dark:border-green-700 whitespace-pre-wrap';
+                    log(`✅ Extracted data successfully.`);
+                } else {
+                    receiverResult.classList.remove('hidden');
+                    receiverResult.innerHTML = '⚠️ No data marker found in this event description.';
+                    receiverResult.className = 'mt-3 text-sm text-yellow-700 dark:text-yellow-300 bg-white dark:bg-gray-800 p-3 rounded-xl border border-yellow-300 dark:border-yellow-700';
+                    log('⚠️ No data marker found.');
+                }
+            } catch (err) {
+                log(`❌ Extract error: ${err.message}`);
+                receiverResult.classList.remove('hidden');
+                receiverResult.innerHTML = `❌ Failed: ${err.message}`;
+                receiverResult.className = 'mt-3 text-sm text-red-700 dark:text-red-300 bg-white dark:bg-gray-800 p-3 rounded-xl border border-red-300 dark:border-red-700';
+            }
+        };
+
+        fetchEventsBtn.onclick = fetchSharedEvents;
+
+        // ---------- UTILITY ----------
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ---------- INIT ----------
+        window.onload = function() {
+            initAuth();
+            // Pre-fill recipient with a demo
+            recipientEmail.value = 'test.receiver@gmail.com'; // Replace with actual test email
+            log('🚀 Test page loaded. Ready to share calendar data.');
+            log('📌 Remember: The receiver MUST accept the invite manually in Gmail/Calendar first!');
+        };
+    </script>
+</body>
+</html>
