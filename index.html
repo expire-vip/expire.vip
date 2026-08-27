@@ -337,6 +337,23 @@
             cursor: grabbing;
             transition: none;
         }
+        /* Desktop image zoom controls/panning; on phones let the browser handle native pinch zoom. */
+        @media (max-width: 767px) {
+            #zoomOutBtn, #zoomResetBtn, #zoomInBtn {
+                display: none !important;
+            }
+            #previewModal .preview-body img {
+                max-width: 100%;
+                max-height: 100%;
+                transform: none !important;
+                touch-action: auto;
+                cursor: auto;
+            }
+            #previewModal .preview-body img.is-zoomed,
+            #previewModal .preview-body img.is-dragging {
+                cursor: auto;
+            }
+        }
         #previewModal .preview-body video {
             max-width: 100%;
             max-height: 100%;
@@ -380,6 +397,18 @@
             color: #9ca3af;
             font-size: 1.2rem;
             text-align: center;
+        }
+        .inline-note-editor {
+            width: 100%;
+            min-height: 120px;
+            resize: both;
+            box-sizing: border-box;
+        }
+        .inline-note-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.35rem;
+            margin-top: 0.4rem;
         }
         /* Notes full width on mobile */
         .notes-wrapper {
@@ -604,11 +633,16 @@
     <div class="app-container flex flex-col relative pb-10 bg-white dark:bg-gray-900 transition-colors shadow-lg rounded-none sm:rounded-2xl overflow-hidden">
         <!-- Header -->
         <header class="bg-indigo-600 dark:bg-indigo-800 text-white p-5 shadow-md flex justify-between items-center rounded-b-xl">
-            <div>
+            <div class="min-w-0">
                 <button id="homeTitleBtn" type="button" class="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90 transition-opacity text-left" title="Refresh Expire.vip">📅 Expire.vip</button>
                 <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
+                <div id="accountEmailWrap" class="hidden-auth items-center gap-1.5 text-xs text-white/90 mt-1" title="Signed-in Google account">
+                    <i class="fas fa-user-circle text-[11px] opacity-80" aria-hidden="true"></i>
+                    <span id="accountEmailDisplay" class="max-w-[180px] truncate">—</span>
+                    <button id="accountEmailToggle" type="button" class="text-white/70 hover:text-white underline underline-offset-2" title="Show full email">View</button>
+                </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-shrink-0">
                 <!-- Dark mode toggle removed -->
                 <button id="settingsBtn" class="text-white/80 hover:text-white transition hidden-auth" title="Settings">
                     <i class="fas fa-cog text-lg"></i>
@@ -857,9 +891,9 @@
                 <div>
                     <div class="flex justify-between items-center mb-1">
                         <label for="itemNotes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes (optional)</label>
-                        <span id="notesCharCount" class="text-xs text-gray-400 dark:text-gray-500">0/500</span>
+                        <span id="notesCharCount" class="text-xs text-gray-400 dark:text-gray-500">0/4000</span>
                     </div>
-                    <textarea id="itemNotes" rows="3" maxlength="500" placeholder="e.g., Policy number, renewal link, memo..." class="w-full max-w-full block px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm resize-none"></textarea>
+                    <textarea id="itemNotes" rows="6" maxlength="4000" placeholder="e.g., Policy number, renewal link, memo..." class="w-full max-w-full block px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm resize-both"></textarea>
                 </div>
                 <div id="remindersSection">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Reminders (max 5, ≤28 days)</label>
@@ -1115,9 +1149,9 @@
                         <!-- Dynamic buttons injected here -->
                         <button id="jsonToggleBtn" style="display:none;" onclick="toggleJsonFormat()">Format JSON</button>
                         <button id="editToggleBtn" style="display:none;" onclick="toggleEditMode()">Edit</button>
-                        <button id="zoomOutBtn" style="display:none;" onclick="zoomImage(-0.2)">🔍−</button>
-                        <button id="zoomResetBtn" style="display:none;" onclick="zoomImage(0)">⟲</button>
-                        <button id="zoomInBtn" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
+                        <button id="zoomOutBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(-0.2)">🔍−</button>
+                        <button id="zoomResetBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0)">⟲</button>
+                        <button id="zoomInBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
                         <button id="saveEditBtn" style="display:none;" class="save-edit-btn" onclick="saveEdit()">Save</button>
                         <button class="close-preview" onclick="closePreview()">✕</button>
                     </div>
@@ -1191,6 +1225,8 @@
         let previewPanX = 0;
         let previewPanY = 0;
         let previewDrag = null;
+        let inlineNoteEditItemId = null;
+        let accountEmailVisible = false;
 
         // DOM elements
         const landingPage = document.getElementById('landingPage');
@@ -1214,6 +1250,9 @@
         const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
         const statsBar = document.getElementById('statsBar');
+        const accountEmailWrap = document.getElementById('accountEmailWrap');
+        const accountEmailDisplay = document.getElementById('accountEmailDisplay');
+        const accountEmailToggle = document.getElementById('accountEmailToggle');
         const duplicateModal = document.getElementById('duplicateModal');
         const duplicateModalTitleEl = document.getElementById('duplicateModalTitle');
         const duplicateModalSubtitleEl = document.getElementById('duplicateModalSubtitle');
@@ -1295,6 +1334,26 @@ async function fetchGoogleAccountEmail(token) {
     }
 
     return localStorage.getItem('expire_googleEmail') || '';
+}
+
+function updateAccountEmailUI() {
+    if (!accountEmailWrap || !accountEmailDisplay || !accountEmailToggle) return;
+    const email = localStorage.getItem('expire_googleEmail') || '';
+    if (!email || isTestMode) {
+        accountEmailWrap.style.display = 'none';
+        return;
+    }
+    accountEmailWrap.style.display = 'flex';
+    if (accountEmailVisible) {
+        accountEmailDisplay.textContent = email;
+        accountEmailToggle.textContent = 'Hide';
+        accountEmailToggle.title = 'Hide full email';
+    } else {
+        const prefix = email.slice(0, 2);
+        accountEmailDisplay.textContent = `${prefix}••••`;
+        accountEmailToggle.textContent = 'View';
+        accountEmailToggle.title = 'Show full email';
+    }
 }
 
 async function ensureValidToken() {
@@ -2021,6 +2080,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
             const data = await res.json(); return data.id;
         }
+        async function updateCalendarEventNotes(eventId, notes) {
+            if (!eventId || isTestMode) return;
+            const response = await callGoogleAPI(
+                `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ description: notes || '' })
+                }
+            );
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+        }
+
         async function removeCalendarEvent(eventId) {
             if (!eventId) return;
             await callGoogleAPI(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
@@ -2357,6 +2431,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function setupPreviewImagePan() {
             const img = document.getElementById('previewImage');
             if (!img || img.dataset.panBound === 'true') return;
+            // Desktop only: mobile devices should retain native browser pinch zoom.
+            if (!window.matchMedia('(min-width: 768px) and (pointer: fine)').matches) return;
             img.dataset.panBound = 'true';
 
             const beginDrag = (event) => {
@@ -2692,7 +2768,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const notesEl = document.getElementById('itemNotes');
             const countEl = document.getElementById('notesCharCount');
             if (notesEl && countEl) {
-                countEl.textContent = `${notesEl.value.length}/500`;
+                countEl.textContent = `${notesEl.value.length}/4000`;
             }
         }
 
@@ -3297,7 +3373,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const name = document.getElementById('itemName').value.trim();
             const category = document.getElementById('itemCategory').value;
             const date = document.getElementById('itemDate').value;
-            const notes = document.getElementById('itemNotes').value.trim().slice(0, 500);
+            const notes = document.getElementById('itemNotes').value.trim().slice(0, 4000);
             const noExpiration = document.getElementById('itemNoDate').checked;
             const hasTime = document.getElementById('itemHasTime').checked;
             const time = hasTime ? document.getElementById('itemTime').value : '';
@@ -3831,11 +3907,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                       }).join('')}</div>`
                     : '';
 
-                const notesHtml = item.notes ? `
-                    <div class="mt-2.5 w-full bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 flex items-start gap-2 break-words">
-                        <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
-                        <span class="notes-text whitespace-pre-line">${escapeHtml(item.notes)}</span>
-                    </div>` : '';
+                const isInlineNoteEditing = inlineNoteEditItemId === item.id;
+                const notesHtml = `
+                    <div class="mt-2.5 w-full bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 break-words" data-note-item="${item.id}">
+                        <div class="flex items-start gap-2">
+                            <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
+                            ${isInlineNoteEditing
+                                ? `<textarea id="inlineNote_${item.id}" maxlength="4000" class="inline-note-editor px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">${escapeHtml(item.notes || '')}</textarea>`
+                                : `<span class="notes-text whitespace-pre-line flex-1 min-w-0 ${item.notes ? '' : 'text-gray-400 dark:text-gray-500 italic'}">${item.notes ? escapeHtml(item.notes) : 'No notes'}</span>`}
+                        </div>
+                        <div class="inline-note-actions">
+                            ${isInlineNoteEditing
+                                ? `<button type="button" onclick="saveInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium">Save</button>
+                                   <button type="button" onclick="cancelInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-medium">Cancel</button>`
+                                : `<button type="button" onclick="copyItemNotes('${item.id}')" ${item.notes ? '' : 'disabled'} class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Copy notes" aria-label="Copy notes"><i class="fas fa-copy text-xs"></i></button>
+                                   <button type="button" onclick="startInlineNoteEdit('${item.id}')" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Edit notes" aria-label="Edit notes"><i class="fas fa-edit text-xs"></i></button>`}
+                        </div>
+                    </div>`;
 
                 let dateLineHtml = '';
                 if (item.date && !item.noExpiration) {
@@ -3955,6 +4043,82 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        async function saveInlineNote(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            const textarea = document.getElementById(`inlineNote_${itemId}`);
+            if (!item || !textarea) return;
+            const notes = textarea.value.trim().slice(0, 4000);
+            const oldNotes = item.notes || '';
+            if (notes === oldNotes) {
+                inlineNoteEditItemId = null;
+                renderAll();
+                return;
+            }
+
+            try {
+                await withLoading('Saving notes...', async () => {
+                    item.notes = notes;
+                    await updateCalendarEventNotes(item.eventId, notes);
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+                });
+                inlineNoteEditItemId = null;
+                renderAll();
+                toastSuccess('Notes saved.');
+            } catch (error) {
+                item.notes = oldNotes;
+                toastError('Failed to save notes: ' + error.message);
+            }
+        }
+
+        function startInlineNoteEdit(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            inlineNoteEditItemId = itemId;
+            renderAll();
+            setTimeout(() => {
+                const textarea = document.getElementById(`inlineNote_${itemId}`);
+                if (textarea) {
+                    textarea.focus();
+                    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                }
+            }, 0);
+        }
+
+        function cancelInlineNote(itemId) {
+            inlineNoteEditItemId = null;
+            renderAll();
+        }
+
+        async function copyItemNotes(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item || !item.notes) {
+                showToast('There are no notes to copy.', 'info');
+                return;
+            }
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(item.notes);
+                } else {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = item.notes;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.focus();
+                    textarea.select();
+                    document.execCommand('copy');
+                    textarea.remove();
+                }
+                toastSuccess('Notes copied to clipboard.');
+            } catch (error) {
+                toastError('Could not copy notes.');
+            }
+        }
+
         function renderAll() { 
             renderCategoryChips(); 
             renderStatsBar();
@@ -3967,6 +4131,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (isTestMode) { testBanner.style.display = 'block'; exitTestBtn.style.display = 'inline-block'; logoutBtn.style.display = 'none'; settingsBtn.style.display = 'block'; }
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
             reminderBanner.style.display = 'block';
+            updateAccountEmailUI();
             renderAll();
             // Update sync status if we have a valid token
             if (accessToken && Date.now() < tokenExpiry) {
@@ -4017,6 +4182,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
             saveToken(response.access_token, response.expires_in);
             await fetchGoogleAccountEmail(response.access_token);
+            updateAccountEmailUI();
 
             if (pendingTokenResolve) {
                 const resolve = pendingTokenResolve;
@@ -4150,6 +4316,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             localStorage.removeItem('expire_accessToken');
             localStorage.removeItem('expire_tokenExpiry');
             localStorage.removeItem('expire_googleEmail');
+            accountEmailVisible = false;
+            updateAccountEmailUI();
             accessToken = null;
             tokenExpiry = 0;
 
@@ -4177,6 +4345,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // ---------- OTHER INITIALIZATIONS ----------
         addItemBtn.onclick = openAddModal;
         settingsBtn.onclick = openSettings;
+        if (accountEmailToggle) {
+            accountEmailToggle.onclick = () => {
+                accountEmailVisible = !accountEmailVisible;
+                updateAccountEmailUI();
+            };
+        }
         showArchivedToggle.onclick = toggleShowArchived;
         document.getElementById('searchInput').addEventListener('input', renderAll);
         document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
@@ -4217,6 +4391,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closePreview();
+                if (inlineNoteEditItemId !== null) {
+                    inlineNoteEditItemId = null;
+                    renderAll();
+                }
             }
         });
         // Close modals with Escape key
