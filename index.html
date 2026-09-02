@@ -52,6 +52,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body { background-color: #f3f4f6; }
         select, input[type="date"] { color-scheme: light dark; }
@@ -365,6 +366,32 @@
             border: none;
             min-height: 400px;
         }
+        .pdf-preview-container {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.5rem;
+            background: #e5e7eb;
+        }
+        .dark .pdf-preview-container { background: #111827; }
+        .pdf-preview-page {
+            background: white;
+            box-shadow: 0 4px 16px rgba(0,0,0,.18);
+            max-width: 100%;
+            height: auto;
+        }
+        .pdf-page-label {
+            color: #6b7280;
+            font-size: .7rem;
+            margin-top: -.65rem;
+        }
+        .inline-note-editor { min-height: 140px; resize: both; width: 100%; }
+        .inline-note-meta { display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-top:.35rem; font-size:.7rem; color:#9ca3af; }
+        .note-preview-text { white-space: pre-line; }
         #previewModal .preview-body pre {
             width: 100%;
             margin: 0;
@@ -894,6 +921,10 @@
                         <span id="notesCharCount" class="text-xs text-gray-400 dark:text-gray-500">0/4000</span>
                     </div>
                     <textarea id="itemNotes" rows="6" maxlength="4000" placeholder="e.g., Policy number, renewal link, memo..." class="w-full max-w-full block px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm resize-both"></textarea>
+                    <label class="mt-2 inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-400 select-none">
+                        <input type="checkbox" id="itemShowNotes" class="rounded border-gray-300 dark:border-gray-600 text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                        <span>Show notes in the item list by default</span>
+                    </label>
                 </div>
                 <div id="remindersSection">
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Reminders (max 5, ≤28 days)</label>
@@ -1226,6 +1257,7 @@
         let previewPanY = 0;
         let previewDrag = null;
         let inlineNoteEditItemId = null;
+        const expandedNotesItems = new Set();
         let accountEmailVisible = false;
 
         // DOM elements
@@ -1961,6 +1993,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.original_event_id === undefined) item.original_event_id = null;
                 if (item.referenceDate === undefined) item.referenceDate = '';
                 if (item.endDate === undefined) item.endDate = '';
+                if (item.showNotes === undefined) item.showNotes = true;
                 if (item.renewal === undefined || item.renewal === null || typeof item.renewal !== 'object') {
                     item.renewal = { enabled: false, value: 1, unit: 'years', base: 'previous' };
                 } else {
@@ -2236,6 +2269,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             previewData = { title, fileId, mimeType, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false, isVideo: false };
             titleEl.textContent = title || 'Preview';
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
+            body.style.alignItems = 'center';
+            body.style.justifyContent = 'center';
+            body.style.padding = '1rem';
             modal.classList.add('show');
 
             // Fetch metadata first
@@ -2286,7 +2322,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     } else if (contentType === 'application/pdf') {
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
-                        body.innerHTML = `<iframe src="${url}"></iframe>`;
+                        await renderPdfPreview(url, body);
                     } else if (contentType.includes('json') || contentType.includes('text')) {
                         const text = await response.text();
                         previewData.rawText = text;
@@ -2323,6 +2359,49 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 .catch((err) => {
                     body.innerHTML = `<div class="preview-placeholder" style="color:#ef4444;">Failed to load preview: ${escapeHtml(err.message)}</div>`;
                 });
+        }
+
+        async function renderPdfPreview(url, body) {
+            if (!window.pdfjsLib) {
+                body.innerHTML = `<iframe src="${url}"></iframe>`;
+                return;
+            }
+            const container = document.createElement('div');
+            container.className = 'pdf-preview-container';
+            body.innerHTML = '';
+            body.style.alignItems = 'stretch';
+            body.style.justifyContent = 'stretch';
+            body.style.padding = '0';
+            body.appendChild(container);
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            try {
+                const pdf = await pdfjsLib.getDocument(url).promise;
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const containerWidth = Math.max(280, container.clientWidth - 24);
+                    const baseViewport = page.getViewport({ scale: 1 });
+                    const scale = Math.min(2, containerWidth / baseViewport.width);
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'pdf-preview-page';
+                    const dpr = Math.min(2, window.devicePixelRatio || 1);
+                    canvas.width = Math.ceil(viewport.width * dpr);
+                    canvas.height = Math.ceil(viewport.height * dpr);
+                    canvas.style.width = `${Math.ceil(viewport.width)}px`;
+                    canvas.style.height = `${Math.ceil(viewport.height)}px`;
+                    const ctx = canvas.getContext('2d');
+                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+                    container.appendChild(canvas);
+                    const label = document.createElement('div');
+                    label.className = 'pdf-page-label';
+                    label.textContent = `Page ${pageNum} of ${pdf.numPages}`;
+                    container.appendChild(label);
+                }
+            } catch (error) {
+                console.error('PDF preview failed:', error);
+                body.innerHTML = `<iframe src="${url}"></iframe>`;
+            }
         }
 
         function showJsonPreview(pretty) {
@@ -2734,7 +2813,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 reminders: [...formReminders],
                 eventId: null,
                 archived: false,
-                attachments: [...formAttachments]
+                attachments: [...formAttachments],
+                showNotes: document.getElementById('itemShowNotes')?.checked !== false
             };
 
             appData.items.push(newItem);
@@ -2818,6 +2898,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 duration: document.getElementById('itemDuration').value,
                 referenceDate: document.getElementById('itemReferenceDate').value,
                 endDate: document.getElementById('itemEndDate').value,
+                showNotes: document.getElementById('itemShowNotes').checked,
                 notes: document.getElementById('itemNotes').value,
                 tags: [...formTags],
                 reminders: JSON.stringify(formReminders),
@@ -2837,6 +2918,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 duration: document.getElementById('itemDuration').value,
                 referenceDate: document.getElementById('itemReferenceDate').value,
                 endDate: document.getElementById('itemEndDate').value,
+                showNotes: document.getElementById('itemShowNotes').checked,
                 notes: document.getElementById('itemNotes').value,
                 tags: [...formTags],
                 reminders: JSON.stringify(formReminders),
@@ -2880,6 +2962,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.getElementById('itemDuration').value = 30;
             document.getElementById('itemReferenceDate').value = '';
             document.getElementById('itemEndDate').value = '';
+            document.getElementById('itemShowNotes').checked = true;
             updateLifetimePreview();
             // Ensure time section is visible
             const timeSection = document.getElementById('timeSection');
@@ -2924,6 +3007,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.getElementById('itemDuration').value = hasTime ? (item.durationMinutes || 30) : 30;
             document.getElementById('itemReferenceDate').value = item.referenceDate || '';
             document.getElementById('itemEndDate').value = item.endDate || '';
+            document.getElementById('itemShowNotes').checked = item.showNotes !== false;
             updateLifetimePreview();
             formReminders = item.reminders ? [...item.reminders] : [];
             renderReminderChipsForm();
@@ -3257,6 +3341,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         original_event_id: item.id,
                         archived: false,
                         attachments: [],
+                        showNotes: item.showNotes !== false,
                         referenceDate,
                         endDate: '',
                         renewal: { enabled: isRenew || !!item.renewal?.enabled, value: renewalValue, unit: renewalUnit, base: renewalBase }
@@ -3380,6 +3465,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const durationMinutes = parseInt(document.getElementById('itemDuration').value) || 30;
             const referenceDate = document.getElementById('itemReferenceDate').value || '';
             const endDate = document.getElementById('itemEndDate').value || '';
+            const showNotes = document.getElementById('itemShowNotes').checked;
 
             // If user typed tag text without pressing Enter before clicking save, add it automatically
             const tagInput = document.getElementById('tagInput');
@@ -3460,6 +3546,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             eventId: newEventId || null,
                             archived: old.archived || false,
                             attachments: [...formAttachments],
+                            showNotes,
                             original_event_id: old.original_event_id || null,
                             referenceDate,
                             endDate,
@@ -3499,6 +3586,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             eventId: newEventId,
                             archived: false,
                             attachments: [...formAttachments],
+                            showNotes,
                             original_event_id: null,
                             referenceDate,
                             endDate,
@@ -3908,20 +3996,34 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     : '';
 
                 const isInlineNoteEditing = inlineNoteEditItemId === item.id;
+                const notesExpanded = expandedNotesItems.has(item.id);
+                const notesHidden = item.showNotes === false && !isInlineNoteEditing && !notesExpanded;
+                const notesTruncated = (item.notes || '').length > 500 && !notesExpanded && !isInlineNoteEditing;
+                const notesDisplay = notesHidden
+                    ? `<span class="text-gray-400 dark:text-gray-500 italic text-xs">Notes hidden</span>`
+                    : (notesTruncated
+                        ? `<span class="notes-text flex-1 min-w-0 note-preview-text">${escapeHtml((item.notes || '').slice(0,500))}…</span>`
+                        : `<span class="notes-text flex-1 min-w-0 note-preview-text ${item.notes ? '' : 'text-gray-400 dark:text-gray-500 italic'}">${item.notes ? escapeHtml(item.notes) : 'No notes'}</span>`);
+                const noteToggle = item.notes && !isInlineNoteEditing && (item.showNotes === false || (item.notes.length > 500))
+                    ? `<button type="button" onclick="toggleItemNotes('${item.id}')" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">${notesHidden ? 'Show notes' : (notesTruncated ? 'View all' : 'Hide')}</button>`
+                    : '';
                 const notesHtml = `
                     <div class="mt-2.5 w-full bg-gray-50 dark:bg-gray-700/60 p-2.5 rounded-xl border border-gray-100 dark:border-gray-700 break-words" data-note-item="${item.id}">
                         <div class="flex items-start gap-2">
                             <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
                             ${isInlineNoteEditing
-                                ? `<textarea id="inlineNote_${item.id}" maxlength="4000" class="inline-note-editor px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">${escapeHtml(item.notes || '')}</textarea>`
-                                : `<span class="notes-text whitespace-pre-line flex-1 min-w-0 ${item.notes ? '' : 'text-gray-400 dark:text-gray-500 italic'}">${item.notes ? escapeHtml(item.notes) : 'No notes'}</span>`}
+                                ? `<div class="flex-1 min-w-0"><textarea id="inlineNote_${item.id}" maxlength="4000" oninput="updateInlineNoteCount('${item.id}')" class="inline-note-editor px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">${escapeHtml(item.notes || '')}</textarea><div class="inline-note-meta"><span id="inlineNoteCount_${item.id}">${(item.notes || '').length}/4000</span><span>Drag the corner to resize</span></div></div>`
+                                : notesDisplay}
                         </div>
-                        <div class="inline-note-actions">
-                            ${isInlineNoteEditing
-                                ? `<button type="button" onclick="saveInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium">Save</button>
-                                   <button type="button" onclick="cancelInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-medium">Cancel</button>`
-                                : `<button type="button" onclick="copyItemNotes('${item.id}')" ${item.notes ? '' : 'disabled'} class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Copy notes" aria-label="Copy notes"><i class="fas fa-copy text-xs"></i></button>
-                                   <button type="button" onclick="startInlineNoteEdit('${item.id}')" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Edit notes" aria-label="Edit notes"><i class="fas fa-edit text-xs"></i></button>`}
+                        <div class="flex items-center justify-between gap-2 mt-1">
+                            <div>${noteToggle}</div>
+                            <div class="inline-note-actions">
+                                ${isInlineNoteEditing
+                                    ? `<button type="button" onclick="saveInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium">Save</button>
+                                       <button type="button" onclick="cancelInlineNote('${item.id}')" class="px-2.5 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-medium">Cancel</button>`
+                                    : `<button type="button" onclick="copyItemNotes('${item.id}')" ${item.notes ? '' : 'disabled'} class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 disabled:opacity-30 disabled:hover:text-gray-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Copy notes" aria-label="Copy notes"><i class="fas fa-copy text-xs"></i></button>
+                                       <button type="button" onclick="startInlineNoteEdit('${item.id}')" class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="Edit notes" aria-label="Edit notes"><i class="fas fa-edit text-xs"></i></button>`}
+                            </div>
                         </div>
                     </div>`;
 
@@ -3990,6 +4092,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 ${lifetimeHtml}
                             </div>
                             <div class="actions">
+                                <button onclick="uploadAttachmentForItem('${item.id}')"
+                                         class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                         title="Upload file">
+                                    <i class="fas fa-paperclip text-base"></i>
+                                </button>
                                 <button onclick="openEditModal('${item.id}')" 
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="Edit">
@@ -4041,6 +4148,48 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             } catch (err) {
                 toastError('Download failed: ' + err.message);
             }
+        }
+
+        function toggleItemNotes(itemId) {
+            if (expandedNotesItems.has(itemId)) expandedNotesItems.delete(itemId);
+            else expandedNotesItems.add(itemId);
+            renderAll();
+        }
+
+        function updateInlineNoteCount(itemId) {
+            const textarea = document.getElementById(`inlineNote_${itemId}`);
+            const count = document.getElementById(`inlineNoteCount_${itemId}`);
+            if (!textarea || !count) return;
+            count.textContent = `${textarea.value.length}/4000`;
+        }
+
+        async function uploadAttachmentForItem(itemId) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.style.display = 'none';
+            document.body.appendChild(input);
+            input.onchange = async (event) => {
+                const file = event.target.files && event.target.files[0];
+                if (!file) { input.remove(); return; }
+                if (file.size > 5 * 1024 * 1024 && !confirm(`File is ${(file.size / (1024*1024)).toFixed(1)} MB, which exceeds the recommended 5 MB limit. Continue?`)) {
+                    input.remove(); return;
+                }
+                const item = appData.items.find(i => i.id === itemId);
+                if (!item) { input.remove(); return; }
+                try {
+                    let fileId;
+                    await withLoading(`Uploading ${file.name}...`, async () => { fileId = await uploadFileToAppData(file, file.name); });
+                    item.attachments = item.attachments || [];
+                    item.attachments.push({ driveFileId: fileId, name: file.name, mimeType: file.type || 'application/octet-stream', addedDate: getTodayDateString() });
+                    if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    else await syncToCloud();
+                    renderAll();
+                    toastSuccess(`Uploaded ${file.name}`);
+                } catch (err) {
+                    toastError('Upload failed: ' + err.message);
+                } finally { input.remove(); }
+            };
+            input.click();
         }
 
         async function saveInlineNote(itemId) {
