@@ -1987,6 +1987,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.durationMinutes === undefined) item.durationMinutes = 30;
                 // Ensure archived field exists
                 if (item.archived === undefined) item.archived = false;
+                // Ensure pinned field exists
+                if (item.pinned === undefined) item.pinned = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
                 // Optional lineage and lifetime fields
@@ -2813,6 +2815,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 reminders: [...formReminders],
                 eventId: null,
                 archived: false,
+                pinned: false,
                 attachments: [...formAttachments],
                 showNotes: document.getElementById('itemShowNotes')?.checked !== false
             };
@@ -3340,6 +3343,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         eventId: null,
                         original_event_id: item.id,
                         archived: false,
+                        pinned: false,
                         attachments: [],
                         showNotes: item.showNotes !== false,
                         referenceDate,
@@ -3545,6 +3549,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             reminders: formReminders,
                             eventId: newEventId || null,
                             archived: old.archived || false,
+                            pinned: old.pinned || false,
                             attachments: [...formAttachments],
                             showNotes,
                             original_event_id: old.original_event_id || null,
@@ -3585,6 +3590,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             reminders: formReminders,
                             eventId: newEventId,
                             archived: false,
+                            pinned: false,
                             attachments: [...formAttachments],
                             showNotes,
                             original_event_id: null,
@@ -3779,8 +3785,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 { key: 'noExpiry', label: '♾️ No expiry', count: stats.noExpiry, cssClass: 'no-expiry' }
             ];
             
-            // Only show chips with count > 0, except "all" which always shows
-            const visibleChips = chips.filter(chip => chip.key === 'all' || chip.count > 0);
+            // Always show the active filter, even when its count is 0.
+            // This keeps the selected filter visible while searching.
+            const visibleChips = chips.filter(chip =>
+                chip.key === 'all' || chip.count > 0 || activeStatFilter === chip.key
+            );
             
             if (visibleChips.length === 0) {
                 statsBar.innerHTML = `<span class="text-xs text-gray-400 dark:text-gray-500">No items to show</span>`;
@@ -3955,11 +3964,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderItems() {
             const filtered = filterItems();
             if (!filtered.length) {
-                const msg = showArchived ? 'No archived items found.' : 'No items found. Add one above!';
-                return itemsList.innerHTML = `<p class="text-gray-400 dark:text-gray-500 text-center py-6">${msg}</p>`;
+                let msg;
+                if (activeStatFilter !== 'all') {
+                    msg = showArchived
+                        ? 'No archived items match the selected filter and search.'
+                        : 'No items match the selected filter and search.';
+                } else {
+                    msg = showArchived ? 'No archived items found.' : 'No items found. Add one above!';
+                }
+                return itemsList.innerHTML = `<div class="text-center py-6"><p class="text-gray-400 dark:text-gray-500">${msg}</p>${activeStatFilter !== 'all' ? `<button type="button" onclick="setStatFilter('all')" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">Clear selected filter</button>` : ''}</div>`;
             }
-            // Sort: items with noExpiration go to the end, then by date ascending (and time if same date)
+            // Sort: pinned items first, then no-expiration items to the end, then by date ascending (and time if same date)
             filtered.sort((a, b) => {
+                // Pinned items always stay at the top of the visible list.
+                if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
                 // Sort by noExpiration: false (has date) first, true (no expiry) last
                 if (a.noExpiration && !b.noExpiration) return 1;
                 if (!a.noExpiration && b.noExpiration) return -1;
@@ -4067,8 +4085,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     `;
                 }
 
-                // Archive badge for archived items
+                // Archive / pin badges
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
+                const pinBadge = item.pinned ? `<span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium ml-1">📌 Pinned</span>` : '';
 
                 return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
@@ -4076,6 +4095,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center flex-wrap gap-1">
                                     <span class="text-xs tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
+                                    ${pinBadge}
                                     ${archiveBadge}
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
@@ -4092,6 +4112,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 ${lifetimeHtml}
                             </div>
                             <div class="actions">
+                                <button onclick="togglePinItem('${item.id}')"
+                                         class="${item.pinned ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' : 'text-gray-400'} hover:text-amber-600 dark:hover:text-amber-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                         title="${item.pinned ? 'Unpin' : 'Pin to top'}" aria-label="${item.pinned ? 'Unpin item' : 'Pin item to top'}">
+                                    <i class="fas fa-thumbtack text-base"></i>
+                                </button>
                                 <button onclick="uploadAttachmentForItem('${item.id}')"
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
                                          title="Upload file">
@@ -4265,6 +4290,28 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 toastSuccess('Notes copied to clipboard.');
             } catch (error) {
                 toastError('Could not copy notes.');
+            }
+        }
+
+        async function togglePinItem(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+
+            const previous = !!item.pinned;
+            item.pinned = !previous;
+            try {
+                await withLoading(item.pinned ? 'Pinning item...' : 'Unpinning item...', async () => {
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+                });
+                renderAll();
+                showToast(item.pinned ? 'Pinned to the top.' : 'Unpinned.');
+            } catch (error) {
+                item.pinned = previous;
+                toastError('Failed to update pin: ' + error.message);
             }
         }
 
