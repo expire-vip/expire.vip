@@ -130,6 +130,34 @@
                 transform: translate(-50%, 20px);
             }
         }
+        /* Featured preview / thumbnail styles */
+        .featured-previews { display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.65rem; }
+        .featured-preview { position:relative; width:72px; height:58px; border-radius:0.75rem; overflow:hidden; border:1px solid #e5e7eb; background:#f3f4f6; cursor:pointer; }
+        .dark .featured-preview { border-color:#374151; background:#1f2937; }
+        .featured-preview img { width:100%; height:100%; object-fit:cover; display:block; }
+        .featured-preview.featured-cover { width:120px; height:86px; }
+        .featured-preview .featured-cover-badge { position:absolute; left:3px; bottom:3px; padding:1px 4px; border-radius:9999px; font-size:9px; line-height:1.2; background:rgba(17,24,39,.8); color:#fff; }
+        .featured-preview .featured-placeholder { width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:1.25rem; }
+        .featured-preview.skeleton .featured-placeholder { color:#9ca3af; }
+        .attachment-feature-actions { display:flex; gap:0.15rem; align-items:center; margin-left:auto; }
+        .attachment-feature-actions button { background:none; border:none; padding:0.2rem 0.28rem; border-radius:0.4rem; cursor:pointer; color:#9ca3af; }
+        .attachment-feature-actions button:hover { background:#e5e7eb; color:#374151; }
+        .dark .attachment-feature-actions button:hover { background:#374151; color:#f3f4f6; }
+        .attachment-feature-actions button.featured-active { color:#eab308; }
+        .attachment-feature-actions button.cover-active { color:#f59e0b; }
+        .featured-manage { margin-top:0.65rem; padding:0.65rem; border-radius:0.75rem; border:1px solid #e5e7eb; background:#f8fafc; }
+        .dark .featured-manage { border-color:#374151; background:#111827; }
+        .featured-manage-title { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; font-size:0.75rem; font-weight:600; color:#4b5563; }
+        .dark .featured-manage-title { color:#d1d5db; }
+        .featured-manage-list { display:flex; flex-wrap:wrap; gap:0.4rem; margin-top:0.5rem; }
+        .featured-manage-chip { display:flex; align-items:center; gap:0.35rem; padding:0.25rem 0.4rem; border-radius:0.6rem; border:1px solid #d1d5db; background:#fff; font-size:0.7rem; }
+        .dark .featured-manage-chip { border-color:#4b5563; background:#1f2937; }
+        .featured-manage-chip .mini-thumb { width:26px; height:22px; border-radius:0.3rem; object-fit:cover; background:#e5e7eb; }
+        .dark .featured-manage-chip .mini-thumb { background:#374151; }
+        .featured-manage-chip button { border:0; background:transparent; padding:0.12rem; color:#9ca3af; cursor:pointer; }
+        .featured-manage-chip button:hover { color:#4f46e5; }
+        .featured-cover-chip { font-size:0.65rem; color:#d97706; font-weight:700; }
+
         /* Attachment list styles */
         .attachment-item {
             display: flex;
@@ -1253,6 +1281,12 @@
         let isEditMode = false;
         let originalContent = '';
         let currentZoom = 1;
+
+        // Featured thumbnail state/cache
+        const thumbnailCache = new Map();
+        const thumbnailLoading = new Map();
+        let thumbnailObserver = null;
+        let thumbnailFolderId = null;
         let previewPanX = 0;
         let previewPanY = 0;
         let previewDrag = null;
@@ -1991,6 +2025,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.pinned === undefined) item.pinned = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                if (!Array.isArray(item.previewAttachments)) item.previewAttachments = [];
+                item.previewAttachments = item.previewAttachments.filter(p => p && p.attachmentId && p.thumbnailId).slice(0, 4);
                 // Optional lineage and lifetime fields
                 if (item.original_event_id === undefined) item.original_event_id = null;
                 if (item.referenceDate === undefined) item.referenceDate = '';
@@ -2135,7 +2171,115 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             await callGoogleAPI(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
         }
 
-        // ---------- DRIVE FILE OPERATIONS (for attachments) ----------
+        // ---------- DRIVE FILE OPERATIONS (for attachments + thumbnails) ----------
+        async function getOrCreateThumbnailFolder() {
+            if (thumbnailFolderId) return thumbnailFolderId;
+            const token = await ensureValidToken();
+            const q = `name = 'expire_thumbnails' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+            const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=10`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!listRes.ok) throw new Error('Unable to access thumbnail folder.');
+            const listData = await listRes.json();
+            if (listData.files && listData.files.length) {
+                thumbnailFolderId = listData.files[0].id;
+                return thumbnailFolderId;
+            }
+            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'expire_thumbnails', mimeType: 'application/vnd.google-apps.folder', parents: ['appDataFolder'] })
+            });
+            if (!createRes.ok) throw new Error('Unable to create thumbnail folder.');
+            const folder = await createRes.json();
+            thumbnailFolderId = folder.id;
+            return thumbnailFolderId;
+        }
+
+        async function uploadThumbnailBlob(blob, fileName) {
+            const token = await ensureValidToken();
+            const folderId = await getOrCreateThumbnailFolder();
+            const metadata = { name: fileName, parents: [folderId] };
+            const formData = new FormData();
+            formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+            formData.append('file', blob);
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+                body: formData
+            });
+            if (!response.ok) throw new Error('Thumbnail upload failed.');
+            return (await response.json()).id;
+        }
+
+        async function downloadThumbnailBlob(thumbnailId) {
+            const token = await ensureValidToken();
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(thumbnailId)}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!response.ok) throw new Error(`Thumbnail download failed (${response.status}).`);
+            return await response.blob();
+        }
+
+        async function createThumbnailForAttachment(att) {
+            const response = await downloadFile(att.driveFileId);
+            const blob = await response.blob();
+            const mime = att.mimeType || blob.type || '';
+            const maxW = 320, maxH = 220;
+            let thumbBlob;
+
+            if (mime.startsWith('image/')) {
+                const bitmap = await createImageBitmap(blob);
+                const scale = Math.min(1, maxW / bitmap.width, maxH / bitmap.height);
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+                canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                thumbBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.78));
+                bitmap.close();
+            } else if (mime.startsWith('video/')) {
+                const url = URL.createObjectURL(blob);
+                try {
+                    const video = document.createElement('video');
+                    video.muted = true; video.playsInline = true; video.preload = 'metadata';
+                    await new Promise((resolve, reject) => {
+                        video.onloadedmetadata = resolve;
+                        video.onerror = reject;
+                        video.src = url;
+                    });
+                    video.currentTime = Math.min(1, Math.max(0, (video.duration || 1) / 10));
+                    await new Promise((resolve, reject) => { video.onseeked = resolve; video.onerror = reject; });
+                    const ratio = Math.min(1, maxW / video.videoWidth, maxH / video.videoHeight);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(video.videoWidth * ratio));
+                    canvas.height = Math.max(1, Math.round(video.videoHeight * ratio));
+                    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                    thumbBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.78));
+                } finally { URL.revokeObjectURL(url); }
+            } else if (mime.includes('pdf')) {
+                if (!window.pdfjsLib) throw new Error('PDF thumbnail support is unavailable.');
+                const url = URL.createObjectURL(blob);
+                try {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const page = await pdf.getPage(1);
+                    const base = page.getViewport({ scale: 1 });
+                    const scale = Math.min(1, maxW / base.width, maxH / base.height);
+                    const viewport = page.getViewport({ scale });
+                    const canvas = document.createElement('canvas');
+                    const dpr = Math.min(2, window.devicePixelRatio || 1);
+                    canvas.width = Math.round(viewport.width * dpr); canvas.height = Math.round(viewport.height * dpr);
+                    const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+                    await page.render({ canvasContext: ctx, viewport }).promise;
+                    thumbBlob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.78));
+                } finally { URL.revokeObjectURL(url); }
+            } else {
+                const label = (mime.includes('sheet') || mime.includes('csv') || mime.includes('excel')) ? 'XLS' : (mime.includes('text') ? 'TXT' : (mime.includes('zip') || mime.includes('archive') ? 'ZIP' : (mime.includes('audio') ? '♪' : (mime.includes('presentation') ? 'PPT' : 'DOC'))));
+                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220"><rect width="100%" height="100%" rx="24" fill="#e5e7eb"/><text x="160" y="128" text-anchor="middle" font-family="Arial,sans-serif" font-size="56" font-weight="700" fill="#4b5563">${label}</text></svg>`;
+                thumbBlob = new Blob([svg], { type: 'image/svg+xml' });
+            }
+            if (!thumbBlob) throw new Error('Could not generate thumbnail.');
+            return await uploadThumbnailBlob(thumbBlob, `thumb_${att.driveFileId}.${thumbBlob.type.includes('svg') ? 'svg' : 'webp'}`);
+        }
+
         async function uploadFileToAppData(fileBlob, fileName) {
             const token = await ensureValidToken();
             const metadata = { name: fileName, parents: ['appDataFolder'] };
@@ -2593,6 +2737,151 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             saveEditBtn.style.display = 'none';
         }
 
+        // ---------- FEATURED THUMBNAILS ----------
+        function getCurrentEditableItem() {
+            if (editingItemId === null) return null;
+            return appData.items.find(i => i.id === editingItemId) || null;
+        }
+
+        function getFeaturedEntries(item) {
+            return Array.isArray(item && item.previewAttachments) ? item.previewAttachments.slice(0, 4) : [];
+        }
+
+        function isAttachmentFeatured(item, attachmentId) {
+            return getFeaturedEntries(item).some(p => p.attachmentId === attachmentId);
+        }
+
+        async function setAttachmentFeatured(itemId, attachmentId, featured) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            const att = (item.attachments || []).find(a => a.driveFileId === attachmentId);
+            if (!att) return;
+            item.previewAttachments = Array.isArray(item.previewAttachments) ? item.previewAttachments : [];
+            if (featured) {
+                if (item.previewAttachments.some(p => p.attachmentId === attachmentId)) return;
+                if (item.previewAttachments.length >= 4) { toastInfo('You can select up to 4 featured previews.'); return; }
+                try {
+                    showLoading('Creating thumbnail...');
+                    const thumbnailId = await createThumbnailForAttachment(att);
+                    item.previewAttachments.push({ attachmentId, thumbnailId, cover: item.previewAttachments.length === 0 });
+                    if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                    toastSuccess('Added to featured previews.');
+                } catch (err) { toastError('Could not create thumbnail: ' + err.message); }
+                finally { hideLoading(); }
+            } else {
+                const removedEntry = item.previewAttachments.find(p => p.attachmentId === attachmentId);
+                const wasCover = !!removedEntry?.cover;
+                item.previewAttachments = item.previewAttachments.filter(p => p.attachmentId !== attachmentId);
+                if (wasCover && item.previewAttachments[0]) item.previewAttachments[0].cover = true;
+                if (removedEntry?.thumbnailId) {
+                    const cachedUrl = thumbnailCache.get(removedEntry.thumbnailId);
+                    if (cachedUrl) { URL.revokeObjectURL(cachedUrl); thumbnailCache.delete(removedEntry.thumbnailId); }
+                    try { await deleteFile(removedEntry.thumbnailId); } catch (_) {}
+                }
+                if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                toastSuccess('Removed from featured previews.');
+            }
+            renderAll();
+            if (editingItemId === itemId) renderAttachments();
+        }
+
+        async function setAttachmentCover(itemId, attachmentId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            const entry = (item.previewAttachments || []).find(p => p.attachmentId === attachmentId);
+            if (!entry) { await setAttachmentFeatured(itemId, attachmentId, true); return; }
+            item.previewAttachments.forEach(p => p.cover = p.attachmentId === attachmentId);
+            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            renderAll();
+            if (editingItemId === itemId) renderAttachments();
+        }
+
+        async function moveFeaturedPreview(itemId, index, direction) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item || !item.previewAttachments) return;
+            const next = index + direction;
+            if (next < 0 || next >= item.previewAttachments.length) return;
+            const arr = item.previewAttachments;
+            [arr[index], arr[next]] = [arr[next], arr[index]];
+            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            renderAll();
+            if (editingItemId === itemId) renderAttachments();
+        }
+
+        function getCoverPreviewEntry(item) {
+            const entries = getFeaturedEntries(item);
+            return entries.find(p => p.cover) || entries[0] || null;
+        }
+
+        async function loadThumbnailIntoElement(img, thumbnailId) {
+            if (!thumbnailId || !img) return;
+            const cached = thumbnailCache.get(thumbnailId);
+            if (cached) { img.src = cached; return; }
+            if (thumbnailLoading.has(thumbnailId)) {
+                try { img.src = await thumbnailLoading.get(thumbnailId); } catch (_) {}
+                return;
+            }
+            const promise = downloadThumbnailBlob(thumbnailId).then(blob => {
+                const url = URL.createObjectURL(blob);
+                thumbnailCache.set(thumbnailId, url);
+                return url;
+            });
+            thumbnailLoading.set(thumbnailId, promise);
+            try { img.src = await promise; } catch (error) {
+                img.removeAttribute('src');
+                const parent = img.parentElement; if (parent) parent.classList.add('failed');
+            } finally { thumbnailLoading.delete(thumbnailId); }
+        }
+
+        function observeLazyThumbnails(root = itemsList) {
+            if (!root) return;
+            if (thumbnailObserver) thumbnailObserver.disconnect();
+            thumbnailObserver = new IntersectionObserver(entries => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting) return;
+                    const img = entry.target;
+                    const id = img.dataset.thumbnailId;
+                    loadThumbnailIntoElement(img, id);
+                    thumbnailObserver.unobserve(img);
+                });
+            }, { rootMargin: '250px 0px' });
+            root.querySelectorAll('img[data-thumbnail-id]').forEach(img => thumbnailObserver.observe(img));
+        }
+
+        function renderFeaturedPreviews(item) {
+            const entries = getFeaturedEntries(item);
+            if (!entries.length) return '';
+            const attachments = item.attachments || [];
+            const ordered = entries.map(p => ({ ...p, att: attachments.find(a => a.driveFileId === p.attachmentId) })).filter(p => p.att);
+            if (!ordered.length) return '';
+            const coverId = getCoverPreviewEntry(item)?.attachmentId;
+            return `<div class="featured-previews">${ordered.map(p => `
+                <div class="featured-preview ${p.attachmentId === coverId ? 'featured-cover' : ''}" onclick="previewFileById('${p.att.driveFileId}', '${escapeHtml(p.att.name)}', '${escapeHtml(p.att.mimeType)}')" title="${escapeHtml(p.att.name)}">
+                    <img data-thumbnail-id="${escapeHtml(p.thumbnailId)}" alt="${escapeHtml(p.att.name)} thumbnail" />
+                    ${p.attachmentId === coverId ? '<span class="featured-cover-badge">Cover</span>' : ''}
+                </div>`).join('')}</div>`;
+        }
+
+        function renderFeaturedManager(item) {
+            const entries = getFeaturedEntries(item);
+            if (!entries.length) return '';
+            const attachments = item.attachments || [];
+            const chips = entries.map((p, idx) => {
+                const att = attachments.find(a => a.driveFileId === p.attachmentId);
+                if (!att) return '';
+                return `<div class="featured-manage-chip">
+                    <span class="mini-thumb">${getFileIcon(att.mimeType)}</span>
+                    <span class="truncate max-w-[90px]">${escapeHtml(att.name)}</span>
+                    ${p.cover ? '<span class="featured-cover-chip">Cover</span>' : ''}
+                    <button type="button" onclick="moveFeaturedPreview('${item.id}', ${idx}, -1)" title="Move left">◀</button>
+                    <button type="button" onclick="moveFeaturedPreview('${item.id}', ${idx}, 1)" title="Move right">▶</button>
+                    <button type="button" onclick="setAttachmentCover('${item.id}', '${att.driveFileId}')" title="Set as cover">★</button>
+                    <button type="button" onclick="setAttachmentFeatured('${item.id}', '${att.driveFileId}', false)" title="Remove featured">✕</button>
+                </div>`;
+            }).join('');
+            return `<div class="featured-manage"><div class="featured-manage-title"><span>Featured previews (${entries.length}/4)</span><span class="text-xs font-normal text-gray-400">Use ★ for cover</span></div><div class="featured-manage-list">${chips}</div></div>`;
+        }
+
         // ---------- ATTACHMENT UI FUNCTIONS ----------
         function renderAttachments() {
             const container = document.getElementById('attachmentList');
@@ -2615,6 +2904,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             <button class="preview-attachment" onclick="previewAttachment(${idx})" title="Preview">
                                 <i class="fas fa-eye"></i>
                             </button>
+                            ${(() => { const currentItem = getCurrentEditableItem(); const featured = currentItem && isAttachmentFeatured(currentItem, att.driveFileId); const entry = featured ? (currentItem.previewAttachments || []).find(p => p.attachmentId === att.driveFileId) : null; return `<div class="attachment-feature-actions"><button class="${featured ? 'featured-active' : ''}" onclick="${currentItem ? `setAttachmentFeatured('${currentItem.id}','${att.driveFileId}',${featured ? 'false' : 'true'})` : 'return false'}" title="${featured ? 'Remove featured preview' : 'Add featured preview'}"><i class="fas fa-star"></i></button>${featured ? `<button class="${entry && entry.cover ? 'cover-active' : ''}" onclick="setAttachmentCover('${currentItem.id}','${att.driveFileId}')" title="Set as cover"><i class="fas fa-crown"></i></button>` : ''}</div>`; })()}
                             <button class="download-attachment" onclick="downloadAttachment(${idx})" title="Download">
                                 <i class="fas fa-download"></i>
                             </button>
@@ -2628,6 +2918,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     </div>
                 `;
             }).join('');
+
+            const currentItem = getCurrentEditableItem();
+            const manager = currentItem ? renderFeaturedManager(currentItem) : '';
+            if (manager) container.insertAdjacentHTML('beforeend', manager);
 
             if (countEl) countEl.textContent = `${formAttachments.length} file${formAttachments.length !== 1 ? 's' : ''}`;
         }
@@ -2754,6 +3048,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             try {
                 await deleteFile(att.driveFileId);
                 // Remove from formAttachments regardless of Drive success
+                const removedAttachmentId = att.driveFileId;
+                const currentItem = getCurrentEditableItem();
+                if (currentItem && Array.isArray(currentItem.previewAttachments)) {
+                    const removed = currentItem.previewAttachments.find(p => p.attachmentId === removedAttachmentId);
+                    currentItem.previewAttachments = currentItem.previewAttachments.filter(p => p.attachmentId !== removedAttachmentId);
+                    if (removed && removed.cover && currentItem.previewAttachments[0]) currentItem.previewAttachments[0].cover = true;
+                }
                 formAttachments.splice(idx, 1);
                 renderAttachments();
                 // Auto-save item to update JSON
@@ -2817,6 +3118,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 archived: false,
                 pinned: false,
                 attachments: [...formAttachments],
+                previewAttachments: [],
                 showNotes: document.getElementById('itemShowNotes')?.checked !== false
             };
 
@@ -3345,6 +3647,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         archived: false,
                         pinned: false,
                         attachments: [],
+                        previewAttachments: [],
                         showNotes: item.showNotes !== false,
                         referenceDate,
                         endDate: '',
@@ -3592,6 +3895,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             archived: false,
                             pinned: false,
                             attachments: [...formAttachments],
+                            previewAttachments: [],
                             showNotes,
                             original_event_id: null,
                             referenceDate,
@@ -4069,18 +4373,19 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.attachments && item.attachments.length > 0) {
                     attachmentsHtml = `
                         <div class="mt-2.5 flex flex-wrap gap-1.5">
-                            ${item.attachments.map(att => `
+                            ${item.attachments.map(att => {
+                                const featured = isAttachmentFeatured(item, att.driveFileId);
+                                const entry = featured ? (item.previewAttachments || []).find(p => p.attachmentId === att.driveFileId) : null;
+                                return `
                                 <span class="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700/60 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600">
                                     ${getFileIcon(att.mimeType)}
                                     <span class="truncate max-w-[80px] cursor-pointer hover:underline" onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}')" title="Click to preview">${escapeHtml(att.name)}</span>
-                                    <button onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}')" class="hover:text-purple-600 dark:hover:text-purple-400" title="Preview">
-                                        <i class="fas fa-eye text-[10px]"></i>
-                                    </button>
-                                    <button onclick="downloadFileById('${att.driveFileId}', '${escapeHtml(att.name)}')" class="hover:text-blue-600 dark:hover:text-blue-400" title="Download">
-                                        <i class="fas fa-download text-[10px]"></i>
-                                    </button>
-                                </span>
-                            `).join('')}
+                                    <button onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}')" class="hover:text-purple-600 dark:hover:text-purple-400" title="Preview"><i class="fas fa-eye text-[10px]"></i></button>
+                                    <button onclick="downloadFileById('${att.driveFileId}', '${escapeHtml(att.name)}')" class="hover:text-blue-600 dark:hover:text-blue-400" title="Download"><i class="fas fa-download text-[10px]"></i></button>
+                                    <button onclick="setAttachmentFeatured('${item.id}', '${att.driveFileId}', ${featured ? 'false' : 'true'})" class="${featured ? 'text-yellow-500' : 'text-gray-400'} hover:text-yellow-500" title="${featured ? 'Remove featured preview' : 'Show as thumbnail'}" aria-label="${featured ? 'Remove featured preview' : 'Show as thumbnail'}"><i class="fas fa-star text-[10px]"></i></button>
+                                    ${featured ? `<button onclick="setAttachmentCover('${item.id}', '${att.driveFileId}')" class="${entry?.cover ? 'text-amber-500' : 'text-gray-400'} hover:text-amber-500" title="Set as cover" aria-label="Set as cover"><i class="fas fa-crown text-[10px]"></i></button>` : ''}
+                                </span>`;
+                            }).join('')}
                         </div>
                     `;
                 }
@@ -4104,6 +4409,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         ${tagsHtml}
                         <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
                         ${attachmentsHtml}
+                        ${featuredPreviewsHtml}
                         ${notesHtml}
                         <div class="item-bottom-row">
                             <div class="bottom-left">
@@ -4152,6 +4458,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     </div>
                 </div>`;
             }).join('');
+            observeLazyThumbnails();
         }
 
         // Helper to preview from item card
