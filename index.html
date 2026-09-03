@@ -4390,6 +4390,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     `;
                 }
 
+                const featuredPreviewsHtml = renderFeaturedPreviews(item);
+
                 // Archive / pin badges
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
                 const pinBadge = item.pinned ? `<span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium ml-1">📌 Pinned</span>` : '';
