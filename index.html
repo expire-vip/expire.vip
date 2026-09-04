@@ -130,6 +130,31 @@
                 transform: translate(-50%, 20px);
             }
         }
+        /* Search, filters, and compact list UX */
+        .search-clear-btn { position:absolute; right:0.65rem; top:50%; transform:translateY(-50%); width:2rem; height:2rem; border-radius:9999px; display:none; align-items:center; justify-content:center; color:#9ca3af; background:transparent; }
+        .search-clear-btn:hover { background:#f3f4f6; color:#374151; }
+        .dark .search-clear-btn:hover { background:#374151; color:#f3f4f6; }
+        .filter-panel { border:1px solid #e5e7eb; border-radius:1rem; background:#fff; overflow:hidden; }
+        .dark .filter-panel { border-color:#374151; background:#1f2937; }
+        .filter-panel-header { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; padding:0.65rem 0.8rem; }
+        .filter-panel-toggle { display:inline-flex; align-items:center; gap:0.45rem; font-size:0.82rem; font-weight:700; color:#374151; background:transparent; border:0; cursor:pointer; }
+        .dark .filter-panel-toggle { color:#e5e7eb; }
+        .filter-panel-content { padding:0 0.8rem 0.8rem; }
+        .filter-panel.collapsed .filter-panel-content { display:none; }
+        .filter-panel.collapsed .filter-chevron { transform:rotate(-90deg); }
+        .filter-chevron { transition:transform .15s ease; }
+        .filter-summary { font-size:0.72rem; color:#6b7280; font-weight:600; }
+        .dark .filter-summary { color:#9ca3af; }
+        .item-card.compact-item .item-card-details { display:none; }
+        .item-card.compact-item.compact-expanded .item-card-details { display:block; }
+        .compact-toggle { display:none; align-items:center; justify-content:center; width:2rem; height:2rem; border-radius:9999px; border:1px solid #e5e7eb; background:#fff; color:#6b7280; }
+        .compact-toggle:hover { background:#f9fafb; color:#374151; }
+        .dark .compact-toggle { border-color:#4b5563; background:#1f2937; color:#d1d5db; }
+        .dark .compact-toggle:hover { background:#374151; color:#fff; }
+        .item-card.compact-item { padding:0.7rem 0.8rem; }
+        .item-card.compact-item .compact-toggle { display:inline-flex; }
+        .view-mode-btn { white-space:nowrap; }
+
         /* Featured preview / thumbnail styles */
         .featured-previews { display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.65rem; }
         .featured-preview { position:relative; width:72px; height:58px; border-radius:0.75rem; overflow:hidden; border:1px solid #e5e7eb; background:#f3f4f6; cursor:pointer; }
@@ -794,36 +819,56 @@
 </div>
             <!-- DASHBOARD APP (Hidden initially, shown after login / test) -->
             <div id="appScreen" class="hidden-auth">
-                <!-- Search & Filter -->
-                <div class="flex flex-col gap-3 mb-5">
-                    <div class="relative">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
-                        <input type="text" id="searchInput" placeholder="Search items..." 
-                               class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500">
-                    </div>
-                    <div id="categoryChips" class="flex flex-wrap gap-2">
-                        <!-- Chips injected -->
-                    </div>
-                    <div id="tagFilterChips" class="flex flex-wrap gap-1.5 items-center">
-                        <!-- Tag filter chips injected -->
-                    </div>
+                <!-- Search -->
+                <div class="relative mb-3">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
+                    <input type="text" id="searchInput" placeholder="Search items..." autocomplete="off"
+                           class="w-full pl-10 pr-11 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500">
+                    <button type="button" id="searchClearBtn" class="search-clear-btn" title="Clear search" aria-label="Clear search">
+                        <i class="fas fa-times text-sm"></i>
+                    </button>
                 </div>
 
                 <!-- Add Button -->
-                <button id="addItemBtn" class="w-full mb-5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                <button id="addItemBtn" class="w-full mb-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-2">
                     <i class="fas fa-plus"></i> Add New Item
                 </button>
 
-                <!-- Stats Bar -->
-                <div id="statsBar" class="stats-bar"></div>
+                <!-- Collapsible Filters -->
+                <section id="filterPanel" class="filter-panel collapsed mb-4" aria-label="Search filters">
+                    <div class="filter-panel-header">
+                        <button type="button" id="filterPanelToggle" class="filter-panel-toggle" aria-expanded="false" aria-controls="filterPanelContent">
+                            <i class="fas fa-sliders-h text-xs"></i>
+                            <span>Filters</span>
+                            <span id="filterSummary" class="filter-summary"></span>
+                            <i class="fas fa-chevron-down filter-chevron text-[10px]"></i>
+                        </button>
+                        <span class="text-[11px] text-gray-400 dark:text-gray-500">Categories, tags &amp; expiry</span>
+                    </div>
+                    <div id="filterPanelContent" class="filter-panel-content">
+                        <div id="categoryChips" class="flex flex-wrap gap-2">
+                            <!-- Chips injected -->
+                        </div>
+                        <div id="tagFilterChips" class="flex flex-wrap gap-1.5 items-center mt-2">
+                            <!-- Tag filter chips injected -->
+                        </div>
+                        <div id="statsBar" class="stats-bar mt-2"></div>
+                    </div>
+                </section>
 
                 <!-- Items List -->
-                <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center justify-between gap-2 mb-3">
                     <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Your Tracked Items</h2>
-                    <button id="showArchivedToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
-                        <i class="fas fa-archive text-xs"></i>
-                        <span id="archivedToggleLabel">Show Archived</span>
-                    </button>
+                    <div class="flex items-center gap-1.5">
+                        <button id="viewModeToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Toggle compact/detailed view">
+                            <i id="viewModeIcon" class="fas fa-list text-xs"></i>
+                            <span id="viewModeLabel">Compact</span>
+                        </button>
+                        <button id="showArchivedToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
+                            <i class="fas fa-archive text-xs"></i>
+                            <span id="archivedToggleLabel">Show Archived</span>
+                        </button>
+                    </div>
                 </div>
                 <div id="itemsList" class="space-y-3">
                     <!-- Items injected -->
@@ -1269,6 +1314,9 @@
         let isLoading = false;
         let showArchived = false;
         let activeStatFilter = 'all';
+        let filtersCollapsed = localStorage.getItem('expire_filtersCollapsed') !== 'false';
+        let compactView = localStorage.getItem('expire_compactView') === 'true';
+        const expandedCompactItems = new Set();
 
         // Form attachments (local list for modal)
         let formAttachments = [];
@@ -1316,6 +1364,13 @@
         const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
         const statsBar = document.getElementById('statsBar');
+        const filterPanel = document.getElementById('filterPanel');
+        const filterPanelToggle = document.getElementById('filterPanelToggle');
+        const filterSummary = document.getElementById('filterSummary');
+        const searchClearBtn = document.getElementById('searchClearBtn');
+        const viewModeToggle = document.getElementById('viewModeToggle');
+        const viewModeIcon = document.getElementById('viewModeIcon');
+        const viewModeLabel = document.getElementById('viewModeLabel');
         const accountEmailWrap = document.getElementById('accountEmailWrap');
         const accountEmailDisplay = document.getElementById('accountEmailDisplay');
         const accountEmailToggle = document.getElementById('accountEmailToggle');
@@ -2025,6 +2080,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.pinned === undefined) item.pinned = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                if (item.previewAttachments === undefined) item.previewAttachments = [];
+                if (item.showNotes === undefined) item.showNotes = true;
+                if (item.pinned === undefined) item.pinned = false;
                 if (!Array.isArray(item.previewAttachments)) item.previewAttachments = [];
                 item.previewAttachments = item.previewAttachments.filter(p => p && p.attachmentId && p.thumbnailId).slice(0, 4);
                 // Optional lineage and lifetime fields
@@ -4012,31 +4070,120 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
-        // ---------- STATS ----------
+        // ---------- SEARCH HELPERS & STATS ----------
+        function normalizeSearchText(value) {
+            return String(value || '')
+                .replace(/[“”]/g, '"')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase();
+        }
+
+        function parseSearchQuery(value) {
+            const normalized = normalizeSearchText(value).trim();
+            if (!normalized) return { phrases: [], words: [] };
+
+            const phrases = [];
+            const withoutPhrases = normalized.replace(/"([^"]+)"/g, (_, phrase) => {
+                const clean = phrase.trim();
+                if (clean) phrases.push(clean);
+                return ' ';
+            });
+            const words = withoutPhrases.split(/\s+/).map(s => s.trim()).filter(Boolean);
+            return { phrases, words };
+        }
+
+        function getSearchableItemText(item) {
+            const itemCategory = item.category || 'Other';
+            const itemTags = item.tags || [];
+            const attachmentNames = (item.attachments || []).map(a => a && a.name ? a.name : '');
+            return normalizeSearchText([
+                item.name || '', item.notes || '', itemCategory, ...itemTags, ...attachmentNames
+            ].join(' '));
+        }
+
+        function itemMatchesSearch(item, query) {
+            if (!query.phrases.length && !query.words.length) return true;
+            const haystack = getSearchableItemText(item);
+            return query.phrases.every(phrase => haystack.includes(phrase)) &&
+                   query.words.every(word => haystack.includes(word));
+        }
+
+        function updateSearchUI() {
+            if (!searchClearBtn) return;
+            const hasSearch = !!document.getElementById('searchInput').value.trim();
+            searchClearBtn.style.display = hasSearch ? 'inline-flex' : 'none';
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('searchInput');
+            if (!input) return;
+            input.value = '';
+            updateSearchUI();
+            renderAll();
+            input.focus();
+        }
+
+        function getActiveFilterCount() {
+            let count = 0;
+            if (activeCategory !== 'All') count++;
+            if (activeTag) count++;
+            if (activeStatFilter !== 'all') count++;
+            return count;
+        }
+
+        function updateFilterUI() {
+            if (!filterPanel) return;
+            filterPanel.classList.toggle('collapsed', filtersCollapsed);
+            if (filterPanelToggle) filterPanelToggle.setAttribute('aria-expanded', String(!filtersCollapsed));
+            if (filterSummary) {
+                const count = getActiveFilterCount();
+                filterSummary.textContent = count ? `· ${count} active` : '';
+            }
+        }
+
+        function toggleFilters() {
+            filtersCollapsed = !filtersCollapsed;
+            localStorage.setItem('expire_filtersCollapsed', String(filtersCollapsed));
+            updateFilterUI();
+        }
+
+        function updateViewModeUI() {
+            if (!viewModeToggle) return;
+            viewModeLabel.textContent = compactView ? 'Detailed' : 'Compact';
+            viewModeIcon.className = compactView ? 'fas fa-table-cells-large text-xs' : 'fas fa-list text-xs';
+            viewModeToggle.title = compactView ? 'Switch to detailed view' : 'Switch to compact view';
+            viewModeToggle.setAttribute('aria-label', viewModeToggle.title);
+        }
+
+        function setCompactView(enabled) {
+            compactView = !!enabled;
+            localStorage.setItem('expire_compactView', String(compactView));
+            if (!compactView) expandedCompactItems.clear();
+            updateViewModeUI();
+            renderItems();
+        }
+
+        function toggleCompactView() { setCompactView(!compactView); }
+
+        function toggleItemExpanded(event, itemId) {
+            if (event) event.stopPropagation();
+            if (expandedCompactItems.has(itemId)) expandedCompactItems.delete(itemId);
+            else expandedCompactItems.add(itemId);
+            renderItems();
+        }
+
         function getBaseFilteredItems() {
-            // Apply all filters EXCEPT stat filter
-            const term = document.getElementById('searchInput').value.toLowerCase().trim();
-            const filtered = appData.items.filter(i => {
-                // Filter archived items unless showArchived is true
+            // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
+            const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
+            return appData.items.filter(i => {
                 if (!showArchived && i.archived) return false;
-                
                 const itemCategory = i.category || 'Other';
                 const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
-                const itemTags = (i.tags || []).map(t => t.toLowerCase());
+                const itemTags = (i.tags || []).map(t => String(t).toLowerCase());
                 const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
-                
-                // Search in item name, notes, category, tags, AND attachment names
-                const attachmentNames = (i.attachments || []).map(a => a.name.toLowerCase());
-                const matchesTerm = !term || 
-                    (i.name && i.name.toLowerCase().includes(term)) || 
-                    (i.notes && i.notes.toLowerCase().includes(term)) ||
-                    (itemCategory && itemCategory.toLowerCase().includes(term)) ||
-                    itemTags.some(t => t.includes(term)) ||
-                    attachmentNames.some(name => name.includes(term));
-                
-                return matchesCategory && matchesTag && matchesTerm;
+                return matchesCategory && matchesTag && itemMatchesSearch(i, searchQuery);
             });
-            return filtered;
         }
 
         function computeStats(items) {
@@ -4396,9 +4543,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
                 const pinBadge = item.pinned ? `<span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium ml-1">📌 Pinned</span>` : '';
 
-                return `<div class="p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
+                const isCompactExpanded = compactView && expandedCompactItems.has(item.id);
+                return `<div class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
-                        <div class="flex items-start justify-between">
+                        <div class="item-card-header flex items-start justify-between">
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center flex-wrap gap-1">
                                     <span class="text-xs tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
@@ -4407,12 +4555,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             </div>
+                            <button type="button" class="compact-toggle flex-shrink-0 ml-2" onclick="toggleItemExpanded(event, '${escapeHtml(item.id)}')" title="${isCompactExpanded ? 'Collapse item' : 'Expand item'}" aria-label="${isCompactExpanded ? 'Collapse item' : 'Expand item'}">
+                                <i class="fas ${isCompactExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs"></i>
+                            </button>
                         </div>
-                        ${tagsHtml}
-                        <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
-                        ${attachmentsHtml}
-                        ${featuredPreviewsHtml}
-                        ${notesHtml}
+                        <div class="item-card-details">
+                            ${tagsHtml}
+                            <div class="flex flex-wrap gap-1.5 mt-2">${remindersHtml}</div>
+                            ${attachmentsHtml}
+                            ${featuredPreviewsHtml}
+                            ${notesHtml}
+                        </div>
                         <div class="item-bottom-row">
                             <div class="bottom-left">
                                 ${dateLineHtml}
@@ -4627,6 +4780,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderAll() { 
             renderCategoryChips(); 
             renderStatsBar();
+            updateFilterUI();
+            updateSearchUI();
+            updateViewModeUI();
             renderItems(); 
         }
         
@@ -4857,7 +5013,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             };
         }
         showArchivedToggle.onclick = toggleShowArchived;
-        document.getElementById('searchInput').addEventListener('input', renderAll);
+        if (filterPanelToggle) filterPanelToggle.onclick = toggleFilters;
+        if (searchClearBtn) searchClearBtn.onclick = clearSearch;
+        if (viewModeToggle) viewModeToggle.onclick = toggleCompactView;
+        const searchInputEl = document.getElementById('searchInput');
+        searchInputEl.addEventListener('input', () => { updateSearchUI(); renderAll(); });
+        searchInputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && searchInputEl.value) {
+                e.preventDefault();
+                clearSearch();
+            }
+        });
+        updateSearchUI();
+        updateFilterUI();
+        updateViewModeUI();
         document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
         
         const tagInputEl = document.getElementById('tagInput');
