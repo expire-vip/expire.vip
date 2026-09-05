@@ -1312,7 +1312,7 @@
         let formTags = [];
         let activeTag = null;
         let isLoading = false;
-        let showArchived = false;
+        let archiveViewMode = 'active'; // active = hide archived, all = show all, archived = show only archived
         let activeStatFilter = 'all';
         let filtersCollapsed = localStorage.getItem('expire_filtersCollapsed') !== 'false';
         let compactView = localStorage.getItem('expire_compactView') === 'true';
@@ -3344,7 +3344,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             setTimeout(() => { captureInitialFormState(); }, 50);
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        function openEditModal(itemId) {
+        async function refreshLatestFromCloudBeforeEdit(actionLabel = 'edit') {
+            if (isTestMode || !accessToken || !driveFileId) return true;
+            try {
+                await withLoading(`Checking latest version before ${actionLabel}...`, async () => {
+                    await loadFromCloud();
+                });
+                renderAll();
+                return true;
+            } catch (error) {
+                console.error(`Failed to refresh cloud data before ${actionLabel}:`, error);
+                toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
+                return false;
+            }
+        }
+
+        async function openEditModal(itemId) {
+            if (!(await refreshLatestFromCloudBeforeEdit('editing the item'))) return;
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
             editingItemId = itemId;
@@ -3747,9 +3763,33 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- ARCHIVE ----------
+        function getArchivedCount() {
+            return (appData.items || []).filter(i => !!i.archived).length;
+        }
+
+        function updateArchivedToggleUI() {
+            if (!showArchivedToggle || !archivedToggleLabel) return;
+            const count = getArchivedCount();
+            const suffix = ` (${count})`;
+            if (archiveViewMode === 'active') {
+                archivedToggleLabel.textContent = `Show Archived${suffix}`;
+                showArchivedToggle.title = count ? 'Show active and archived items' : 'There are no archived items';
+            } else if (archiveViewMode === 'all') {
+                archivedToggleLabel.textContent = `Show Only Archived${suffix}`;
+                showArchivedToggle.title = 'Show only archived items';
+            } else {
+                archivedToggleLabel.textContent = `Hide Archived${suffix}`;
+                showArchivedToggle.title = 'Hide archived items';
+            }
+            showArchivedToggle.disabled = count === 0 && archiveViewMode === 'archived';
+            showArchivedToggle.setAttribute('aria-label', `${archivedToggleLabel.textContent}. Click to change archived view.`);
+        }
+
         function toggleShowArchived() {
-            showArchived = !showArchived;
-            archivedToggleLabel.textContent = showArchived ? 'Hide Archived' : 'Show Archived';
+            if (archiveViewMode === 'active') archiveViewMode = 'all';
+            else if (archiveViewMode === 'all') archiveViewMode = 'archived';
+            else archiveViewMode = 'active';
+            updateArchivedToggleUI();
             renderAll();
         }
 
@@ -4177,7 +4217,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
             const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
             return appData.items.filter(i => {
-                if (!showArchived && i.archived) return false;
+                if (archiveViewMode === 'active' && i.archived) return false;
+                if (archiveViewMode === 'archived' && !i.archived) return false;
                 const itemCategory = i.category || 'Other';
                 const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
                 const itemTags = (i.tags || []).map(t => String(t).toLowerCase());
@@ -4284,7 +4325,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderCategoryChips() {
             const customCats = (appData.customCategories || []).map(c => c.name);
             const itemCats = appData.items
-                .filter(i => !i.archived || showArchived)
+                .filter(i => archiveViewMode !== 'active' || !i.archived)
                 .map(i => i.category || 'Other');
             const builtinCats = BUILTIN_CATEGORIES.map(c => c.name);
             const allUniqueCats = [...new Set([...builtinCats, ...customCats, ...itemCats])];
@@ -4417,11 +4458,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!filtered.length) {
                 let msg;
                 if (activeStatFilter !== 'all') {
-                    msg = showArchived
+                    msg = archiveViewMode === 'archived'
                         ? 'No archived items match the selected filter and search.'
                         : 'No items match the selected filter and search.';
                 } else {
-                    msg = showArchived ? 'No archived items found.' : 'No items found. Add one above!';
+                    msg = archiveViewMode === 'archived' ? 'No archived items found.' : 'No items found. Add one above!';
                 }
                 return itemsList.innerHTML = `<div class="text-center py-6"><p class="text-gray-400 dark:text-gray-500">${msg}</p>${activeStatFilter !== 'all' ? `<button type="button" onclick="setStatFilter('all')" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">Clear selected filter</button>` : ''}</div>`;
             }
@@ -4710,7 +4751,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
-        function startInlineNoteEdit(itemId) {
+        async function startInlineNoteEdit(itemId) {
+            if (!(await refreshLatestFromCloudBeforeEdit('editing the note'))) return;
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
             inlineNoteEditItemId = itemId;
@@ -5013,6 +5055,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             };
         }
         showArchivedToggle.onclick = toggleShowArchived;
+        updateArchivedToggleUI();
         if (filterPanelToggle) filterPanelToggle.onclick = toggleFilters;
         if (searchClearBtn) searchClearBtn.onclick = clearSearch;
         if (viewModeToggle) viewModeToggle.onclick = toggleCompactView;
