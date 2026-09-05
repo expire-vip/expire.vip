@@ -443,6 +443,18 @@
             margin-top: -.65rem;
         }
         .inline-note-editor { min-height: 140px; resize: both; width: 100%; }
+        .inline-note-editor-wrap { position: relative; width: 100%; max-width: 100%; }
+        .inline-note-editor-wrap .inline-note-editor { display:block; padding-right: 1.5rem; padding-bottom: 1.25rem; }
+        .inline-note-resize-handle {
+            position:absolute; right:4px; bottom:4px; width:18px; height:18px;
+            display:flex; align-items:flex-end; justify-content:flex-end;
+            color:#9ca3af; opacity:.8; cursor:nwse-resize; touch-action:none;
+            user-select:none; z-index:2;
+        }
+        .inline-note-resize-handle::before {
+            content:'⋰'; font-size:18px; line-height:14px; transform:rotate(180deg);
+        }
+        .inline-note-resize-handle:hover { opacity:1; color:#6366f1; }
         .inline-note-meta { display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-top:.35rem; font-size:.7rem; color:#9ca3af; }
         .note-preview-text { white-space: pre-line; }
         #previewModal .preview-body pre {
@@ -1304,6 +1316,8 @@
         let pendingTokenReject = null;
         let tokenExpiry = 0;
         let driveFileId = null;
+        let cloudDataModifiedTime = '';
+        const CLOUD_SYNC_TIME_KEY = 'expire_cloudDataModifiedTime';
         let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
@@ -2112,25 +2126,59 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        async function loadFromCloud() {
-            const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"', { headers: { Authorization: `Bearer ${accessToken}` } });
+        function getStoredCloudDataModifiedTime() {
+            return localStorage.getItem(CLOUD_SYNC_TIME_KEY) || '';
+        }
+
+        function setStoredCloudDataModifiedTime(modifiedTime) {
+            cloudDataModifiedTime = modifiedTime || '';
+            if (cloudDataModifiedTime) localStorage.setItem(CLOUD_SYNC_TIME_KEY, cloudDataModifiedTime);
+            else localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
+        }
+
+        async function getCloudDataMetadata() {
+            const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"&fields=files(id,modifiedTime)', { headers: { Authorization: `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
-            if (searchData.files && searchData.files.length > 0) {
-                driveFileId = searchData.files[0].id;
+            if (!searchRes.ok) throw new Error(searchData.error?.message || `Drive metadata lookup failed (${searchRes.status})`);
+            return searchData.files && searchData.files.length ? searchData.files[0] : null;
+        }
+
+        async function loadFromCloud(options = {}) {
+            const force = !!options.force;
+            const meta = await getCloudDataMetadata();
+            if (meta) {
+                driveFileId = meta.id;
+                const localModifiedTime = getStoredCloudDataModifiedTime();
+                const hasLocalData = Array.isArray(appData.items);
+                // A metadata-only check is intentionally cheap. Download the JSON only when
+                // there is no local sync timestamp, the caller forces a refresh, or Drive
+                // reports a different modifiedTime than the last locally synced version.
+                const needsData = force || !localModifiedTime || !hasLocalData || meta.modifiedTime !== localModifiedTime;
+
+                if (!needsData) {
+                    cloudDataModifiedTime = localModifiedTime;
+                    return false;
+                }
+
                 const fileRes = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, { headers: { Authorization: `Bearer ${accessToken}` } });
                 const raw = await fileRes.json();
+                if (!fileRes.ok) throw new Error(raw.error?.message || `Cloud data download failed (${fileRes.status})`);
                 appData = Array.isArray(raw) ? { items: raw, customCategories: [], knownTags: [], settings: { timezone: '' } } : raw;
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
-                migrateItems(); // ensure noExpiration, time, archived, and attachments fields, and migrate reminders
+                migrateItems();
+                setStoredCloudDataModifiedTime(meta.modifiedTime);
+                return true;
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
+                setStoredCloudDataModifiedTime('');
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
                 });
                 const fileMeta = await createRes.json();
+                if (!createRes.ok) throw new Error(fileMeta.error?.message || `Could not create cloud data file (${createRes.status})`);
                 driveFileId = fileMeta.id;
                 await syncToCloud();
             }
@@ -2140,11 +2188,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         async function syncToCloud() {
             if (!driveFileId || !accessToken) return;
             updateStatus("Saving to cloud...");
-            await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+            const response = await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media&fields=id,modifiedTime`, {
                 method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(appData)
             });
+            const metadata = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(metadata.error?.message || `Cloud save failed (${response.status})`);
+            setStoredCloudDataModifiedTime(metadata.modifiedTime || new Date().toISOString());
             updateStatus("✅ Cloud Synced");
+            return metadata;
         }
 
         // ---------- CALENDAR ----------
@@ -3347,6 +3399,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         async function refreshLatestFromCloudBeforeEdit(actionLabel = 'edit') {
             if (isTestMode || !accessToken || !driveFileId) return true;
             try {
+                cloudDataModifiedTime = getStoredCloudDataModifiedTime();
                 await withLoading(`Checking latest version before ${actionLabel}...`, async () => {
                     await loadFromCloud();
                 });
@@ -4522,7 +4575,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         <div class="flex items-start gap-2">
                             <i class="fas fa-sticky-note text-amber-500 mt-0.5 flex-shrink-0"></i>
                             ${isInlineNoteEditing
-                                ? `<div class="flex-1 min-w-0"><textarea id="inlineNote_${item.id}" maxlength="4000" oninput="updateInlineNoteCount('${item.id}')" class="inline-note-editor px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">${escapeHtml(item.notes || '')}</textarea><div class="inline-note-meta"><span id="inlineNoteCount_${item.id}">${(item.notes || '').length}/4000</span><span>Drag the corner to resize</span></div></div>`
+                                ? `<div class="flex-1 min-w-0"><div class="inline-note-editor-wrap"><textarea id="inlineNote_${item.id}" maxlength="4000" oninput="updateInlineNoteCount('${item.id}')" class="inline-note-editor px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">${escapeHtml(item.notes || '')}</textarea><div class="inline-note-resize-handle" data-resize-note="${item.id}" title="Drag to resize" aria-label="Drag to resize note"></div></div><div class="inline-note-meta"><span id="inlineNoteCount_${item.id}">${(item.notes || '').length}/4000</span><span>Drag the corner to resize</span></div></div>`
                                 : notesDisplay}
                         </div>
                         <div class="flex items-center justify-between gap-2 mt-1">
@@ -4751,6 +4804,55 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        function initInlineNoteResizer(itemId) {
+            const textarea = document.getElementById(`inlineNote_${itemId}`);
+            const handle = document.querySelector(`[data-resize-note="${CSS.escape(itemId)}"]`);
+            const wrap = handle ? handle.parentElement : null;
+            if (!textarea || !handle || !wrap || handle.dataset.bound === '1') return;
+            handle.dataset.bound = '1';
+
+            let resizing = false;
+            let activePointerId = null;
+            let startX = 0, startY = 0, startWidth = 0, startHeight = 0;
+
+            const onPointerMove = (event) => {
+                if (!resizing || (activePointerId !== null && event.pointerId !== activePointerId)) return;
+                const containerWidth = wrap.parentElement ? wrap.parentElement.clientWidth : 1000;
+                const nextWidth = Math.max(180, Math.min(containerWidth, startWidth + (event.clientX - startX)));
+                const nextHeight = Math.max(140, Math.min(window.innerHeight * 0.65, startHeight + (event.clientY - startY)));
+                textarea.style.width = `${nextWidth}px`;
+                textarea.style.height = `${nextHeight}px`;
+                textarea.style.maxWidth = '100%';
+                event.preventDefault();
+            };
+
+            const stopResize = () => {
+                if (!resizing) return;
+                resizing = false;
+                activePointerId = null;
+                handle.classList.remove('text-indigo-600');
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', stopResize);
+                window.removeEventListener('pointercancel', stopResize);
+            };
+
+            handle.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                resizing = true;
+                activePointerId = event.pointerId;
+                startX = event.clientX;
+                startY = event.clientY;
+                const rect = textarea.getBoundingClientRect();
+                startWidth = rect.width;
+                startHeight = rect.height;
+                handle.classList.add('text-indigo-600');
+                try { handle.setPointerCapture?.(event.pointerId); } catch (_) {}
+                window.addEventListener('pointermove', onPointerMove, { passive:false });
+                window.addEventListener('pointerup', stopResize);
+                window.addEventListener('pointercancel', stopResize);
+            });
+        }
+
         async function startInlineNoteEdit(itemId) {
             if (!(await refreshLatestFromCloudBeforeEdit('editing the note'))) return;
             const item = appData.items.find(i => i.id === itemId);
@@ -4760,6 +4862,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             setTimeout(() => {
                 const textarea = document.getElementById(`inlineNote_${itemId}`);
                 if (textarea) {
+                    initInlineNoteResizer(itemId);
                     textarea.focus();
                     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
                 }
@@ -4835,6 +4938,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
             reminderBanner.style.display = 'block';
             updateAccountEmailUI();
+            updateArchivedToggleUI();
+            updateFilterUI();
+            updateViewModeUI();
+            updateSearchUI();
             renderAll();
             // Update sync status if we have a valid token
             if (accessToken && Date.now() < tokenExpiry) {
@@ -5019,6 +5126,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             localStorage.removeItem('expire_accessToken');
             localStorage.removeItem('expire_tokenExpiry');
             localStorage.removeItem('expire_googleEmail');
+            localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
+            cloudDataModifiedTime = '';
             accountEmailVisible = false;
             updateAccountEmailUI();
             accessToken = null;
