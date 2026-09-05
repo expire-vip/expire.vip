@@ -1318,7 +1318,7 @@
         let driveFileId = null;
         let cloudDataModifiedTime = '';
         const CLOUD_SYNC_TIME_KEY = 'expire_cloudDataModifiedTime';
-        const CLOUD_DATA_CACHE_KEY = 'expire_cloudDataCache';
+        let hasLoadedCloudData = false;
         let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
@@ -2137,35 +2137,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             else localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
         }
 
-        function cacheCloudData() {
-            try {
-                localStorage.setItem(CLOUD_DATA_CACHE_KEY, JSON.stringify(appData));
-                return true;
-            } catch (error) {
-                console.warn('Could not cache cloud data locally:', error);
-                return false;
-            }
-        }
-
-        function restoreCachedCloudData() {
-            const stored = localStorage.getItem(CLOUD_DATA_CACHE_KEY);
-            if (!stored) return false;
-            try {
-                const cached = JSON.parse(stored);
-                if (!cached || !Array.isArray(cached.items)) return false;
-                appData = cached;
-                if (!appData.customCategories) appData.customCategories = [];
-                if (!appData.knownTags) appData.knownTags = [];
-                if (!appData.settings) appData.settings = { timezone: '' };
-                migrateItems();
-                return true;
-            } catch (error) {
-                console.warn('Could not restore cached cloud data:', error);
-                localStorage.removeItem(CLOUD_DATA_CACHE_KEY);
-                return false;
-            }
-        }
-
         async function getCloudDataMetadata() {
             const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"&fields=files(id,modifiedTime)', { headers: { Authorization: `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
@@ -2179,11 +2150,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (meta) {
                 driveFileId = meta.id;
                 const localModifiedTime = getStoredCloudDataModifiedTime();
-                const hasCachedData = restoreCachedCloudData();
-                // A metadata-only check is intentionally cheap. Download the JSON only when
-                // there is no saved sync timestamp, no cached data, the caller forces a refresh,
-                // or Drive reports a different modifiedTime than the last locally synced version.
-                const needsData = force || !localModifiedTime || !hasCachedData || meta.modifiedTime !== localModifiedTime;
+                // A metadata-only check is intentionally cheap. During a single page session,
+                // download the JSON only on first load, when forced, or when Drive reports a
+                // different modifiedTime than the last locally loaded version. The actual app
+                // data is never stored in localStorage.
+                const needsData = force || !hasLoadedCloudData || !localModifiedTime || meta.modifiedTime !== localModifiedTime;
 
                 if (!needsData) {
                     cloudDataModifiedTime = localModifiedTime;
@@ -2197,7 +2168,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!appData.customCategories) appData.customCategories = [];
                 if (!appData.knownTags) appData.knownTags = [];
                 migrateItems();
-                cacheCloudData();
+                hasLoadedCloudData = true;
                 setStoredCloudDataModifiedTime(meta.modifiedTime);
                 return true;
             } else {
@@ -2211,6 +2182,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const fileMeta = await createRes.json();
                 if (!createRes.ok) throw new Error(fileMeta.error?.message || `Could not create cloud data file (${createRes.status})`);
                 driveFileId = fileMeta.id;
+                hasLoadedCloudData = true;
                 await syncToCloud();
             }
             if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
@@ -2225,7 +2197,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
             const metadata = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(metadata.error?.message || `Cloud save failed (${response.status})`);
-            cacheCloudData();
+            hasLoadedCloudData = true;
             setStoredCloudDataModifiedTime(metadata.modifiedTime || new Date().toISOString());
             updateStatus("✅ Cloud Synced");
             return metadata;
@@ -5036,7 +5008,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- INIT ----------
         async function initAppData() {
-            if (!isTestMode) restoreCachedCloudData();
             updateStatus("Syncing cloud data...");
             try { await withLoading("Loading data...", async () => {await loadFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
             catch(e) { 
@@ -5160,7 +5131,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             localStorage.removeItem('expire_tokenExpiry');
             localStorage.removeItem('expire_googleEmail');
             localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
-            localStorage.removeItem(CLOUD_DATA_CACHE_KEY);
             cloudDataModifiedTime = '';
             accountEmailVisible = false;
             updateAccountEmailUI();
