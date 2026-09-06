@@ -2129,11 +2129,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        async function getCloudDataMetadata() {
-            const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"&fields=files(id,modifiedTime)', { headers: { Authorization: `Bearer ${accessToken}` } });
-            const searchData = await searchRes.json();
-            if (!searchRes.ok) throw new Error(searchData.error?.message || `Drive metadata lookup failed (${searchRes.status})`);
-            return searchData.files && searchData.files.length ? searchData.files[0] : null;
+        async function getCloudDataMetadata(fileId = driveFileId) {
+            const url = fileId
+                ? `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,modifiedTime`
+                : 'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"&fields=files(id,modifiedTime)';
+            const response = await callGoogleAPI(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error?.message || `Drive metadata lookup failed (${response.status})`);
+            return fileId ? data : (data.files && data.files.length ? data.files[0] : null);
         }
 
         async function loadFromCloud(options = {}) {
@@ -2198,12 +2201,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     throw new Error('Cloud data version is unknown. The latest data must be loaded before saving.');
                 }
             } else {
-                const currentMeta = await getCloudDataMetadata();
+                const currentMeta = await getCloudDataMetadata(driveFileId);
                 if (!currentMeta || currentMeta.id !== driveFileId) {
                     throw new Error('Cloud data file could not be verified before saving. Please refresh and try again.');
                 }
                 if (currentMeta.modifiedTime !== expectedModifiedTime) {
-                    hasLoadedCloudData = false;
                     throw new Error('Cloud data changed on another device. Your changes were not saved. Please refresh the latest data and try again.');
                 }
             }
@@ -4031,12 +4033,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         
             const wasEditing = editingItemId !== null;
-            if (!(await ensureLatestCloudDataBeforeWrite(wasEditing ? 'updating the item' : 'creating the item'))) return;
-            if (wasEditing && !appData.items.some(i => i.id === editingItemId)) {
-                toastError('This item was changed or removed on another device. Please reopen it before saving.');
-                closeItemModal();
-                renderAll();
-                return;
+            if (!wasEditing) {
+                if (!(await ensureLatestCloudDataBeforeWrite('creating the item'))) return;
             }
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
@@ -4865,12 +4863,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const oldNotes = item.notes || '';
             if (notes === oldNotes) {
                 inlineNoteEditItemId = null;
-                renderAll();
+                    renderAll();
                 return;
             }
 
             try {
-                if (!(await ensureLatestCloudDataBeforeWrite('saving the note'))) return;
                 const freshItem = appData.items.find(i => i.id === itemId);
                 if (!freshItem) {
                     toastError('This item was changed or removed on another device. Please reopen it.');
