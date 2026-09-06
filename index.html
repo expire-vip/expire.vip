@@ -2061,6 +2061,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.getElementById('settingsModal').classList.add('hidden');
         }
         async function saveSettings() {
+            if (!(await ensureLatestCloudDataBeforeWrite('saving settings'))) return;
             const newTz = document.getElementById('timezoneSelect').value;
             appData.settings.timezone = newTz;
             appData.customCategories = appData.customCategories || [];
@@ -2866,6 +2867,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function setAttachmentFeatured(itemId, attachmentId, featured) {
+            if (!(await ensureLatestCloudDataBeforeWrite('changing featured preview settings'))) return;
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
             const att = (item.attachments || []).find(a => a.driveFileId === attachmentId);
@@ -2900,6 +2902,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function setAttachmentCover(itemId, attachmentId) {
+            if (!(await ensureLatestCloudDataBeforeWrite('changing the cover preview'))) return;
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
             const entry = (item.previewAttachments || []).find(p => p.attachmentId === attachmentId);
@@ -2911,6 +2914,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function moveFeaturedPreview(itemId, index, direction) {
+            if (!(await ensureLatestCloudDataBeforeWrite('reordering featured previews'))) return;
             const item = appData.items.find(i => i.id === itemId);
             if (!item || !item.previewAttachments) return;
             const next = index + direction;
@@ -3073,6 +3077,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${file.name}`))) return;
+                if (editingItemId !== null && !appData.items.some(i => i.id === editingItemId)) {
+                    toastError('This item was changed or removed on another device. Please reopen it before uploading a file.');
+                    return;
+                }
                 let fileId;
                 await withLoading(`Uploading ${file.name}...`, async () => {
                     fileId = await uploadFileToAppData(file, file.name);
@@ -3100,6 +3109,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const content = '';
             const blob = new Blob([content], { type: 'text/plain' });
             try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`creating ${fileName}`))) return;
+                if (editingItemId !== null && !appData.items.some(i => i.id === editingItemId)) {
+                    toastError('This item was changed or removed on another device. Please reopen it before creating a file.');
+                    return;
+                }
                 let fileId;
                 await withLoading(`Creating ${fileName}...`, async () => {
                     fileId = await uploadFileToAppData(blob, fileName);
@@ -3137,11 +3151,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function renameAttachment(idx) {
-            const att = formAttachments[idx];
+            let att = formAttachments[idx];
             if (!att) return;
             const newName = prompt('New file name:', att.name);
             if (!newName || newName === att.name) return;
             try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`renaming ${att.name}`))) return;
+                if (editingItemId !== null) {
+                    const freshItem = appData.items.find(i => i.id === editingItemId);
+                    if (!freshItem) { toastError('This item was changed or removed on another device. Please reopen it.'); return; }
+                    formAttachments = [...(freshItem.attachments || [])];
+                    const freshAtt = formAttachments.find(a => a.driveFileId === att.driveFileId);
+                    if (!freshAtt) { toastError('That attachment was changed or removed on another device. Please reopen the item.'); renderAttachments(); return; }
+                    att = freshAtt;
+                }
                 await withLoading(`Renaming to ${newName}...`, async () => {
                     await renameFile(att.driveFileId, newName);
                 });
@@ -3160,6 +3183,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!att) return;
             if (!confirm(`Delete attachment "${att.name}" from Drive?`)) return;
             try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`removing ${att.name}`))) return;
+                if (editingItemId !== null) {
+                    const freshItem = appData.items.find(i => i.id === editingItemId);
+                    if (!freshItem) { toastError('This item was changed or removed on another device. Please reopen it.'); return; }
+                    formAttachments = [...(freshItem.attachments || [])];
+                    const freshAtt = formAttachments.find(a => a.driveFileId === att.driveFileId);
+                    if (!freshAtt) { toastError('That attachment was changed or removed on another device. Please reopen the item.'); renderAttachments(); return; }
+                    att = freshAtt;
+                }
                 await deleteFile(att.driveFileId);
                 // Remove from formAttachments regardless of Drive success
                 const removedAttachmentId = att.driveFileId;
@@ -3189,6 +3221,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- AUTO-SAVE ITEM ----------
         async function autoSaveItem() {
+            if (!(await ensureLatestCloudDataBeforeWrite('saving item changes'))) return false;
             // If we're editing an existing item, update it
             if (editingItemId !== null) {
                 const idx = appData.items.findIndex(i => i.id === editingItemId);
@@ -3400,20 +3433,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             setTimeout(() => { captureInitialFormState(); }, 50);
             document.getElementById('itemModal').classList.remove('hidden');
         }
-        async function refreshLatestFromCloudBeforeEdit(actionLabel = 'edit') {
+        async function ensureLatestCloudDataBeforeWrite(actionLabel = 'saving changes') {
             if (isTestMode || !accessToken || !driveFileId) return true;
             try {
-                cloudDataModifiedTime = getStoredCloudDataModifiedTime();
-                await withLoading(`Checking latest version before ${actionLabel}...`, async () => {
-                    await loadFromCloud();
-                });
-                renderAll();
+                await loadFromCloud();
                 return true;
             } catch (error) {
-                console.error(`Failed to refresh cloud data before ${actionLabel}:`, error);
+                console.error(`Failed to get latest cloud data before ${actionLabel}:`, error);
                 toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
                 return false;
             }
+        }
+
+        async function refreshLatestFromCloudBeforeEdit(actionLabel = 'edit') {
+            const ok = await ensureLatestCloudDataBeforeWrite(actionLabel);
+            if (ok) renderAll();
+            return ok;
         }
 
         async function openEditModal(itemId) {
@@ -3730,13 +3765,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         async function confirmDuplicateItem() {
             const sourceId = duplicatingItemId;
-            const item = appData.items.find(i => i.id === sourceId);
             const newDate = duplicateDateEl.value;
             const newName = duplicateItemNameEl.value.trim();
-            if (!item) {
-                closeDuplicateModal();
-                return;
-            }
             if (!newName) {
                 showToast('Please enter an item name.');
                 duplicateItemNameEl.focus();
@@ -3749,6 +3779,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             const isRenew = duplicateMode === 'renew';
+            if (!(await ensureLatestCloudDataBeforeWrite(isRenew ? 'renewing the item' : 'duplicating the item'))) return;
+            const item = appData.items.find(i => i.id === sourceId);
+            if (!item) {
+                toastError('That item was changed or removed on another device. Please reopen it.');
+                closeDuplicateModal();
+                renderAll();
+                return;
+            }
             confirmDuplicateBtn.disabled = true;
             confirmDuplicateBtn.textContent = isRenew ? 'Renewing...' : 'Duplicating...';
 
@@ -3820,8 +3858,19 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- ARCHIVE ----------
+        function getPreArchiveFilteredItems() {
+            const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
+            return (appData.items || []).filter(i => {
+                const itemCategory = i.category || 'Other';
+                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
+                const itemTags = (i.tags || []).map(t => String(t).toLowerCase());
+                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
+                return matchesCategory && matchesTag && itemMatchesSearch(i, searchQuery);
+            });
+        }
+
         function getArchivedCount() {
-            return (appData.items || []).filter(i => !!i.archived).length;
+            return getPreArchiveFilteredItems().filter(i => !!i.archived).length;
         }
 
         function updateArchivedToggleUI() {
@@ -3850,15 +3899,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             renderAll();
         }
 
-        async function archiveItem(itemId, currentArchived) {
-            const action = currentArchived ? 'unarchive' : 'archive';
-            const actionText = currentArchived ? 'unarchive' : 'archive';
-            if (!confirm(`Are you sure you want to ${actionText} this item?`)) {
+        async function archiveItem(itemId) {
+            if (!(await ensureLatestCloudDataBeforeWrite('changing the archive status'))) return;
+            const idx = appData.items.findIndex(i => i.id === itemId);
+            if (idx === -1) {
+                toastError('That item was changed or removed on another device. Please refresh the list.');
+                renderAll();
                 return;
             }
-            const idx = appData.items.findIndex(i => i.id === itemId);
-            if (idx === -1) return;
-            
+            const currentArchived = !!appData.items[idx].archived;
+            const action = currentArchived ? 'unarchive' : 'archive';
+            if (!confirm(`Are you sure you want to ${action} this item?`)) return;
             appData.items[idx].archived = !currentArchived;
             
             if (isTestMode) {
@@ -3885,11 +3936,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 confirmMsg += `\nThis item has ${attachments.length} attachment(s) that will also be permanently deleted from Drive.`;
             }
             if (!confirm(confirmMsg)) return;
+            if (!(await ensureLatestCloudDataBeforeWrite('deleting the item'))) return;
+            const freshItem = appData.items.find(i => i.id === itemId);
+            if (!freshItem) {
+                toastError('That item was changed or removed on another device. Please refresh the list.');
+                renderAll();
+                return;
+            }
+            const freshEventId = freshItem.eventId;
+            const freshAttachments = freshItem.attachments || [];
         
             await withLoading("Deleting item and attachments...", async () => {
                 // Delete attachments from Drive
-                if (attachments && attachments.length > 0 && !isTestMode) {
-                    for (const att of attachments) {
+                if (freshAttachments && freshAttachments.length > 0 && !isTestMode) {
+                    for (const att of freshAttachments) {
                         try {
                             await deleteFile(att.driveFileId);
                         } catch (e) {
@@ -3898,8 +3958,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     }
                 }
         
-                if (eventId && !isTestMode) {
-                    await removeCalendarEvent(eventId).catch(() => {});
+                if (freshEventId && !isTestMode) {
+                    await removeCalendarEvent(freshEventId).catch(() => {});
                 }
         
                 appData.items = appData.items.filter(i => i.id !== itemId);
@@ -3953,6 +4013,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         
             const wasEditing = editingItemId !== null;
+            if (!(await ensureLatestCloudDataBeforeWrite(wasEditing ? 'updating the item' : 'creating the item'))) return;
+            if (wasEditing && !appData.items.some(i => i.id === editingItemId)) {
+                toastError('This item was changed or removed on another device. Please reopen it before saving.');
+                closeItemModal();
+                renderAll();
+                return;
+            }
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
@@ -4272,16 +4339,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function getBaseFilteredItems() {
             // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
-            const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
-            return appData.items.filter(i => {
-                if (archiveViewMode === 'active' && i.archived) return false;
-                if (archiveViewMode === 'archived' && !i.archived) return false;
-                const itemCategory = i.category || 'Other';
-                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
-                const itemTags = (i.tags || []).map(t => String(t).toLowerCase());
-                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
-                return matchesCategory && matchesTag && itemMatchesSearch(i, searchQuery);
-            });
+            const filtered = getPreArchiveFilteredItems();
+            if (archiveViewMode === 'active') return filtered.filter(i => !i.archived);
+            if (archiveViewMode === 'archived') return filtered.filter(i => !!i.archived);
+            return filtered;
         }
 
         function computeStats(items) {
@@ -4696,7 +4757,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          title="Renew">
                                     <i class="fas fa-rotate-right text-base"></i>
                                 </button>
-                                <button onclick="archiveItem('${item.id}', ${item.archived || false})" 
+                                <button onclick="archiveItem('${item.id}')" 
                                          class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="${item.archived ? 'Unarchive' : 'Archive'}">
                                     <i class="fas fa-archive text-base"></i>
@@ -4759,9 +4820,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (file.size > 5 * 1024 * 1024 && !confirm(`File is ${(file.size / (1024*1024)).toFixed(1)} MB, which exceeds the recommended 5 MB limit. Continue?`)) {
                     input.remove(); return;
                 }
-                const item = appData.items.find(i => i.id === itemId);
-                if (!item) { input.remove(); return; }
                 try {
+                    if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${file.name}`))) return;
+                    const item = appData.items.find(i => i.id === itemId);
+                    if (!item) { toastError('That item was changed or removed on another device. Please refresh the list.'); return; }
                     let fileId;
                     await withLoading(`Uploading ${file.name}...`, async () => { fileId = await uploadFileToAppData(file, file.name); });
                     item.attachments = item.attachments || [];
@@ -4790,9 +4852,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             try {
+                if (!(await ensureLatestCloudDataBeforeWrite('saving the note'))) return;
+                const freshItem = appData.items.find(i => i.id === itemId);
+                if (!freshItem) {
+                    toastError('This item was changed or removed on another device. Please reopen it.');
+                    inlineNoteEditItemId = null;
+                    renderAll();
+                    return;
+                }
+                const latestOldNotes = freshItem.notes || '';
+                if (notes === latestOldNotes) {
+                    inlineNoteEditItemId = null;
+                    renderAll();
+                    return;
+                }
                 await withLoading('Saving notes...', async () => {
-                    item.notes = notes;
-                    await updateCalendarEventNotes(item.eventId, notes);
+                    freshItem.notes = notes;
+                    await updateCalendarEventNotes(freshItem.eventId, notes);
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
@@ -4905,8 +4981,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function togglePinItem(itemId) {
+            if (!(await ensureLatestCloudDataBeforeWrite('changing the pin status'))) return;
             const item = appData.items.find(i => i.id === itemId);
-            if (!item) return;
+            if (!item) { toastError('That item was changed or removed on another device. Please refresh the list.'); renderAll(); return; }
 
             const previous = !!item.pinned;
             item.pinned = !previous;
