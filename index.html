@@ -1319,6 +1319,8 @@
         let cloudDataModifiedTime = '';
         const CLOUD_SYNC_TIME_KEY = 'expire_cloudDataModifiedTime';
         let hasLoadedCloudData = false;
+        // True only for the one initial write immediately after creating a new cloud data file.
+        let allowInitialCloudWrite = false;
         let appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
         let isTestMode = localStorage.getItem('expire_testMode') === 'true';
         let editingItemId = null;
@@ -2184,6 +2186,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!createRes.ok) throw new Error(fileMeta.error?.message || `Could not create cloud data file (${createRes.status})`);
                 driveFileId = fileMeta.id;
                 hasLoadedCloudData = true;
+                allowInitialCloudWrite = true;
                 await syncToCloud();
             }
             if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
@@ -2191,6 +2194,29 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         async function syncToCloud() {
             if (!driveFileId || !accessToken) return;
+
+            // Defensive concurrency guard: before every write, verify that the Drive
+            // file is still at the exact version this page last loaded/synced. This
+            // protects against any future write path that accidentally misses its
+            // own pre-action freshness check.
+            const expectedModifiedTime = cloudDataModifiedTime || getStoredCloudDataModifiedTime();
+            if (!expectedModifiedTime) {
+                if (!allowInitialCloudWrite) {
+                    // For an existing file, never overwrite data unless this page knows
+                    // which Drive version it was loaded from.
+                    throw new Error('Cloud data version is unknown. The latest data must be loaded before saving.');
+                }
+            } else {
+                const currentMeta = await getCloudDataMetadata();
+                if (!currentMeta || currentMeta.id !== driveFileId) {
+                    throw new Error('Cloud data file could not be verified before saving. Please refresh and try again.');
+                }
+                if (currentMeta.modifiedTime !== expectedModifiedTime) {
+                    hasLoadedCloudData = false;
+                    throw new Error('Cloud data changed on another device. Your changes were not saved. Please refresh the latest data and try again.');
+                }
+            }
+
             updateStatus("Saving to cloud...");
             const response = await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media&fields=id,modifiedTime`, {
                 method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -2199,6 +2225,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const metadata = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(metadata.error?.message || `Cloud save failed (${response.status})`);
             hasLoadedCloudData = true;
+            allowInitialCloudWrite = false;
             setStoredCloudDataModifiedTime(metadata.modifiedTime || new Date().toISOString());
             updateStatus("✅ Cloud Synced");
             return metadata;
