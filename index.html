@@ -1317,7 +1317,6 @@
         let tokenExpiry = 0;
         let driveFileId = null;
         let cloudDataModifiedTime = '';
-        const CLOUD_SYNC_TIME_KEY = 'expire_cloudDataModifiedTime';
         let hasLoadedCloudData = false;
         // True only for the one initial write immediately after creating a new cloud data file.
         let allowInitialCloudWrite = false;
@@ -2130,16 +2129,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        function getStoredCloudDataModifiedTime() {
-            return localStorage.getItem(CLOUD_SYNC_TIME_KEY) || '';
-        }
-
-        function setStoredCloudDataModifiedTime(modifiedTime) {
-            cloudDataModifiedTime = modifiedTime || '';
-            if (cloudDataModifiedTime) localStorage.setItem(CLOUD_SYNC_TIME_KEY, cloudDataModifiedTime);
-            else localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
-        }
-
         async function getCloudDataMetadata() {
             const searchRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_data.json"&fields=files(id,modifiedTime)', { headers: { Authorization: `Bearer ${accessToken}` } });
             const searchData = await searchRes.json();
@@ -2152,15 +2141,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const meta = await getCloudDataMetadata();
             if (meta) {
                 driveFileId = meta.id;
-                const localModifiedTime = getStoredCloudDataModifiedTime();
+                // Keep the expected cloud version only in this page/tab's memory.
+                // Never use localStorage for the application's cloud data or its version,
+                // because another tab/device can legitimately have a different in-memory
+                // view of the same Drive file.
+                const expectedModifiedTime = cloudDataModifiedTime;
                 // A metadata-only check is intentionally cheap. During a single page session,
                 // download the JSON only on first load, when forced, or when Drive reports a
-                // different modifiedTime than the last locally loaded version. The actual app
-                // data is never stored in localStorage.
-                const needsData = force || !hasLoadedCloudData || !localModifiedTime || meta.modifiedTime !== localModifiedTime;
+                // different modifiedTime than the last version loaded into this tab.
+                const needsData = force || !hasLoadedCloudData || !expectedModifiedTime || meta.modifiedTime !== expectedModifiedTime;
 
                 if (!needsData) {
-                    cloudDataModifiedTime = localModifiedTime;
                     return false;
                 }
 
@@ -2172,12 +2163,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!appData.knownTags) appData.knownTags = [];
                 migrateItems();
                 hasLoadedCloudData = true;
-                setStoredCloudDataModifiedTime(meta.modifiedTime);
+                cloudDataModifiedTime = meta.modifiedTime || '';
                 return true;
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
                 appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
-                setStoredCloudDataModifiedTime('');
+                cloudDataModifiedTime = '';
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: 'expire_data.json', parents: ['appDataFolder'] })
@@ -2199,7 +2190,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // file is still at the exact version this page last loaded/synced. This
             // protects against any future write path that accidentally misses its
             // own pre-action freshness check.
-            const expectedModifiedTime = cloudDataModifiedTime || getStoredCloudDataModifiedTime();
+            const expectedModifiedTime = cloudDataModifiedTime;
             if (!expectedModifiedTime) {
                 if (!allowInitialCloudWrite) {
                     // For an existing file, never overwrite data unless this page knows
@@ -2226,7 +2217,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!response.ok) throw new Error(metadata.error?.message || `Cloud save failed (${response.status})`);
             hasLoadedCloudData = true;
             allowInitialCloudWrite = false;
-            setStoredCloudDataModifiedTime(metadata.modifiedTime || new Date().toISOString());
+            cloudDataModifiedTime = metadata.modifiedTime || cloudDataModifiedTime || new Date().toISOString();
             updateStatus("✅ Cloud Synced");
             return metadata;
         }
@@ -5234,7 +5225,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             localStorage.removeItem('expire_accessToken');
             localStorage.removeItem('expire_tokenExpiry');
             localStorage.removeItem('expire_googleEmail');
-            localStorage.removeItem(CLOUD_SYNC_TIME_KEY);
             cloudDataModifiedTime = '';
             accountEmailVisible = false;
             updateAccountEmailUI();
