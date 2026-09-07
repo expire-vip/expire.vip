@@ -2186,29 +2186,33 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!appData.settings.timezone) { appData.settings.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; await syncToCloud(); }
         }
 
-        async function syncToCloud() {
-            if (!driveFileId || !accessToken) return;
+        async function verifyCloudVersionForWrite() {
+            if (isTestMode || !driveFileId || !accessToken) return null;
 
-            // Defensive concurrency guard: before every write, verify that the Drive
-            // file is still at the exact version this page last loaded/synced. This
-            // protects against any future write path that accidentally misses its
-            // own pre-action freshness check.
             const expectedModifiedTime = cloudDataModifiedTime;
             if (!expectedModifiedTime) {
                 if (!allowInitialCloudWrite) {
-                    // For an existing file, never overwrite data unless this page knows
-                    // which Drive version it was loaded from.
                     throw new Error('Cloud data version is unknown. The latest data must be loaded before saving.');
                 }
-            } else {
-                const currentMeta = await getCloudDataMetadata(driveFileId);
-                if (!currentMeta || currentMeta.id !== driveFileId) {
-                    throw new Error('Cloud data file could not be verified before saving. Please refresh and try again.');
-                }
-                if (currentMeta.modifiedTime !== expectedModifiedTime) {
-                    throw new Error('Cloud data changed on another device. Your changes were not saved. Please refresh the latest data and try again.');
-                }
+                return null;
             }
+
+            const currentMeta = await getCloudDataMetadata(driveFileId);
+            if (!currentMeta || currentMeta.id !== driveFileId) {
+                throw new Error('Cloud data file could not be verified before saving. Please refresh and try again.');
+            }
+            if (currentMeta.modifiedTime !== expectedModifiedTime) {
+                throw new Error('Cloud data changed on another device. Your changes were not saved. Please refresh the latest data and try again.');
+            }
+            return currentMeta;
+        }
+
+        async function syncToCloud() {
+            if (!driveFileId || !accessToken) return;
+
+            // Final defensive concurrency guard: every JSON write independently verifies
+            // that Drive is still at the exact version represented by this page's in-memory data.
+            await verifyCloudVersionForWrite();
 
             updateStatus("Saving to cloud...");
             const response = await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media&fields=id,modifiedTime`, {
@@ -4038,6 +4042,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!wasEditing) {
                 if (!(await ensureLatestCloudDataBeforeWrite('creating the item'))) return;
             }
+
+            // Verify the cloud version immediately before any Calendar side effects.
+            // This is intentionally a version-only check: for an already-open editor we
+            // must not refresh appData here, because that would replace the user's edits.
+            if (!isTestMode) {
+                await verifyCloudVersionForWrite();
+            }
+
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
