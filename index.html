@@ -4039,21 +4039,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         
             const wasEditing = editingItemId !== null;
-            if (!wasEditing) {
-                if (!(await ensureLatestCloudDataBeforeWrite('creating the item'))) return;
-            }
-
-            // Verify the cloud version immediately before any Calendar side effects.
-            // This is intentionally a version-only check: for an already-open editor we
-            // must not refresh appData here, because that would replace the user's edits.
-            if (!isTestMode) {
-                await verifyCloudVersionForWrite();
-            }
-
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
             try {
+              if (!wasEditing) {
+                  if (!(await ensureLatestCloudDataBeforeWrite('creating the item'))) return;
+              }
+
+              // Verify the cloud version immediately before any Calendar side effects.
+              // Keep this inside the try/catch so conflicts are surfaced as a toast.
+              // This is intentionally a version-only check: for an already-open editor we
+              // must not refresh appData here, because that would replace the user's edits.
+              if (!isTestMode) {
+                  await verifyCloudVersionForWrite();
+              }
+
               await withLoading(
                 wasEditing ? "Updating item..." : "Creating item...",
                 async () => {
@@ -4066,15 +4067,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         
                         // Remove old calendar event if it exists (regardless of new state)
                         if (old.eventId && !isTestMode) {
-                            showLoading("Removing calendar event");
+                            showLoading("Removing calendar event...");
+                            updateStatus("Removing calendar event...");
                             await removeCalendarEvent(old.eventId).catch(() => {});
-                            showLoading("Done removing calendar event");
+                            showLoading("Calendar event removed");
+                            updateStatus("Calendar event removed");
                         }
 
                         let newEventId = null;
                         // Only create a new event if we have a date, not noExpiration, and (time is optional)
                         if (date && !noExpiration) {
-                            showLoading("Adding new calendar event");
+                            showLoading("Adding new calendar event...");
+                            updateStatus("Adding new calendar event...");
                             const eventData = {
                                 name,
                                 category,
@@ -4115,7 +4119,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     } else {
                         let newEventId = null;
                         if (date && !noExpiration) {
-                            showLoading("Adding new calendar event");
+                            showLoading("Adding new calendar event...");
+                            updateStatus("Adding new calendar event...");
                             const eventData = {
                                 name,
                                 category,
@@ -4161,7 +4166,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
-                        showLoading("Syncing data to cloud");
+                        showLoading("Syncing data to cloud...");
+                        updateStatus("Syncing data to cloud...");
                         await syncToCloud();
                     }
         
@@ -4171,7 +4177,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
               );
             } catch (error) {
                 console.error(`Failed to ${wasEditing ? 'update item' : 'add item'}:`, error);
-                toastError(`Could not ${wasEditing ? 'update' : 'add'} item: ${error.message || error}`);
+                toastError(error.message || `Could not ${wasEditing ? 'update' : 'add'} item.`);
             } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = "Save";
