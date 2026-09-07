@@ -170,7 +170,7 @@
 
         // ---------- STATE FOR FILES ----------
         let allFiles = [];               // raw file list from Drive
-        let referencedIds = new Set();   // set of attachment file IDs referenced in expire_data.json
+        let referencedIds = new Set();   // set of file IDs referenced in expire_data.json (attachments + thumbnails)
         let searchQuery = '';
         let showOrphanedOnly = false;
 
@@ -360,7 +360,9 @@
             return data.files || [];
         }
 
-        // Fetch the expire_data.json content and extract all attachment IDs
+        // Fetch expire_data.json and collect all referenced file IDs:
+        // - driveFileId from attachments
+        // - thumbnailId from previewAttachments (also attachmentId for safety)
         async function fetchExpireDataAttachmentIds() {
             const token = await ensureValidToken();
             // First, find the expire_data.json file
@@ -383,15 +385,19 @@
             );
             if (!downloadRes.ok) throw new Error("Failed to download expire_data.json");
             const jsonData = await downloadRes.json();
-            // Parse items and collect attachment driveFileIds
             const items = jsonData.items || [];
             const ids = new Set();
             for (const item of items) {
+                // 1. attachments
                 const atts = item.attachments || [];
                 for (const att of atts) {
-                    if (att.driveFileId) {
-                        ids.add(att.driveFileId);
-                    }
+                    if (att.driveFileId) ids.add(att.driveFileId);
+                }
+                // 2. previewAttachments -> thumbnailId and attachmentId
+                const previews = item.previewAttachments || [];
+                for (const prev of previews) {
+                    if (prev.thumbnailId) ids.add(prev.thumbnailId);
+                    if (prev.attachmentId) ids.add(prev.attachmentId); // safety
                 }
             }
             return ids;
