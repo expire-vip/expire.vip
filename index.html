@@ -3907,7 +3907,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 archivedToggleLabel.textContent = `Hide Archived${suffix}`;
                 showArchivedToggle.title = 'Hide archived items';
             }
-            showArchivedToggle.disabled = count === 0 && archiveViewMode === 'archived';
+            // Keep the control clickable even when the current search/filter matches
+            // zero archived items, so the three-state archive view can always be changed.
+            showArchivedToggle.disabled = false;
             showArchivedToggle.setAttribute('aria-label', `${archivedToggleLabel.textContent}. Click to change archived view.`);
         }
 
@@ -4155,11 +4157,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                 }
               );
+            } catch (error) {
+                console.error(`Failed to ${wasEditing ? 'update item' : 'add item'}:`, error);
+                toastError(`Could not ${wasEditing ? 'update' : 'add'} item: ${error.message || error}`);
             } finally {
                 saveBtn.disabled = false;
                 saveBtn.textContent = "Save";
             }
-            showToast(wasEditing ? 'Updated.' : 'Added.');
+            if (document.getElementById('itemModal').classList.contains('hidden')) {
+                showToast(wasEditing ? 'Updated.' : 'Added.');
+            }
         }
 
         function updateStatus(t) { syncStatus.textContent = t; }
@@ -5021,6 +5028,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderAll() { 
             renderCategoryChips(); 
             renderStatsBar();
+            updateArchivedToggleUI();
             updateFilterUI();
             updateSearchUI();
             updateViewModeUI();
