@@ -1595,6 +1595,29 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             showToast(msg, "info");
         }
 
+        function getErrorMessage(error, fallback = 'Something went wrong. Please try again.') {
+            if (!error) return fallback;
+            if (typeof error === 'string') return error;
+            if (error.message) return error.message;
+            return fallback;
+        }
+
+        // Last-resort error surfacing for async/event-handler failures that were
+        // not caught by their specific operation. Specific handlers should still
+        // provide the more contextual toast whenever possible.
+        window.addEventListener('unhandledrejection', (event) => {
+            const message = getErrorMessage(event.reason);
+            console.error('Unhandled promise rejection:', event.reason);
+            toastError(message);
+        });
+
+        window.addEventListener('error', (event) => {
+            if (event && event.error) {
+                console.error('Unhandled application error:', event.error);
+                toastError(getErrorMessage(event.error, 'An unexpected application error occurred.'));
+            }
+        });
+
         // ---------- TEST MODE ----------
         window.enableTestMode = () => { localStorage.setItem('expire_testMode', 'true'); location.reload(); };
         window.disableTestMode = () => { localStorage.removeItem('expire_testMode'); location.reload(); };
@@ -2315,21 +2338,27 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (thumbnailFolderId) return thumbnailFolderId;
             const token = await ensureValidToken();
             const q = `name = 'expire_thumbnails' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-            const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=10`, {
+            const listRes = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=10`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            if (!listRes.ok) throw new Error('Unable to access thumbnail folder.');
+            if (!listRes.ok) {
+                const errorData = await listRes.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Unable to access thumbnail folder (${listRes.status}).`);
+            }
             const listData = await listRes.json();
             if (listData.files && listData.files.length) {
                 thumbnailFolderId = listData.files[0].id;
                 return thumbnailFolderId;
             }
-            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+            const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: 'expire_thumbnails', mimeType: 'application/vnd.google-apps.folder', parents: ['appDataFolder'] })
             });
-            if (!createRes.ok) throw new Error('Unable to create thumbnail folder.');
+            if (!createRes.ok) {
+                const errorData = await createRes.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Unable to create thumbnail folder (${createRes.status}).`);
+            }
             const folder = await createRes.json();
             thumbnailFolderId = folder.id;
             return thumbnailFolderId;
@@ -2342,19 +2371,25 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const formData = new FormData();
             formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
             formData.append('file', blob);
-            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+            const response = await callGoogleAPI('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` },
                 body: formData
             });
-            if (!response.ok) throw new Error('Thumbnail upload failed.');
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Thumbnail upload failed (${response.status}).`);
+            }
             return (await response.json()).id;
         }
 
         async function downloadThumbnailBlob(thumbnailId) {
             const token = await ensureValidToken();
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(thumbnailId)}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
-            if (!response.ok) throw new Error(`Thumbnail download failed (${response.status}).`);
+            const response = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(thumbnailId)}?alt=media`, { headers: { Authorization: `Bearer ${token}` } });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Thumbnail download failed (${response.status}).`);
+            }
             return await response.blob();
         }
 
@@ -2427,13 +2462,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
             formData.append('file', fileBlob);
 
-            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            const response = await callGoogleAPI('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
                 body: formData
             });
 
-            if (!response.ok) throw new Error("Upload request failed.");
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Upload request failed (${response.status}).`);
+            }
             const data = await response.json();
             return data.id;
         }
@@ -2441,7 +2479,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         async function updateFileContent(fileId, content, mimeType) {
             const token = await ensureValidToken();
             const blob = new Blob([content], { type: mimeType || 'text/plain' });
-            const response = await fetch(
+            const response = await callGoogleAPI(
                 `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media`,
                 {
                     method: 'PATCH',
@@ -2454,7 +2492,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             );
             if (!response.ok) {
                 const errText = await response.text();
-                throw new Error('Update failed: ' + errText);
+                throw new Error('Update failed: ' + (errText || `HTTP ${response.status}`));
             }
             return await response.json();
         }
@@ -2462,7 +2500,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         async function deleteFile(fileId) {
             const token = await ensureValidToken();
         
-            const response = await fetch(
+            const response = await callGoogleAPI(
                 `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
                 {
                     method: 'DELETE',
@@ -2477,14 +2515,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (response.status === 404) {
                     return;
                 }
-                throw new Error(await response.text());
+                throw new Error((await response.text()) || `Delete failed (HTTP ${response.status}).`);
             }
         }
 
         async function renameFile(fileId, newName) {
             const token = await ensureValidToken();
         
-            const response = await fetch(
+            const response = await callGoogleAPI(
                 `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`,
                 {
                     method: 'PATCH',
@@ -2499,7 +2537,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             );
         
             if (!response.ok) {
-                throw new Error(await response.text());
+                throw new Error((await response.text()) || `Rename failed (HTTP ${response.status}).`);
             }
         
             return await response.json();
@@ -2519,13 +2557,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         async function downloadFile(fileId) {
             const token = await ensureValidToken();
-            const response = await fetch(
+            const response = await callGoogleAPI(
                 `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
                 {
                     headers: { Authorization: `Bearer ${token}` }
                 }
             );
-            if (!response.ok) throw new Error("Download failed.");
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `Download failed (${response.status}).`);
+            }
             return response;
         }
 
