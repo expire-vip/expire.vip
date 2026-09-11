@@ -1163,6 +1163,31 @@
         </div>
     </div>
 
+    <!-- Unsaved Changes Confirmation -->
+    <div id="discardChangesModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] hidden backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="discardChangesTitle">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+            <div class="p-5 sm:p-6">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center" aria-hidden="true">
+                        <i class="fas fa-triangle-exclamation text-amber-600 dark:text-amber-400"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 id="discardChangesTitle" class="text-base font-semibold text-gray-900 dark:text-gray-100">Unsaved changes</h3>
+                        <p class="text-sm text-gray-600 dark:text-gray-300 mt-1.5">You have changes that have not been saved yet. What would you like to do?</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 sm:p-5 pt-0 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <button type="button" id="discardContinueBtn" onclick="resolveDiscardChanges(false)" class="w-full sm:w-auto px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition font-medium">
+                    Continue Editing
+                </button>
+                <button type="button" onclick="resolveDiscardChanges(true)" class="w-full sm:w-auto px-4 py-2.5 rounded-xl text-white bg-red-600 hover:bg-red-700 transition font-semibold">
+                    Discard Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4 overflow-y-auto">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden">
@@ -3449,14 +3474,40 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- MODAL CLOSE CONFIRMATION ----------
-        function tryCloseItemModal() {
-            if (isFormDirty()) {
-                if (confirm('You have unsaved changes. Are you sure you want to discard them?')) {
-                    closeItemModal();
+        let discardChangesResolver = null;
+
+        function showDiscardChangesDialog() {
+            return new Promise(resolve => {
+                const modal = document.getElementById('discardChangesModal');
+                if (!modal) {
+                    // Safe fallback: keep editing if the custom dialog is unavailable.
+                    resolve(false);
+                    return;
                 }
-            } else {
-                closeItemModal();
+                discardChangesResolver = resolve;
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    const continueBtn = document.getElementById('discardContinueBtn');
+                    if (continueBtn) continueBtn.focus();
+                });
+            });
+        }
+
+        function resolveDiscardChanges(shouldDiscard) {
+            const modal = document.getElementById('discardChangesModal');
+            if (modal) modal.classList.add('hidden');
+            const resolver = discardChangesResolver;
+            discardChangesResolver = null;
+            if (resolver) resolver(shouldDiscard);
+        }
+
+        async function tryCloseItemModal() {
+            if (isFormDirty()) {
+                const shouldDiscard = await showDiscardChangesDialog();
+                if (shouldDiscard) closeItemModal();
+                return;
             }
+            closeItemModal();
         }
 
         function openAddModal() {
@@ -5371,6 +5422,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         });
         document.getElementById('settingsModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('settingsModal')) closeSettings();
+        });
+        document.getElementById('discardChangesModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('discardChangesModal')) resolveDiscardChanges(false);
         });
         duplicateModal.addEventListener('click', (e) => {
             if (e.target === duplicateModal) closeDuplicateModal();
