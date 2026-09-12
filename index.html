@@ -532,6 +532,17 @@
             resize: both;
             box-sizing: border-box;
         }
+        /* iOS Safari zooms the page when focusing small text inputs/textareas.
+           Keep note editors at >=16px on touch/mobile so focus does not change
+           the page scale or push modal controls out of view. */
+        @media (max-width: 640px) {
+            .inline-note-editor,
+            #itemNotes {
+                font-size: 16px !important;
+                line-height: 1.45;
+                -webkit-text-size-adjust: 100%;
+            }
+        }
         .inline-note-actions {
             display: flex;
             justify-content: flex-end;
