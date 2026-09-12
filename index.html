@@ -401,6 +401,86 @@
         .dark #previewModal .preview-header .preview-meta {
             color: #9ca3af;
         }
+        #previewModal .preview-rename-editor {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            margin-top: 0.6rem;
+        }
+        #previewModal .preview-rename-editor input {
+            flex: 1;
+            min-width: 0;
+            border: 1px solid #9ca3af;
+            border-radius: 0.6rem;
+            padding: 0.5rem 0.7rem;
+            font-size: 16px;
+            line-height: 1.3;
+            background: #fff;
+            color: #111827;
+            outline: none;
+        }
+        .dark #previewModal .preview-rename-editor input {
+            background: #374151;
+            color: #f3f4f6;
+            border-color: #6b7280;
+        }
+        #previewModal .preview-rename-editor input:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px rgba(99,102,241,.2);
+        }
+        #previewModal .preview-rename-editor button {
+            border: none;
+            border-radius: 0.6rem;
+            padding: 0.5rem 0.7rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        #previewModal .preview-rename-save { background:#2563eb; color:white; }
+        #previewModal .preview-rename-cancel { background:#e5e7eb; color:#374151; }
+        .dark #previewModal .preview-rename-cancel { background:#374151; color:#e5e7eb; }
+        #previewModal .preview-nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.6rem;
+            margin-top: 0.6rem;
+        }
+        #previewModal .preview-nav button {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.6rem;
+            background: #f9fafb;
+            color: #374151;
+            padding: 0.4rem 0.65rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .dark #previewModal .preview-nav button {
+            background: #374151;
+            color: #f3f4f6;
+            border-color: #4b5563;
+        }
+        #previewModal .preview-nav button:disabled { opacity: .4; cursor: default; }
+        #previewModal .preview-nav #previewNavLabel {
+            min-width: 0;
+            flex: 1;
+            text-align: center;
+            font-size: 0.75rem;
+            color: #6b7280;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .dark #previewModal .preview-nav #previewNavLabel { color:#9ca3af; }
+        @media (max-width: 767px) {
+            #previewModal .preview-rename-editor input { font-size: 16px !important; }
+            #previewModal .preview-nav button { min-height: 40px; }
+        }
         #previewModal .preview-body {
             flex: 1;
             overflow: auto;
@@ -1341,10 +1421,21 @@
                         <button id="zoomResetBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0)">⟲</button>
                         <button id="zoomInBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
                         <button id="saveEditBtn" style="display:none;" class="save-edit-btn" onclick="saveEdit()">Save</button>
+                        <button id="previewRenameBtn" style="display:none;" onclick="startPreviewRename()" title="Rename file" aria-label="Rename file">✏️</button>
                         <button class="close-preview" onclick="closePreview()">✕</button>
                     </div>
                 </div>
                 <div id="previewMeta" class="preview-meta"></div>
+                <div id="previewRenameEditor" class="preview-rename-editor" style="display:none;">
+                    <input id="previewRenameInput" type="text" autocomplete="off" aria-label="New file name" />
+                    <button type="button" onclick="savePreviewRename()" class="preview-rename-save">Save</button>
+                    <button type="button" onclick="cancelPreviewRename()" class="preview-rename-cancel">Cancel</button>
+                </div>
+                <div id="previewNav" class="preview-nav" style="display:none;">
+                    <button type="button" id="previewPrevBtn" onclick="navigatePreview(-1)" title="Previous file" aria-label="Previous file">‹ <span>Previous</span></button>
+                    <span id="previewNavLabel"></span>
+                    <button type="button" id="previewNextBtn" onclick="navigatePreview(1)" title="Next file" aria-label="Next file"><span>Next</span> ›</button>
+                </div>
             </div>
             <div class="preview-body" id="previewBody">
                 <div class="preview-placeholder">Loading...</div>
@@ -2643,7 +2734,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- PREVIEW ----------
-        function openPreview(title, fileId, mimeType) {
+        function openPreview(title, fileId, mimeType, itemId = null, attachmentIndex = null) {
             const modal = document.getElementById('previewModal');
             const body = document.getElementById('previewBody');
             const titleEl = document.getElementById('previewTitle');
@@ -2661,16 +2752,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             zoomResetBtn.style.display = 'none';
             zoomInBtn.style.display = 'none';
             saveEditBtn.style.display = 'none';
+            const previewRenameBtn = document.getElementById('previewRenameBtn');
+            const previewRenameEditor = document.getElementById('previewRenameEditor');
+            const previewNav = document.getElementById('previewNav');
+            if (previewRenameBtn) previewRenameBtn.style.display = itemId ? 'inline-block' : 'none';
+            if (previewRenameEditor) previewRenameEditor.style.display = 'none';
+            if (previewNav) previewNav.style.display = 'none';
             
             meta.textContent = '';
             isEditMode = false;
-            previewData = { title, fileId, mimeType, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false, isVideo: false };
+            previewData = { title, fileId, mimeType, itemId, attachmentIndex, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false, isVideo: false };
             titleEl.textContent = title || 'Preview';
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
             body.style.alignItems = 'center';
             body.style.justifyContent = 'center';
             body.style.padding = '1rem';
             modal.classList.add('show');
+            updatePreviewNavigation();
 
             // Fetch metadata first
             getFileMetadata(fileId)
@@ -2799,6 +2897,108 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             } catch (error) {
                 console.error('PDF preview failed:', error);
                 body.innerHTML = `<iframe src="${url}"></iframe>`;
+            }
+        }
+
+        function getPreviewAttachments() {
+            if (!previewData.itemId) return [];
+            const item = (appData.items || []).find(i => i.id === previewData.itemId);
+            return item && Array.isArray(item.attachments) ? item.attachments : [];
+        }
+
+        function getPreviewAttachmentIndex() {
+            const attachments = getPreviewAttachments();
+            if (!attachments.length) return -1;
+            const byId = attachments.findIndex(a => a.driveFileId === previewData.fileId);
+            if (byId >= 0) return byId;
+            return Number.isInteger(previewData.attachmentIndex) ? Math.max(0, Math.min(previewData.attachmentIndex, attachments.length - 1)) : -1;
+        }
+
+        function updatePreviewNavigation() {
+            const nav = document.getElementById('previewNav');
+            const prev = document.getElementById('previewPrevBtn');
+            const next = document.getElementById('previewNextBtn');
+            const label = document.getElementById('previewNavLabel');
+            if (!nav || !prev || !next || !label) return;
+            const attachments = getPreviewAttachments();
+            const index = getPreviewAttachmentIndex();
+            if (attachments.length <= 1 || index < 0) {
+                nav.style.display = 'none';
+                return;
+            }
+            nav.style.display = 'flex';
+            prev.disabled = index <= 0;
+            next.disabled = index >= attachments.length - 1;
+            label.textContent = `${index + 1} of ${attachments.length} · ${attachments[index].name}`;
+            previewData.attachmentIndex = index;
+        }
+
+        async function navigatePreview(delta) {
+            const attachments = getPreviewAttachments();
+            let index = getPreviewAttachmentIndex();
+            if (!attachments.length || index < 0) return;
+            const nextIndex = index + delta;
+            if (nextIndex < 0 || nextIndex >= attachments.length) return;
+            const att = attachments[nextIndex];
+            previewData.attachmentIndex = nextIndex;
+            openPreview(att.name, att.driveFileId, att.mimeType, previewData.itemId, nextIndex);
+        }
+
+        function startPreviewRename() {
+            const editor = document.getElementById('previewRenameEditor');
+            const input = document.getElementById('previewRenameInput');
+            const button = document.getElementById('previewRenameBtn');
+            if (!editor || !input || !previewData.itemId) return;
+            input.value = previewData.title || '';
+            editor.style.display = 'flex';
+            if (button) button.style.display = 'none';
+            requestAnimationFrame(() => {
+                input.focus();
+                input.select();
+            });
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); savePreviewRename(); }
+                if (e.key === 'Escape') { e.preventDefault(); cancelPreviewRename(); }
+            };
+        }
+
+        function cancelPreviewRename() {
+            const editor = document.getElementById('previewRenameEditor');
+            const button = document.getElementById('previewRenameBtn');
+            if (editor) editor.style.display = 'none';
+            if (button && previewData.itemId) button.style.display = 'inline-block';
+        }
+
+        async function savePreviewRename() {
+            const input = document.getElementById('previewRenameInput');
+            if (!input || !previewData.itemId) return;
+            const newName = input.value.trim();
+            const oldName = previewData.title || '';
+            if (!newName) { toastWarning('Please enter a file name.'); return; }
+            if (newName === oldName) { cancelPreviewRename(); return; }
+            try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`renaming ${oldName}`))) return;
+                const item = (appData.items || []).find(i => i.id === previewData.itemId);
+                const att = item && (item.attachments || []).find(a => a.driveFileId === previewData.fileId);
+                if (!att) {
+                    toastError('That file is no longer attached to this item. Please reopen the item.');
+                    closePreview();
+                    return;
+                }
+                await withLoading(`Renaming ${oldName}...`, async () => {
+                    await renameFile(att.driveFileId, newName);
+                });
+                att.name = newName;
+                previewData.title = newName;
+                const titleEl = document.getElementById('previewTitle');
+                if (titleEl) titleEl.textContent = newName;
+                cancelPreviewRename();
+                await syncToCloud();
+                renderAll();
+                updatePreviewNavigation();
+                showToast('File renamed successfully.');
+            } catch (err) {
+                toastError('Rename failed: ' + err.message);
             }
         }
 
@@ -2964,6 +3164,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             applyPreviewImageTransform(img);
         }
 
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('previewModal');
+            if (!modal || !modal.classList.contains('show')) return;
+            const active = document.activeElement;
+            if (active && ['INPUT', 'TEXTAREA'].includes(active.tagName)) return;
+            if (e.key === 'ArrowLeft') navigatePreview(-1);
+            if (e.key === 'ArrowRight') navigatePreview(1);
+        });
+
         function closePreview() {
             document.getElementById('previewModal').classList.remove('show');
             // Clean up any blob URLs
@@ -2987,6 +3196,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             isEditMode = false;
             saveEditBtn.style.display = 'none';
+            const previewRenameBtn = document.getElementById('previewRenameBtn');
+            const previewRenameEditor = document.getElementById('previewRenameEditor');
+            const previewNav = document.getElementById('previewNav');
+            if (previewRenameBtn) previewRenameBtn.style.display = 'none';
+            if (previewRenameEditor) previewRenameEditor.style.display = 'none';
+            if (previewNav) previewNav.style.display = 'none';
+            previewData = {};
         }
 
         // ---------- FEATURED THUMBNAILS ----------
@@ -3111,7 +3327,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!ordered.length) return '';
             const coverId = getCoverPreviewEntry(item)?.attachmentId;
             return `<div class="featured-previews">${ordered.map(p => `
-                <div class="featured-preview ${p.attachmentId === coverId ? 'featured-cover' : ''}" onclick="previewFileById('${p.att.driveFileId}', '${escapeHtml(p.att.name)}', '${escapeHtml(p.att.mimeType)}')" title="${escapeHtml(p.att.name)}">
+                <div class="featured-preview ${p.attachmentId === coverId ? 'featured-cover' : ''}" onclick="previewFileById('${p.att.driveFileId}', '${escapeHtml(p.att.name)}', '${escapeHtml(p.att.mimeType)}', '${item.id}', ${attachments.findIndex(a => a.driveFileId === p.att.driveFileId)})" title="${escapeHtml(p.att.name)}">
                     <img data-thumbnail-id="${escapeHtml(p.thumbnailId)}" alt="${escapeHtml(p.att.name)} thumbnail" />
                     ${p.attachmentId === coverId ? '<span class="featured-cover-badge">Cover</span>' : ''}
                 </div>`).join('')}</div>`;
@@ -3197,7 +3413,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function previewAttachment(idx) {
             const att = formAttachments[idx];
             if (!att) return;
-            openPreview(att.name, att.driveFileId, att.mimeType);
+            openPreview(att.name, att.driveFileId, att.mimeType, editingItemId, idx);
         }
 
         async function handleAttachmentUpload(event) {
@@ -4913,14 +5129,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.attachments && item.attachments.length > 0) {
                     attachmentsHtml = `
                         <div class="mt-2.5 flex flex-wrap gap-1.5">
-                            ${item.attachments.map(att => {
+                            ${item.attachments.map((att, attIdx) => {
                                 const featured = isAttachmentFeatured(item, att.driveFileId);
                                 const entry = featured ? (item.previewAttachments || []).find(p => p.attachmentId === att.driveFileId) : null;
                                 return `
                                 <span class="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700/60 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600">
                                     ${getFileIcon(att.mimeType)}
-                                    <span class="truncate max-w-[80px] cursor-pointer hover:underline" onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}')" title="Click to preview">${escapeHtml(att.name)}</span>
-                                    <button onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}')" class="hover:text-purple-600 dark:hover:text-purple-400" title="Preview"><i class="fas fa-eye text-[10px]"></i></button>
+                                    <span class="truncate max-w-[80px] cursor-pointer hover:underline" onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}', '${item.id}', ${attIdx})" title="Click to preview">${escapeHtml(att.name)}</span>
+                                    <button onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}', '${item.id}', ${attIdx})" class="hover:text-purple-600 dark:hover:text-purple-400" title="Preview"><i class="fas fa-eye text-[10px]"></i></button>
                                     <button onclick="downloadFileById('${att.driveFileId}', '${escapeHtml(att.name)}')" class="hover:text-blue-600 dark:hover:text-blue-400" title="Download"><i class="fas fa-download text-[10px]"></i></button>
                                     <button onclick="setAttachmentFeatured('${item.id}', '${att.driveFileId}', ${featured ? 'false' : 'true'})" class="${featured ? 'text-yellow-500' : 'text-gray-400'} hover:text-yellow-500" title="${featured ? 'Remove featured preview' : 'Show as thumbnail'}" aria-label="${featured ? 'Remove featured preview' : 'Show as thumbnail'}"><i class="fas fa-star text-[10px]"></i></button>
                                     ${featured ? `<button onclick="setAttachmentCover('${item.id}', '${att.driveFileId}')" class="${entry?.cover ? 'text-amber-500' : 'text-gray-400'} hover:text-amber-500" title="Set as cover" aria-label="Set as cover"><i class="fas fa-crown text-[10px]"></i></button>` : ''}
@@ -5010,8 +5226,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // Helper to preview from item card
-        function previewFileById(fileId, fileName, mimeType) {
-            openPreview(fileName, fileId, mimeType);
+        function previewFileById(fileId, fileName, mimeType, itemId = null, attachmentIndex = null) {
+            openPreview(fileName, fileId, mimeType, itemId, attachmentIndex);
         }
 
         // Helper to download attachment from item card
