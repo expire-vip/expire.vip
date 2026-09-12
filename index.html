@@ -69,6 +69,17 @@
         }
         .app-container { max-width: 500px; margin: 0 auto; min-height: 100vh; background-color: #ffffff; box-shadow: 0 0 20px rgba(0,0,0,0.05); }
         .hidden-auth { display: none; }
+        /* Keep modal scrolling inside the dialog on mobile and respect safe-area insets. */
+        body.modal-scroll-locked { overflow: hidden; }
+        .modal-safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+        .modal-scroll-content {
+            min-height: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+        }
         .toast {
             visibility: hidden;
             min-width: 280px;
@@ -1089,8 +1100,8 @@
     </div>
 
     <!-- Duplicate / Renew Item Modal -->
-    <div id="duplicateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-4 overflow-y-auto">
-        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[90vh] flex flex-col overflow-hidden">
+    <div id="duplicateModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="duplicateModalTitle" style="touch-action:none;">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col min-h-0 overflow-hidden">
             <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
                 <div>
                     <h3 id="duplicateModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Duplicate Item</h3>
@@ -1100,7 +1111,7 @@
                     <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
-            <div class="p-5 sm:p-6 space-y-4 overflow-y-auto">
+            <div class="p-5 sm:p-6 space-y-4 flex-1 modal-scroll-content">
                 <div>
                     <label for="duplicateItemNameInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">New item name</label>
                     <input type="text" id="duplicateItemNameInput" maxlength="120" class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
@@ -1156,7 +1167,7 @@
                     Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.
                 </div>
             </div>
-            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80 flex-shrink-0">
+            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/95 dark:bg-gray-800/95 flex-shrink-0 sticky bottom-0 z-10 modal-safe-bottom">
                 <button type="button" onclick="closeDuplicateModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Cancel</button>
                 <button type="button" id="confirmDuplicateBtn" onclick="confirmDuplicateItem()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Duplicate</button>
             </div>
@@ -3735,6 +3746,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- DUPLICATE / RENEW ITEM ----------
         let duplicateMode = 'duplicate';
+        let duplicateModalScrollY = 0;
 
         function formatDuplicateOriginalDetails(item) {
             if (!item.date || item.noExpiration) {
@@ -3811,6 +3823,28 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return '';
         }
 
+        function lockDuplicateModalScroll() {
+            if (!duplicateModal || document.body.classList.contains('modal-scroll-locked')) return;
+            duplicateModalScrollY = window.scrollY || window.pageYOffset || 0;
+            document.body.classList.add('modal-scroll-locked');
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${duplicateModalScrollY}px`;
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+            document.body.style.width = '100%';
+        }
+
+        function unlockDuplicateModalScroll() {
+            if (!document.body.classList.contains('modal-scroll-locked')) return;
+            document.body.classList.remove('modal-scroll-locked');
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
+            document.body.style.width = '';
+            window.scrollTo(0, duplicateModalScrollY);
+        }
+
         function openDuplicateModal(itemId) {
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
@@ -3828,6 +3862,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             confirmDuplicateBtn.textContent = 'Duplicate';
             confirmDuplicateBtn.disabled = false;
             duplicateModal.classList.remove('hidden');
+            lockDuplicateModalScroll();
             setTimeout(() => duplicateItemNameEl.focus(), 50);
         }
 
@@ -3862,6 +3897,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             confirmDuplicateBtn.textContent = 'Renew';
             confirmDuplicateBtn.disabled = false;
             duplicateModal.classList.remove('hidden');
+            lockDuplicateModalScroll();
             setTimeout(() => duplicateItemNameEl.focus(), 50);
         }
 
@@ -3869,6 +3905,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicatingItemId = null;
             duplicateMode = 'duplicate';
             duplicateModal.classList.add('hidden');
+            unlockDuplicateModalScroll();
             if (duplicateItemNameEl) duplicateItemNameEl.value = '';
             if (duplicateDateEl) duplicateDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.value = '';
@@ -5427,7 +5464,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (e.target === document.getElementById('discardChangesModal')) resolveDiscardChanges(false);
         });
         duplicateModal.addEventListener('click', (e) => {
-            if (e.target === duplicateModal) closeDuplicateModal();
+            // Keep the duplicate/renew dialog open on backdrop taps; mobile touch
+            // gestures can otherwise end outside the scrollable content.
+            if (e.target === duplicateModal) e.preventDefault();
         });
         // Close preview with Escape
         document.addEventListener('keydown', (e) => {
