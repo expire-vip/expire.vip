@@ -1420,6 +1420,7 @@
                         <button id="zoomOutBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(-0.2)">🔍−</button>
                         <button id="zoomResetBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0)">⟲</button>
                         <button id="zoomInBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
+                        <button id="pdfViewerToggleBtn" style="display:none;" onclick="togglePdfViewer()" title="Switch PDF viewer"></button>
                         <button id="saveEditBtn" style="display:none;" class="save-edit-btn" onclick="saveEdit()">Save</button>
                         <button id="previewRenameBtn" style="display:none;" onclick="startPreviewRename()" title="Rename file" aria-label="Rename file">✏️</button>
                         <button class="close-preview" onclick="closePreview()">✕</button>
@@ -2735,6 +2736,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- PREVIEW ----------
         function openPreview(title, fileId, mimeType, itemId = null, attachmentIndex = null) {
+            if (previewData && previewData.pdfUrl && previewData.pdfUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(previewData.pdfUrl);
+            }
             const modal = document.getElementById('previewModal');
             const body = document.getElementById('previewBody');
             const titleEl = document.getElementById('previewTitle');
@@ -2752,6 +2756,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             zoomResetBtn.style.display = 'none';
             zoomInBtn.style.display = 'none';
             saveEditBtn.style.display = 'none';
+            const pdfViewerToggleBtn = document.getElementById('pdfViewerToggleBtn');
+            if (pdfViewerToggleBtn) pdfViewerToggleBtn.style.display = 'none';
             const previewRenameBtn = document.getElementById('previewRenameBtn');
             const previewRenameEditor = document.getElementById('previewRenameEditor');
             const previewNav = document.getElementById('previewNav');
@@ -2761,7 +2767,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             
             meta.textContent = '';
             isEditMode = false;
-            previewData = { title, fileId, mimeType, itemId, attachmentIndex, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false, isVideo: false };
+            previewData = { title, fileId, mimeType, itemId, attachmentIndex, rawText: '', isJson: false, pretty: false, originalContent: '', isImage: false, isVideo: false, isPdf: false, pdfUrl: '', pdfViewer: 'custom' };
             titleEl.textContent = title || 'Preview';
             body.innerHTML = `<div class="preview-placeholder">Loading...</div>`;
             body.style.alignItems = 'center';
@@ -2816,9 +2822,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         body.innerHTML = videoHtml;
                         // No zoom controls for video
                     } else if (contentType === 'application/pdf') {
+                        previewData.isPdf = true;
+                        previewData.pdfViewer = 'custom';
                         const blob = await response.blob();
                         const url = URL.createObjectURL(blob);
-                        await renderPdfPreview(url, body);
+                        previewData.pdfUrl = url;
+                        await setPdfViewerMode('custom');
+                        const pdfViewerToggleBtn = document.getElementById('pdfViewerToggleBtn');
+                        if (pdfViewerToggleBtn) {
+                            if (window.pdfjsLib) {
+                                pdfViewerToggleBtn.style.display = 'inline-block';
+                                updatePdfViewerToggleButton();
+                            } else {
+                                pdfViewerToggleBtn.style.display = 'none';
+                            }
+                        }
                     } else if (contentType.includes('json') || contentType.includes('text')) {
                         const text = await response.text();
                         previewData.rawText = text;
@@ -2857,9 +2875,60 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 });
         }
 
+        function updatePdfViewerToggleButton() {
+            const button = document.getElementById('pdfViewerToggleBtn');
+            if (!button || !previewData.isPdf || !window.pdfjsLib) return;
+            if (previewData.pdfViewer === 'browser') {
+                button.textContent = '📄 PDF.js';
+                button.title = 'Switch to the app PDF viewer';
+                button.setAttribute('aria-label', 'Switch to PDF.js viewer');
+            } else {
+                button.textContent = '🌐 Browser PDF';
+                button.title = 'Switch to the browser PDF viewer';
+                button.setAttribute('aria-label', 'Switch to browser PDF viewer');
+            }
+        }
+
+        async function setPdfViewerMode(mode) {
+            if (!previewData.isPdf || !previewData.pdfUrl) return;
+            const body = document.getElementById('previewBody');
+            if (!body) return;
+
+            if (mode === 'browser') {
+                previewData.pdfViewer = 'browser';
+                body.innerHTML = `<iframe src="${previewData.pdfUrl}" title="PDF browser viewer"></iframe>`;
+                body.style.alignItems = 'stretch';
+                body.style.justifyContent = 'stretch';
+                body.style.padding = '0';
+                updatePdfViewerToggleButton();
+                return;
+            }
+
+            if (!window.pdfjsLib) {
+                toastWarning('The app PDF viewer is unavailable. Using the browser PDF viewer instead.');
+                previewData.pdfViewer = 'browser';
+                body.innerHTML = `<iframe src="${previewData.pdfUrl}" title="PDF browser viewer"></iframe>`;
+                body.style.alignItems = 'stretch';
+                body.style.justifyContent = 'stretch';
+                body.style.padding = '0';
+                updatePdfViewerToggleButton();
+                return;
+            }
+
+            previewData.pdfViewer = 'custom';
+            await renderPdfPreview(previewData.pdfUrl, body);
+            updatePdfViewerToggleButton();
+        }
+
+        function togglePdfViewer() {
+            if (!previewData.isPdf) return;
+            const nextMode = previewData.pdfViewer === 'browser' ? 'custom' : 'browser';
+            setPdfViewerMode(nextMode).catch(err => toastError('Could not switch PDF viewer: ' + err.message));
+        }
+
         async function renderPdfPreview(url, body) {
             if (!window.pdfjsLib) {
-                body.innerHTML = `<iframe src="${url}"></iframe>`;
+                body.innerHTML = `<iframe src="${url}" title="PDF browser viewer"></iframe>`;
                 return;
             }
             const container = document.createElement('div');
@@ -2896,7 +2965,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
             } catch (error) {
                 console.error('PDF preview failed:', error);
-                body.innerHTML = `<iframe src="${url}"></iframe>`;
+                previewData.pdfViewer = 'browser';
+                body.innerHTML = `<iframe src="${url}" title="PDF browser viewer"></iframe>`;
+                body.style.alignItems = 'stretch';
+                body.style.justifyContent = 'stretch';
+                body.style.padding = '0';
             }
         }
 
@@ -3176,12 +3249,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function closePreview() {
             document.getElementById('previewModal').classList.remove('show');
             // Clean up any blob URLs
+            const pdfUrl = previewData && previewData.pdfUrl;
             const iframe = document.querySelector('#previewBody iframe');
             if (iframe) {
                 const src = iframe.src;
-                if (src.startsWith('blob:')) {
+                if (src.startsWith('blob:') && src !== pdfUrl) {
                     URL.revokeObjectURL(src);
                 }
+            }
+            if (pdfUrl && pdfUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(pdfUrl);
             }
             const img = document.querySelector('#previewBody img');
             if (img && img.src && img.src.startsWith('blob:')) {
