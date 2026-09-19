@@ -2949,13 +2949,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     const viewport = page.getViewport({ scale });
                     const canvas = document.createElement('canvas');
                     canvas.className = 'pdf-preview-page';
-                    const dpr = Math.min(2, window.devicePixelRatio || 1);
-                    canvas.width = Math.ceil(viewport.width * dpr);
-                    canvas.height = Math.ceil(viewport.height * dpr);
+                    // Use the device's full pixel density (up to 3x) for the PDF canvas.
+                    // Keep the CSS display size unchanged so the page still fits the viewer,
+                    // but preserve enough backing pixels for readable text when zoomed.
+                    const devicePixelRatio = window.devicePixelRatio || 1;
+                    const outputScale = Math.min(3, Math.max(1.5, devicePixelRatio));
+                    canvas.width = Math.ceil(viewport.width * outputScale);
+                    canvas.height = Math.ceil(viewport.height * outputScale);
                     canvas.style.width = `${Math.ceil(viewport.width)}px`;
                     canvas.style.height = `${Math.ceil(viewport.height)}px`;
-                    const ctx = canvas.getContext('2d');
-                    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                    const ctx = canvas.getContext('2d', { alpha: false });
+                    ctx.setTransform(outputScale, 0, 0, outputScale, 0, 0);
                     await page.render({ canvasContext: ctx, viewport }).promise;
                     container.appendChild(canvas);
                     const label = document.createElement('div');
