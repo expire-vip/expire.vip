@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Expire.vip – Sudoku</title>
+  <meta name="description" content="Play Sudoku on Expire.vip. Pause, resume, save your game and record completed games in Google Calendar.">
+  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body { background:#f3f4f6; }
+    .app-container { max-width:500px; margin:0 auto; min-height:100vh; background:#fff; box-shadow:0 0 20px rgba(0,0,0,.05); }
+    .sudoku-grid { display:grid; grid-template-columns:repeat(9,1fr); aspect-ratio:1; width:100%; border:3px solid #4f46e5; background:#4f46e5; gap:1px; }
+    .cell { min-width:0; border:0; outline:0; text-align:center; font-size:clamp(1rem,7vw,2rem); font-weight:600; background:#fff; color:#111827; }
+    .dark .cell { background:#1f2937; color:#f9fafb; }
+    .cell.given { background:#eef2ff; color:#312e81; font-weight:800; }
+    .dark .cell.given { background:#312e81; color:#e0e7ff; }
+    .cell.selected { background:#e0e7ff !important; }
+    .dark .cell.selected { background:#3730a3 !important; }
+    .cell.same-number { background:#f5f3ff; }
+    .dark .cell.same-number { background:#2e1065; }
+    .cell.conflict { background:#fee2e2 !important; color:#991b1b; }
+    .dark .cell.conflict { background:#7f1d1d !important; color:#fecaca; }
+    .cell:nth-child(3n) { border-right:2px solid #4f46e5; }
+    .cell:nth-child(9n) { border-right:0; }
+    .cell:nth-child(n+19):nth-child(-n+27),
+    .cell:nth-child(n+46):nth-child(-n+54) { border-bottom:2px solid #4f46e5; }
+    .number-pad { display:grid; grid-template-columns:repeat(9,1fr); gap:.4rem; }
+    @media(max-width:420px){ .number-pad{grid-template-columns:repeat(5,1fr)} }
+    .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(10px); opacity:0; pointer-events:none; z-index:100; transition:.2s; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100">
+  <div class="app-container min-h-screen flex flex-col bg-white dark:bg-gray-900">
+    <header class="bg-indigo-600 dark:bg-indigo-800 text-white p-5 shadow-md flex items-center justify-between rounded-b-xl">
+      <div>
+        <a href="/" class="text-2xl font-bold tracking-tight hover:opacity-90">📅 Expire.vip</a>
+        <p class="text-indigo-200 text-xs mt-1">Games · Sudoku</p>
+      </div>
+      <a href="/" class="text-white/80 hover:text-white text-sm">Home</a>
+    </header>
+
+    <main class="flex-grow p-5">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-xl font-bold text-gray-900 dark:text-white">Sudoku</h1>
+          <p class="text-xs text-gray-500 dark:text-gray-400">Basic 9×9 puzzle</p>
+        </div>
+        <div class="text-right">
+          <div id="timer" class="font-mono text-lg font-bold text-indigo-600 dark:text-indigo-400">00:00</div>
+          <div id="status" class="text-[11px] text-gray-500 dark:text-gray-400">Playing</div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mb-4">
+        <button id="pauseBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl">
+          <i class="fas fa-pause mr-1"></i> Pause
+        </button>
+        <button id="newBtn" class="flex-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 font-semibold py-2.5 rounded-xl">
+          <i class="fas fa-rotate mr-1"></i> New Game
+        </button>
+      </div>
+
+      <div class="bg-gray-50 dark:bg-gray-800/70 border border-gray-200 dark:border-gray-700 rounded-2xl p-2">
+        <div id="grid" class="sudoku-grid" aria-label="Sudoku board"></div>
+      </div>
+
+      <div id="numberPad" class="number-pad mt-4"></div>
+
+      <div class="grid grid-cols-2 gap-2 mt-3">
+        <button id="eraseBtn" class="py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+          <i class="fas fa-eraser mr-1"></i> Erase
+        </button>
+        <button id="checkBtn" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">
+          <i class="fas fa-check mr-1"></i> Check
+        </button>
+      </div>
+
+      <section class="mt-5 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <h2 class="font-semibold text-indigo-900 dark:text-indigo-100">Google sync</h2>
+            <p id="syncText" class="text-xs text-indigo-700 dark:text-indigo-300 mt-1">Game is saved locally.</p>
+          </div>
+          <button id="googleBtn" class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-3 py-2 rounded-lg">
+            Sign in
+          </button>
+        </div>
+        <p class="text-[11px] text-indigo-600 dark:text-indigo-300 mt-3">
+          Uses the same Google OAuth client/scopes as Expire.vip. The game state is stored in Drive app data; completed games can be added to your primary Google Calendar.
+        </p>
+      </section>
+
+      <div id="winPanel" class="hidden mt-4 p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-center">
+        <div class="text-3xl mb-2">🎉</div>
+        <h2 class="text-lg font-bold text-emerald-900 dark:text-emerald-100">Puzzle solved!</h2>
+        <p id="winText" class="text-sm text-emerald-700 dark:text-emerald-300 mt-1"></p>
+        <button id="winNewBtn" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl">New Game</button>
+      </div>
+    </main>
+
+    <footer class="p-5 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-center text-xs text-gray-400">
+      <a href="/" class="hover:underline">← Back to Expire.vip</a>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast bg-gray-900 text-white px-4 py-3 rounded-xl shadow-xl text-sm"></div>
+
+<script>
+const CLIENT_ID = '592330790483-lc90hejib7bng3to68e02d6vubb27fin.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events openid email';
+const DRIVE_FILE_NAME = 'expire_sudoku.json';
+const STORAGE_KEY = 'expire_sudoku_state_v1';
+
+let tokenClient = null;
+let accessToken = null;
+let tokenExpiry = 0;
+let pendingTokenResolve = null, pendingTokenReject = null;
+let driveFileId = null;
+let state = null;
+let selectedIndex = null;
+let timerHandle = null;
+
+const $ = id => document.getElementById(id);
+const toast = (msg) => {
+  $('toast').textContent = msg;
+  $('toast').classList.add('show');
+  setTimeout(() => $('toast').classList.remove('show'), 2200);
+};
+
+function blankState() {
+  return {
+    version: 1,
+    puzzle: null,
+    solution: null,
+    values: Array(81).fill(0),
+    given: Array(81).fill(false),
+    startedAt: null,
+    elapsedSeconds: 0,
+    running: false,
+    completed: false,
+    calendarEventId: null
+  };
+}
+
+function formatTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+           : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function currentElapsed() {
+  if (!state || !state.running || !state.startedAt) return state?.elapsedSeconds || 0;
+  return state.elapsedSeconds + Math.floor((Date.now() - state.startedAt) / 1000);
+}
+
+function startTimer() {
+  clearInterval(timerHandle);
+  timerHandle = setInterval(() => {
+    if (!state.completed && state.running) {
+      $('timer').textContent = formatTime(currentElapsed());
+    }
+  }, 250);
+}
+
+function setRunning(running) {
+  state.running = running;
+  if (running && !state.startedAt) state.startedAt = Date.now();
+  $('status').textContent = state.completed ? 'Completed' : (running ? 'Playing' : 'Paused');
+  $('pauseBtn').innerHTML = running
+    ? '<i class="fas fa-pause mr-1"></i> Pause'
+    : '<i class="fas fa-play mr-1"></i> Resume';
+  render();
+  saveLocal();
+  saveDriveSoon();
+}
+
+function pauseGame() {
+  if (state.completed || !state.running) return;
+  state.elapsedSeconds = currentElapsed();
+  state.startedAt = null;
+  setRunning(false);
+}
+
+function resumeGame() {
+  if (state.completed || state.running) return;
+  state.startedAt = Date.now();
+  setRunning(true);
+}
+
+function shuffle(a) {
+  for (let i=a.length-1;i>0;i--) {
+    const j=Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function generateSolution() {
+  const board = Array(81).fill(0);
+  const ok = (idx,n) => {
+    const r=Math.floor(idx/9), c=idx%9;
+    for(let x=0;x<9;x++) if(board[r*9+x]===n || board[x*9+c]===n) return false;
+    const br=Math.floor(r/3)*3, bc=Math.floor(c/3)*3;
+    for(let rr=br;rr<br+3;rr++) for(let cc=bc;cc<bc+3;cc++) if(board[rr*9+cc]===n) return false;
+    return true;
+  };
+  function fill(idx) {
+    if(idx===81) return true;
+    const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+    for(const n of nums) {
+      if(ok(idx,n)) { board[idx]=n; if(fill(idx+1)) return true; board[idx]=0; }
+    }
+    return false;
+  }
+  fill(0);
+  return board;
+}
+
+function makePuzzle(solution) {
+  const puzzle = [...solution];
+  const target = 40 + Math.floor(Math.random()*8); // 40-47 blanks
+  let removed=0;
+  for(const idx of shuffle([...Array(81).keys()])) {
+    if(removed>=target) break;
+    puzzle[idx]=0; removed++;
+  }
+  return puzzle;
+}
+
+function newGame() {
+  const solution = generateSolution();
+  const puzzle = makePuzzle(solution);
+  state = blankState();
+  state.solution = solution;
+  state.puzzle = puzzle;
+  state.values = [...puzzle];
+  state.given = puzzle.map(v => v !== 0);
+  state.startedAt = Date.now();
+  state.running = true;
+  selectedIndex = null;
+  $('winPanel').classList.add('hidden');
+  startTimer();
+  render();
+  saveLocal();
+  saveDriveSoon();
+}
+
+function isValidMove(index, value) {
+  if (!value) return true;
+  const r=Math.floor(index/9), c=index%9;
+  for(let x=0;x<9;x++) {
+    if(x!==c && state.values[r*9+x]===value) return false;
+    if(x!==r && state.values[x*9+c]===value) return false;
+  }
+  const br=Math.floor(r/3)*3, bc=Math.floor(c/3)*3;
+  for(let rr=br;rr<br+3;rr++) for(let cc=bc;cc<bc+3;cc++) {
+    const i=rr*9+cc;
+    if(i!==index && state.values[i]===value) return false;
+  }
+  return true;
+}
+
+function setValue(index, value) {
+  if (state.completed || !state.running || state.given[index]) return;
+  if (value && !isValidMove(index, value)) {
+    toast('That number conflicts with the current board.');
+    return;
+  }
+  state.values[index] = value;
+  render();
+  saveLocal();
+  saveDriveSoon();
+  if (state.values.every((v,i) => v === state.solution[i])) completeGame();
+}
+
+function render() {
+  const grid=$('grid');
+  grid.innerHTML='';
+  for(let i=0;i<81;i++) {
+    const b=document.createElement('button');
+    b.className='cell';
+    b.type='button';
+    b.textContent=state.values[i] || '';
+    if(state.given[i]) b.classList.add('given');
+    if(selectedIndex===i) b.classList.add('selected');
+    if(selectedIndex!==null && state.values[i] && state.values[i]===state.values[selectedIndex]) b.classList.add('same-number');
+    if(state.values[i] && !isValidMove(i,state.values[i])) b.classList.add('conflict');
+    b.addEventListener('click',()=>{ selectedIndex=i; render(); });
+    grid.appendChild(b);
+  }
+  $('timer').textContent=formatTime(currentElapsed());
+  $('status').textContent=state.completed?'Completed':(state.running?'Playing':'Paused');
+  $('pauseBtn').disabled=state.completed;
+  $('pauseBtn').classList.toggle('opacity-50',state.completed);
+}
+
+function checkBoard() {
+  let wrong=0, empty=0;
+  state.values.forEach((v,i)=>{
+    if(v===0 && !state.given[i]) empty++;
+    else if(v && v!==state.solution[i]) wrong++;
+  });
+  if(wrong) toast(`${wrong} incorrect ${wrong===1?'cell':'cells'}.`);
+  else if(empty) toast(`No mistakes so far — ${empty} cells left.`);
+  else completeGame();
+}
+
+async function completeGame() {
+  if(state.completed) return;
+  state.elapsedSeconds=currentElapsed();
+  state.startedAt=null;
+  state.running=false;
+  state.completed=true;
+  render();
+  clearInterval(timerHandle);
+  $('winText').textContent=`Solved in ${formatTime(state.elapsedSeconds)}.`;
+  $('winPanel').classList.remove('hidden');
+  saveLocal();
+  await saveDriveNow();
+  if(accessToken) await createCompletionCalendarEvent();
+}
+
+$('numberPad').innerHTML = [1,2,3,4,5,6,7,8,9].map(n =>
+  `<button data-n="${n}" class="py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 font-bold hover:bg-indigo-50 dark:hover:bg-gray-700">${n}</button>`
+).join('');
+document.querySelectorAll('#numberPad button').forEach(b=>b.onclick=()=> {
+  if(selectedIndex!==null) setValue(selectedIndex,Number(b.dataset.n));
+});
+$('eraseBtn').onclick=()=>{ if(selectedIndex!==null) setValue(selectedIndex,0); };
+$('checkBtn').onclick=checkBoard;
+$('pauseBtn').onclick=()=>state.running?pauseGame():resumeGame();
+$('newBtn').onclick=()=>{ if(confirm('Start a new Sudoku? Your current game will be replaced.')) newGame(); };
+$('winNewBtn').onclick=newGame;
+
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9'&&selectedIndex!==null) setValue(selectedIndex,Number(e.key));
+  if(e.key==='Backspace'||e.key==='Delete') { if(selectedIndex!==null) setValue(selectedIndex,0); }
+  if(e.key===' ') { e.preventDefault(); state.running?pauseGame():resumeGame(); }
+});
+
+function saveLocal() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+function loadLocal() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; }
+}
+
+let saveTimer=null;
+function saveDriveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>saveDriveNow().catch(console.error),700);
+}
+
+/* ---------- Google OAuth / Drive / Calendar ---------- */
+function tokenIsValid() { return accessToken && Date.now() < tokenExpiry; }
+function saveToken(token, expiresIn) {
+  accessToken=token;
+  tokenExpiry=Date.now()+Math.max(1,(expiresIn||3600)-60)*1000;
+}
+function requestGoogleToken(opts={}) {
+  return new Promise((resolve,reject)=>{
+    pendingTokenResolve=resolve; pendingTokenReject=reject;
+    tokenClient.requestAccessToken(opts);
+  });
+}
+async function googleCallback(response) {
+  if(response.error) {
+    pendingTokenReject?.(new Error(response.error_description||response.error));
+    pendingTokenResolve=null; pendingTokenReject=null; return;
+  }
+  saveToken(response.access_token,response.expires_in);
+  pendingTokenResolve?.(response.access_token);
+  pendingTokenResolve=null; pendingTokenReject=null;
+}
+async function ensureToken() {
+  if(tokenIsValid()) return accessToken;
+  if(!tokenClient) throw new Error('Google authentication is not ready.');
+  return requestGoogleToken({prompt:'consent'});
+}
+async function googleFetch(url, options={}) {
+  const token=await ensureToken();
+  const headers={...(options.headers||{}),Authorization:`Bearer ${token}`};
+  let res=await fetch(url,{...options,headers});
+  if(res.status===401) {
+    accessToken=null;
+    const fresh=await requestGoogleToken({prompt:''});
+    res=await fetch(url,{...options,headers:{...(options.headers||{}),Authorization:`Bearer ${fresh}`}});
+  }
+  return res;
+}
+async function findDriveFile() {
+  const q=`name='${DRIVE_FILE_NAME}'`;
+  const res=await googleFetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`);
+  if(!res.ok) throw new Error(await res.text());
+  const data=await res.json();
+  return data.files?.[0]||null;
+}
+async function loadDrive() {
+  const meta=await findDriveFile();
+  if(!meta) {
+    driveFileId=null;
+    await saveDriveNow(true);
+    return;
+  }
+  driveFileId=meta.id;
+  const res=await googleFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+  if(!res.ok) throw new Error(await res.text());
+  const remote=await res.json();
+  if(remote?.puzzle && !state.completed) {
+    state=remote;
+    render();
+    if(state.running) startTimer();
+    saveLocal();
+  }
+}
+async function saveDriveNow(forceCreate=false) {
+  if(!accessToken) return;
+  try {
+    if(!driveFileId) {
+      const meta=await findDriveFile();
+      if(meta) driveFileId=meta.id;
+    }
+    if(!driveFileId) {
+      const create=await googleFetch('https://www.googleapis.com/drive/v3/files',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:DRIVE_FILE_NAME,parents:['appDataFolder'],mimeType:'application/json'})
+      });
+      if(!create.ok) throw new Error(await create.text());
+      driveFileId=(await create.json()).id;
+    }
+    const res=await googleFetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media&fields=id,modifiedTime`,{
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(state)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    $('syncText').textContent='Saved to Google Drive.';
+  } catch(e) {
+    console.error(e);
+    $('syncText').textContent='Google sync failed; local save still works.';
+  }
+}
+async function createCompletionCalendarEvent() {
+  if(!accessToken || !state.completed || state.calendarEventId) return;
+  try {
+    const start=new Date(state.startedAt || Date.now() - state.elapsedSeconds*1000);
+    const end=new Date(start.getTime()+state.elapsedSeconds*1000);
+    const tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+    const body={
+      summary:'🎯 Expire.vip Sudoku',
+      description:`Sudoku completed in ${formatTime(state.elapsedSeconds)}. Saved by Expire.vip.`,
+      start:{dateTime:start.toISOString(),timeZone:tz},
+      end:{dateTime:end.toISOString(),timeZone:tz}
+    };
+    const res=await googleFetch('https://www.googleapis.com/calendar/v3/calendars/primary/events',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(await res.text());
+    state.calendarEventId=(await res.json()).id;
+    await saveDriveNow();
+    toast('Sudoku saved and added to Google Calendar.');
+  } catch(e) {
+    console.error(e);
+    toast('Solved! Calendar event could not be created.');
+  }
+}
+
+$('googleBtn').onclick=async()=>{
+  try {
+    await ensureToken();
+    $('googleBtn').textContent='Syncing…';
+    await loadDrive();
+    await saveDriveNow();
+    $('googleBtn').textContent='Google connected';
+    $('syncText').textContent='Connected to Google Drive.';
+  } catch(e) {
+    console.error(e);
+    $('googleBtn').textContent='Sign in';
+    toast('Google sign-in failed.');
+  }
+};
+
+window.addEventListener('beforeunload',()=>{
+  if(state && state.running) {
+    state.elapsedSeconds=currentElapsed();
+    state.startedAt=null;
+    state.running=true;
+    saveLocal();
+  }
+});
+
+window.addEventListener('load',()=>{
+  tokenClient=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPES,callback:googleCallback});
+  const saved=loadLocal();
+  if(saved?.puzzle?.length===81) {
+    state=saved;
+    render();
+    if(state.running && !state.completed) startTimer();
+  } else newGame();
+});
+</script>
+</body>
+</html>
