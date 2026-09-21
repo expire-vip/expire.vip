@@ -1291,7 +1291,7 @@
     </div>
 
     <!-- Link Attachment Modal -->
-    <div id="linkAttachmentModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="linkAttachmentModalTitle" style="touch-action:none;">
+    <div id="linkAttachmentModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[10020] hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="linkAttachmentModalTitle" style="touch-action:none;">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col min-h-0 overflow-hidden">
             <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
                 <div class="min-w-0">
@@ -3803,7 +3803,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         async function removeAttachment(idx) {
-            const att = formAttachments[idx];
+            let att = formAttachments[idx];
             if (!att) return;
             if (!confirm(`Delete attachment "${att.name}" from Drive?`)) return;
             try {
@@ -3862,7 +3862,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         await syncToCloud();
                     }
                     renderAll();
-                    return;
+                    return true;
                 }
             }
 
@@ -3910,6 +3910,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // Update the Save button text
             document.getElementById('saveItemButton').textContent = 'Save';
             toastInfo('Draft item created. Add more details and click Save.');
+            return true;
         }
 
         // ---------- ITEM FORM ----------
@@ -6044,9 +6045,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // gestures can otherwise end outside the scrollable content.
             if (e.target === duplicateModal) e.preventDefault();
         });
-        // Close preview with Escape
+        // Close preview with Escape. When the link dialog is open on top of the preview,
+        // let the modal-specific Escape handler close only the topmost dialog first.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (linkAttachmentModal && !linkAttachmentModal.classList.contains('hidden')) return;
                 closePreview();
                 if (inlineNoteEditItemId !== null) {
                     inlineNoteEditItemId = null;
