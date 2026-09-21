@@ -1290,6 +1290,28 @@
         </div>
     </div>
 
+    <!-- Link Attachment Modal -->
+    <div id="linkAttachmentModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="linkAttachmentModalTitle" style="touch-action:none;">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col min-h-0 overflow-hidden">
+            <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
+                <div class="min-w-0">
+                    <h3 id="linkAttachmentModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Link file to another item</h3>
+                    <p id="linkAttachmentModalSubtitle" class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">Select an item that should also use this file.</p>
+                </div>
+                <button type="button" onclick="closeLinkAttachmentModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition flex-shrink-0" title="Close" aria-label="Close link file dialog">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 space-y-3 flex-1 modal-scroll-content">
+                <input id="linkAttachmentSearch" type="text" inputmode="search" autocomplete="off" placeholder="Search items..." class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border" />
+                <div id="linkAttachmentList" class="space-y-2 pb-1"></div>
+            </div>
+            <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/95 dark:bg-gray-800/95 flex-shrink-0 modal-safe-bottom">
+                <button type="button" onclick="closeLinkAttachmentModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Unsaved Changes Confirmation -->
     <div id="discardChangesModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] hidden backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="discardChangesTitle">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-200 dark:border-gray-700">
@@ -1422,6 +1444,7 @@
                         <button id="zoomInBtn" class="desktop-image-zoom" style="display:none;" onclick="zoomImage(0.2)">🔍+</button>
                         <button id="pdfViewerToggleBtn" style="display:none;" onclick="togglePdfViewer()" title="Switch PDF viewer"></button>
                         <button id="saveEditBtn" style="display:none;" class="save-edit-btn" onclick="saveEdit()">Save</button>
+                        <button id="previewLinkBtn" style="display:none;" onclick="openLinkAttachmentFromPreview()" title="Link file to another item" aria-label="Link file to another item">🔗</button>
                         <button id="previewRenameBtn" style="display:none;" onclick="startPreviewRename()" title="Rename file" aria-label="Rename file">✏️</button>
                         <button class="close-preview" onclick="closePreview()">✕</button>
                     </div>
@@ -1543,6 +1566,7 @@
         const zoomInBtn = document.getElementById('zoomInBtn');
         const saveEditBtn = document.getElementById('saveEditBtn');
         const previewMeta = document.getElementById('previewMeta');
+        const previewLinkBtn = document.getElementById('previewLinkBtn');
         const statsBar = document.getElementById('statsBar');
         const filterPanel = document.getElementById('filterPanel');
         const filterPanelToggle = document.getElementById('filterPanelToggle');
@@ -1569,6 +1593,11 @@
         const renewReferenceModeEl = document.getElementById('renewReferenceMode');
         const renewReferenceDateEl = document.getElementById('renewReferenceDate');
         const confirmDuplicateBtn = document.getElementById('confirmDuplicateBtn');
+        const linkAttachmentModal = document.getElementById('linkAttachmentModal');
+        const linkAttachmentSearch = document.getElementById('linkAttachmentSearch');
+        const linkAttachmentList = document.getElementById('linkAttachmentList');
+        let linkAttachmentContext = null;
+        let linkAttachmentModalScrollY = 0;
         
         function showLoading(message = "Loading...") {
             isLoading = true;
@@ -2284,6 +2313,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.pinned === undefined) item.pinned = false;
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
+                // Linked attachments point to an existing physical Drive file; they are not duplicates.
+                item.attachments = item.attachments.map(att => ({
+                    ...att,
+                    linked: att.linked === true,
+                    linkedFromItemId: att.linkedFromItemId || null
+                }));
                 if (item.previewAttachments === undefined) item.previewAttachments = [];
                 if (item.showNotes === undefined) item.showNotes = true;
                 if (item.pinned === undefined) item.pinned = false;
@@ -2758,6 +2793,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             saveEditBtn.style.display = 'none';
             const pdfViewerToggleBtn = document.getElementById('pdfViewerToggleBtn');
             if (pdfViewerToggleBtn) pdfViewerToggleBtn.style.display = 'none';
+            const previewLinkBtn = document.getElementById('previewLinkBtn');
+            if (previewLinkBtn) previewLinkBtn.style.display = itemId ? 'inline-block' : 'none';
             const previewRenameBtn = document.getElementById('previewRenameBtn');
             const previewRenameEditor = document.getElementById('previewRenameEditor');
             const previewNav = document.getElementById('previewNav');
@@ -3065,6 +3102,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 await withLoading(`Renaming ${oldName}...`, async () => {
                     await renameFile(att.driveFileId, newName);
                 });
+                (appData.items || []).forEach(refItem => {
+                    (refItem.attachments || []).forEach(ref => {
+                        if (ref.driveFileId === att.driveFileId) ref.name = newName;
+                    });
+                });
                 att.name = newName;
                 previewData.title = newName;
                 const titleEl = document.getElementById('previewTitle');
@@ -3077,6 +3119,146 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             } catch (err) {
                 toastError('Rename failed: ' + err.message);
             }
+        }
+
+        function getAttachmentReferenceCount(fileId, excludeItemId = null) {
+            return (appData.items || []).reduce((count, item) => {
+                if (excludeItemId !== null && item.id === excludeItemId) return count;
+                return count + (item.attachments || []).filter(att => att.driveFileId === fileId).length;
+            }, 0);
+        }
+
+        function isAttachmentShared(fileId, excludeItemId = null) {
+            return getAttachmentReferenceCount(fileId, excludeItemId) > 0;
+        }
+
+        function openLinkAttachmentFromPreview() {
+            if (!previewData || !previewData.itemId || !previewData.fileId) return;
+            openLinkAttachmentModal(previewData.itemId, previewData.fileId, previewData.title || 'File', previewData.mimeType || '');
+        }
+
+        async function openLinkAttachmentModal(sourceItemId, fileId, fileName, mimeType) {
+            try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`linking ${fileName}`))) return;
+                const sourceItem = (appData.items || []).find(i => i.id === sourceItemId);
+                const sourceAtt = sourceItem && (sourceItem.attachments || []).find(a => a.driveFileId === fileId);
+                if (!sourceItem || !sourceAtt) {
+                    toastError('That file is no longer attached to this item. Please refresh and try again.');
+                    return;
+                }
+                linkAttachmentContext = {
+                    sourceItemId,
+                    fileId,
+                    fileName: sourceAtt.name || fileName,
+                    mimeType: sourceAtt.mimeType || mimeType || 'application/octet-stream'
+                };
+                const subtitle = document.getElementById('linkAttachmentModalSubtitle');
+                if (subtitle) subtitle.textContent = `Link “${linkAttachmentContext.fileName}” to another item. The file will not be duplicated.`;
+                if (linkAttachmentSearch) linkAttachmentSearch.value = '';
+                renderLinkAttachmentCandidates();
+                lockLinkAttachmentModalScroll();
+                if (linkAttachmentModal) linkAttachmentModal.classList.remove('hidden');
+                setTimeout(() => linkAttachmentSearch?.focus(), 50);
+            } catch (err) {
+                toastError('Could not open the link dialog: ' + err.message);
+            }
+        }
+
+        function lockLinkAttachmentModalScroll() {
+            if (!linkAttachmentModal || document.body.classList.contains('modal-scroll-locked')) return;
+            linkAttachmentModalScrollY = window.scrollY || window.pageYOffset || 0;
+            document.body.classList.add('modal-scroll-locked');
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${linkAttachmentModalScrollY}px`;
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+            document.body.style.width = '100%';
+        }
+
+        function unlockLinkAttachmentModalScroll() {
+            if (!document.body.classList.contains('modal-scroll-locked')) return;
+            document.body.classList.remove('modal-scroll-locked');
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
+            document.body.style.width = '';
+            window.scrollTo(0, linkAttachmentModalScrollY);
+        }
+
+        function renderLinkAttachmentCandidates() {
+            if (!linkAttachmentList || !linkAttachmentContext) return;
+            const term = normalizeSearchText((linkAttachmentSearch?.value || '').trim());
+            const sourceItemId = linkAttachmentContext.sourceItemId;
+            const candidates = (appData.items || []).filter(item => {
+                if (item.id === sourceItemId) return false;
+                if (!term) return true;
+                const haystack = normalizeSearchText([item.name, item.category, ...(item.tags || []), item.notes || ''].join(' '));
+                return term.split(/\s+/).filter(Boolean).every(word => haystack.includes(word));
+            });
+            if (!candidates.length) {
+                linkAttachmentList.innerHTML = `<div class="text-sm text-gray-500 dark:text-gray-400 text-center py-6">No matching items.</div>`;
+                return;
+            }
+            linkAttachmentList.innerHTML = candidates.map(item => {
+                const alreadyLinked = (item.attachments || []).some(att => att.driveFileId === linkAttachmentContext.fileId);
+                return `<div class="flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">${escapeHtml(item.name || '(Unnamed item)')}</div>
+                        <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">${escapeHtml(item.category || 'Other')}${item.date ? ` · ${escapeHtml(item.date)}` : ''}</div>
+                        ${alreadyLinked ? `<div class="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">Already using this file</div>` : ''}
+                    </div>
+                    <button type="button" ${alreadyLinked ? 'disabled' : ''} onclick="confirmLinkAttachment('${escapeHtml(item.id)}')" class="flex-shrink-0 px-3 py-2 rounded-xl text-sm font-semibold transition ${alreadyLinked ? 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-default' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}">${alreadyLinked ? 'Linked' : 'Link'}</button>
+                </div>`;
+            }).join('');
+        }
+
+        async function confirmLinkAttachment(targetItemId) {
+            const ctx = linkAttachmentContext;
+            if (!ctx) return;
+            try {
+                if (!(await ensureLatestCloudDataBeforeWrite(`linking ${ctx.fileName}`))) return;
+                const sourceItem = (appData.items || []).find(i => i.id === ctx.sourceItemId);
+                const targetItem = (appData.items || []).find(i => i.id === targetItemId);
+                const sourceAtt = sourceItem && (sourceItem.attachments || []).find(a => a.driveFileId === ctx.fileId);
+                if (!sourceItem || !sourceAtt) throw new Error('The source file is no longer attached to the original item. Please refresh and try again.');
+                if (!targetItem) throw new Error('The target item no longer exists. Please refresh and try again.');
+                if (targetItem.attachments && targetItem.attachments.some(a => a.driveFileId === ctx.fileId)) {
+                    toastInfo('This file is already attached to that item.');
+                    return;
+                }
+                targetItem.attachments = Array.isArray(targetItem.attachments) ? targetItem.attachments : [];
+                const linkedRef = {
+                    driveFileId: sourceAtt.driveFileId,
+                    name: sourceAtt.name,
+                    mimeType: sourceAtt.mimeType,
+                    addedDate: new Date().toISOString().split('T')[0],
+                    linked: true,
+                    linkedFromItemId: sourceItem.id
+                };
+                targetItem.attachments.push(linkedRef);
+                try {
+                    await withLoading(`Linking ${sourceAtt.name}...`, async () => {
+                        await syncToCloud();
+                    });
+                } catch (err) {
+                    targetItem.attachments = targetItem.attachments.filter(a => a !== linkedRef);
+                    throw err;
+                }
+                closeLinkAttachmentModal();
+                renderAll();
+                showToast(`Linked “${sourceAtt.name}” to ${targetItem.name}.`);
+            } catch (err) {
+                toastError('Could not link file: ' + err.message);
+            }
+        }
+
+        function closeLinkAttachmentModal() {
+            if (linkAttachmentModal) linkAttachmentModal.classList.add('hidden');
+            linkAttachmentContext = null;
+            if (linkAttachmentSearch) linkAttachmentSearch.value = '';
+            if (linkAttachmentList) linkAttachmentList.innerHTML = '';
+            unlockLinkAttachmentModalScroll();
         }
 
         function showJsonPreview(pretty) {
@@ -3277,9 +3459,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             isEditMode = false;
             saveEditBtn.style.display = 'none';
+            const previewLinkBtn = document.getElementById('previewLinkBtn');
             const previewRenameBtn = document.getElementById('previewRenameBtn');
             const previewRenameEditor = document.getElementById('previewRenameEditor');
             const previewNav = document.getElementById('previewNav');
+            if (previewLinkBtn) previewLinkBtn.style.display = 'none';
             if (previewRenameBtn) previewRenameBtn.style.display = 'none';
             if (previewRenameEditor) previewRenameEditor.style.display = 'none';
             if (previewNav) previewNav.style.display = 'none';
@@ -3451,6 +3635,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return `
                     <div class="attachment-item">
                         <span class="file-icon">${icon}</span>
+                        ${att.linked ? '<span class="text-[10px] text-indigo-500 dark:text-indigo-300" title="Linked shared file"><i class="fas fa-link"></i></span>' : ''}
                         <span class="file-name" onclick="previewAttachment(${idx})" title="Click to preview">${escapeHtml(att.name)}</span>
                         <div class="file-actions">
                             <button class="preview-attachment" onclick="previewAttachment(${idx})" title="Preview">
@@ -3602,6 +3787,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 await withLoading(`Renaming to ${newName}...`, async () => {
                     await renameFile(att.driveFileId, newName);
                 });
+                (appData.items || []).forEach(item => {
+                    (item.attachments || []).forEach(ref => {
+                        if (ref.driveFileId === att.driveFileId) ref.name = newName;
+                    });
+                });
                 att.name = newName;
                 renderAttachments();
                 // Auto-save item
@@ -3626,9 +3816,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (!freshAtt) { toastError('That attachment was changed or removed on another device. Please reopen the item.'); renderAttachments(); return; }
                     att = freshAtt;
                 }
-                await deleteFile(att.driveFileId);
-                // Remove from formAttachments regardless of Drive success
                 const removedAttachmentId = att.driveFileId;
+                const keepPhysicalFile = isAttachmentShared(removedAttachmentId, editingItemId);
+                if (!keepPhysicalFile) {
+                    await deleteFile(removedAttachmentId);
+                }
+                // Remove from formAttachments regardless of whether the physical file remains shared.
                 const currentItem = getCurrentEditableItem();
                 if (currentItem && Array.isArray(currentItem.previewAttachments)) {
                     const removed = currentItem.previewAttachments.find(p => p.attachmentId === removedAttachmentId);
@@ -3639,7 +3832,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 renderAttachments();
                 // Auto-save item to update JSON
                 await autoSaveItem();
-                showToast('Attachment removed.');
+                showToast(keepPhysicalFile ? 'Attachment unlinked from this item; the shared file remains available.' : 'Attachment removed.');
             } catch (err) {
                 // If file not found on Drive, just remove it from the list
                 if (err.message.includes('404') || err.message.includes('not found')) {
@@ -4449,7 +4642,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             
             let confirmMsg = 'Delete this item?';
             if (attachments && attachments.length > 0) {
-                confirmMsg += `\nThis item has ${attachments.length} attachment(s) that will also be permanently deleted from Drive.`;
+                const sharedCount = attachments.filter(att => isAttachmentShared(att.driveFileId, itemId)).length;
+                confirmMsg += sharedCount > 0
+                    ? `\nThis item has ${attachments.length} attachment(s). ${sharedCount} shared attachment${sharedCount !== 1 ? 's' : ''} will remain available to other items.`
+                    : `\nThis item has ${attachments.length} attachment(s) that will also be permanently deleted from Drive.`;
             }
             if (!confirm(confirmMsg)) return;
             if (!(await ensureLatestCloudDataBeforeWrite('deleting the item'))) return;
@@ -4463,13 +4659,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const freshAttachments = freshItem.attachments || [];
         
             await withLoading("Deleting item and attachments...", async () => {
-                // Delete attachments from Drive
+                // Delete only physical files that no other item references.
                 if (freshAttachments && freshAttachments.length > 0 && !isTestMode) {
-                    for (const att of freshAttachments) {
+                    const uniqueFileIds = [...new Set(freshAttachments.map(att => att.driveFileId).filter(Boolean))];
+                    for (const fileId of uniqueFileIds) {
+                        if (isAttachmentShared(fileId, itemId)) continue;
                         try {
-                            await deleteFile(att.driveFileId);
+                            await deleteFile(fileId);
                         } catch (e) {
-                            console.warn('Failed to delete attachment:', att.driveFileId, e);
+                            console.warn('Failed to delete attachment:', fileId, e);
                         }
                     }
                 }
@@ -5216,8 +5414,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 return `
                                 <span class="inline-flex items-center gap-1 text-xs bg-gray-100 dark:bg-gray-700/60 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-600">
                                     ${getFileIcon(att.mimeType)}
+                                    ${att.linked ? '<i class="fas fa-link text-indigo-400 text-[9px]" title="Linked shared file"></i>' : ''}
                                     <span class="truncate max-w-[80px] cursor-pointer hover:underline" onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}', '${item.id}', ${attIdx})" title="Click to preview">${escapeHtml(att.name)}</span>
                                     <button onclick="previewFileById('${att.driveFileId}', '${escapeHtml(att.name)}', '${escapeHtml(att.mimeType)}', '${item.id}', ${attIdx})" class="hover:text-purple-600 dark:hover:text-purple-400" title="Preview"><i class="fas fa-eye text-[10px]"></i></button>
+                                    <button onclick="openLinkAttachmentModal('${item.id}','${att.driveFileId}','${escapeHtml(att.name)}','${escapeHtml(att.mimeType || '')}'); event.stopPropagation();" class="hover:text-indigo-600 dark:hover:text-indigo-400" title="Link to another item" aria-label="Link to another item"><i class="fas fa-link text-[10px]"></i></button>
                                     <button onclick="downloadFileById('${att.driveFileId}', '${escapeHtml(att.name)}')" class="hover:text-blue-600 dark:hover:text-blue-400" title="Download"><i class="fas fa-download text-[10px]"></i></button>
                                     <button onclick="setAttachmentFeatured('${item.id}', '${att.driveFileId}', ${featured ? 'false' : 'true'})" class="${featured ? 'text-yellow-500' : 'text-gray-400'} hover:text-yellow-500" title="${featured ? 'Remove featured preview' : 'Show as thumbnail'}" aria-label="${featured ? 'Remove featured preview' : 'Show as thumbnail'}"><i class="fas fa-star text-[10px]"></i></button>
                                     ${featured ? `<button onclick="setAttachmentCover('${item.id}', '${att.driveFileId}')" class="${entry?.cover ? 'text-amber-500' : 'text-gray-400'} hover:text-amber-500" title="Set as cover" aria-label="Set as cover"><i class="fas fa-crown text-[10px]"></i></button>` : ''}
@@ -5821,6 +6021,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         document.getElementById('settingsModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('settingsModal')) closeSettings();
         });
+        if (linkAttachmentSearch) {
+            linkAttachmentSearch.addEventListener('input', renderLinkAttachmentCandidates);
+            linkAttachmentSearch.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeLinkAttachmentModal();
+                }
+            });
+        }
+        if (linkAttachmentModal) {
+            linkAttachmentModal.addEventListener('click', (e) => {
+                if (e.target === linkAttachmentModal) e.preventDefault();
+            });
+        }
+
         document.getElementById('discardChangesModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('discardChangesModal')) resolveDiscardChanges(false);
         });
@@ -5845,6 +6060,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 tryCloseItemModal();
                 closeSettings();
                 if (!duplicateModal.classList.contains('hidden')) closeDuplicateModal();
+                if (linkAttachmentModal && !linkAttachmentModal.classList.contains('hidden')) closeLinkAttachmentModal();
             }
         });
 
