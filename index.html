@@ -2499,6 +2499,19 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        function getCalendarEventTitle(item) {
+            return item.done ? `✅ DONE: ${item.name}` : `🔴 EXPIRING: ${item.name}`;
+        }
+
+        function buildCalendarEventDescription(notes, tags) {
+            let desc = notes ? `${notes}\n\n` : '';
+            if (tags && tags.length > 0) {
+                desc += `Tags: ${tags.map(t => '#' + t).join(' ')}\n\n`;
+            }
+            desc += `(Saved via Expire.vip)`;
+            return desc;
+        }
+
         async function addCalendarEvent(item) {
             const tz = appData.settings.timezone || 'UTC';
             let start, end;
@@ -2532,13 +2545,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             const overrides = (item.reminders || []).slice(0,5).map(r => ({ method: r.method, minutes: getReminderMinutes(r) }));
-            let desc = item.notes ? `${item.notes}\n\n` : '';
-            if (item.tags && item.tags.length > 0) {
-                desc += `Tags: ${item.tags.map(t => '#' + t).join(' ')}\n\n`;
-            }
-            desc += `(Saved via Expire.vip)`;
+            const desc = buildCalendarEventDescription(item.notes || '', item.tags || []);
             const body = {
-                summary: `🔴 EXPIRING: ${item.name}`,
+                summary: getCalendarEventTitle(item),
                 description: desc,
                 start,
                 end,
@@ -2549,14 +2558,29 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
             const data = await res.json(); return data.id;
         }
-        async function updateCalendarEventNotes(eventId, notes) {
+        async function updateCalendarEventNotes(eventId, notes, tags = []) {
             if (!eventId || isTestMode) return;
             const response = await callGoogleAPI(
                 `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
                 {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ description: notes || '' })
+                    body: JSON.stringify({ description: buildCalendarEventDescription(notes || '', tags || []) })
+                }
+            );
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+        }
+
+        async function updateCalendarEventTitle(eventId, item) {
+            if (!eventId || isTestMode) return;
+            const response = await callGoogleAPI(
+                `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ summary: getCalendarEventTitle(item) })
                 }
             );
             if (!response.ok) {
@@ -4691,8 +4715,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const previousDoneAt = item.doneAt || '';
             item.done = !previousDone;
             item.doneAt = item.done ? new Date().toISOString() : '';
+            let calendarTitleChanged = false;
             try {
                 await withLoading(item.done ? 'Marking item as done...' : 'Marking item as active...', async () => {
+                    if (item.eventId && !isTestMode) {
+                        showLoading(item.done ? 'Updating calendar event...' : 'Restoring calendar event...');
+                        await updateCalendarEventTitle(item.eventId, item);
+                        calendarTitleChanged = true;
+                    }
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
@@ -4704,6 +4734,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             } catch (error) {
                 item.done = previousDone;
                 item.doneAt = previousDoneAt;
+                if (calendarTitleChanged && item.eventId && !isTestMode) {
+                    await updateCalendarEventTitle(item.eventId, item).catch(() => {});
+                }
                 renderAll();
                 toastError('Failed to update completion status: ' + error.message);
             }
@@ -4877,7 +4910,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 notes,
                                 tags: formTags,
                                 reminders: formReminders,
-                                noExpiration: false
+                                noExpiration: false,
+                                done: !!old.done
                             };
                             newEventId = isTestMode
                                 ? `test-${Date.now()}`
@@ -5866,7 +5900,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
                 await withLoading('Saving notes...', async () => {
                     freshItem.notes = notes;
-                    await updateCalendarEventNotes(freshItem.eventId, notes);
+                    await updateCalendarEventNotes(freshItem.eventId, notes, freshItem.tags || []);
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
