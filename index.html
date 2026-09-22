@@ -190,6 +190,15 @@
         .item-card.compact-item { padding:0.7rem 0.8rem; }
         .item-card.compact-item .compact-toggle { display:inline-flex; }
         .view-mode-btn { white-space:nowrap; }
+        .list-sort-control { white-space:nowrap; }
+        .list-sort-control select option { background:#fff; color:#111827; }
+        .dark .list-sort-control select option { background:#1f2937; color:#f3f4f6; }
+        .chain-jump-btn { white-space:nowrap; }
+        @keyframes chainJumpHighlight {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0); }
+            35% { box-shadow: 0 0 0 4px rgba(99,102,241,.22); }
+        }
+        .chain-jump-highlight { animation: chainJumpHighlight 1.4s ease; }
 
         /* Featured preview / thumbnail styles */
         .featured-previews { display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.65rem; }
@@ -996,9 +1005,21 @@
                 </section>
 
                 <!-- Items List -->
-                <div class="flex items-center justify-between gap-2 mb-3">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                     <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Your Tracked Items</h2>
-                    <div class="flex items-center gap-1.5">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <label class="list-sort-control inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" title="Choose item date order">
+                            <i class="fas fa-arrow-down-wide-short text-xs text-gray-400 dark:text-gray-500"></i>
+                            <span class="sr-only">Sort order</span>
+                            <select id="sortOrderSelect" class="bg-transparent border-0 outline-none focus:ring-0 text-sm font-medium text-gray-700 dark:text-gray-200 pr-5 cursor-pointer">
+                                <option value="asc">Oldest → Newest</option>
+                                <option value="desc">Newest → Oldest</option>
+                            </select>
+                        </label>
+                        <button id="chainViewToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Show all items in duplicate/renew chains">
+                            <i id="chainViewIcon" class="fas fa-link text-xs"></i>
+                            <span id="chainViewLabel">All Chain Items</span>
+                        </button>
                         <button id="viewModeToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Toggle compact/detailed view">
                             <i id="viewModeIcon" class="fas fa-list text-xs"></i>
                             <span id="viewModeLabel">Compact</span>
@@ -1519,6 +1540,8 @@
         let activeStatFilter = 'all';
         let filtersCollapsed = localStorage.getItem('expire_filtersCollapsed') !== 'false';
         let compactView = localStorage.getItem('expire_compactView') === 'true';
+        let itemSortDirection = localStorage.getItem('expire_itemSortDirection') === 'desc' ? 'desc' : 'asc';
+        let chainViewMode = localStorage.getItem('expire_chainViewMode') === 'latest' ? 'latest' : 'all';
         const expandedCompactItems = new Set();
 
         // Form attachments (local list for modal)
@@ -1572,6 +1595,10 @@
         const filterPanelToggle = document.getElementById('filterPanelToggle');
         const filterSummary = document.getElementById('filterSummary');
         const searchClearBtn = document.getElementById('searchClearBtn');
+        const sortOrderSelect = document.getElementById('sortOrderSelect');
+        const chainViewToggle = document.getElementById('chainViewToggle');
+        const chainViewIcon = document.getElementById('chainViewIcon');
+        const chainViewLabel = document.getElementById('chainViewLabel');
         const viewModeToggle = document.getElementById('viewModeToggle');
         const viewModeIcon = document.getElementById('viewModeIcon');
         const viewModeLabel = document.getElementById('viewModeLabel');
@@ -5050,6 +5077,50 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             viewModeToggle.setAttribute('aria-label', viewModeToggle.title);
         }
 
+        function updateListOrderingUI() {
+            if (sortOrderSelect) {
+                sortOrderSelect.value = itemSortDirection;
+                sortOrderSelect.setAttribute('aria-label', itemSortDirection === 'asc' ? 'Oldest to newest' : 'Newest to oldest');
+            }
+            if (chainViewToggle) {
+                const collapsed = chainViewMode === 'latest';
+                chainViewLabel.textContent = collapsed ? 'Latest in Chains' : 'All Chain Items';
+                chainViewIcon.className = collapsed ? 'fas fa-layer-group text-xs' : 'fas fa-link text-xs';
+                chainViewToggle.title = collapsed
+                    ? 'Show every item in duplicate/renew chains'
+                    : 'Show only the latest item from each duplicate/renew chain';
+                chainViewToggle.setAttribute('aria-label', chainViewToggle.title);
+                chainViewToggle.classList.toggle('bg-indigo-50', collapsed);
+                chainViewToggle.classList.toggle('dark:bg-indigo-900/30', collapsed);
+                chainViewToggle.classList.toggle('border-indigo-300', collapsed);
+                chainViewToggle.classList.toggle('dark:border-indigo-700', collapsed);
+                chainViewToggle.classList.toggle('text-indigo-700', collapsed);
+                chainViewToggle.classList.toggle('dark:text-indigo-300', collapsed);
+            }
+        }
+
+        function setItemSortDirection(direction) {
+            itemSortDirection = direction === 'desc' ? 'desc' : 'asc';
+            localStorage.setItem('expire_itemSortDirection', itemSortDirection);
+            updateListOrderingUI();
+            renderItems();
+        }
+
+        function setChainViewMode(mode) {
+            chainViewMode = mode === 'latest' ? 'latest' : 'all';
+            localStorage.setItem('expire_chainViewMode', chainViewMode);
+            updateListOrderingUI();
+            renderItems();
+        }
+
+        function toggleChainView() {
+            setChainViewMode(chainViewMode === 'latest' ? 'all' : 'latest');
+        }
+
+        function setSortDirectionFromSelect(value) {
+            setItemSortDirection(value);
+        }
+
         function setCompactView(enabled) {
             compactView = !!enabled;
             localStorage.setItem('expire_compactView', String(compactView));
@@ -5301,8 +5372,121 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             el.textContent = explicitEnd || (!noExpiration && expiry) ? formatDateDiff(getDateOnly(reference), getDateOnly(end)) : `${formatDateDiff(getDateOnly(reference), getDateOnly(end))} (ongoing)`;
         }
 
+        function compareItemsByDisplayDateAsc(a, b) {
+            // Items without an expiry stay after dated items in both directions.
+            if (a.noExpiration && !b.noExpiration) return 1;
+            if (!a.noExpiration && b.noExpiration) return -1;
+            if (!a.date && !b.date) {
+                return String(a.id || '').localeCompare(String(b.id || ''));
+            }
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            const dateCompare = getDateOnly(a.date) - getDateOnly(b.date);
+            if (dateCompare !== 0) return dateCompare;
+            const aTime = a.time || '00:00';
+            const bTime = b.time || '00:00';
+            const timeCompare = aTime.localeCompare(bTime);
+            if (timeCompare !== 0) return timeCompare;
+            // IDs generated by the app are timestamp-based, so use them as a stable
+            // final tie-breaker when multiple items share the same date/time.
+            const aNum = Number(a.id);
+            const bNum = Number(b.id);
+            if (Number.isFinite(aNum) && Number.isFinite(bNum)) return aNum - bNum;
+            return String(a.id || '').localeCompare(String(b.id || ''));
+        }
+
+        function getLineageRootId(item, byId) {
+            let current = item;
+            const visited = new Set();
+            while (current && current.original_event_id) {
+                if (visited.has(current.id)) break;
+                visited.add(current.id);
+                const parent = byId.get(current.original_event_id);
+                if (!parent) break;
+                current = parent;
+            }
+            return current?.id || item.id;
+        }
+
+        function buildChainMetadata(items) {
+            const byId = new Map((items || []).map(item => [item.id, item]));
+            const groups = new Map();
+            (items || []).forEach(item => {
+                const rootId = getLineageRootId(item, byId);
+                if (!groups.has(rootId)) groups.set(rootId, []);
+                groups.get(rootId).push(item);
+            });
+
+            const metadata = new Map();
+            groups.forEach((members, rootId) => {
+                if (members.length <= 1) {
+                    metadata.set(rootId, { count: 1, latestId: members[0]?.id || null });
+                    return;
+                }
+                const latest = [...members].sort(compareItemsByDisplayDateAsc).at(-1);
+                metadata.set(rootId, { count: members.length, latestId: latest?.id || null });
+            });
+            return { byId, metadata };
+        }
+
+        function getVisibleLatestChainItems(filtered, chainMetadata) {
+            const visibleLatestByRoot = new Map();
+            (filtered || []).forEach(item => {
+                const rootId = getLineageRootId(item, chainMetadata.byId);
+                const current = visibleLatestByRoot.get(rootId);
+                if (!current || compareItemsByDisplayDateAsc(current, item) < 0) {
+                    visibleLatestByRoot.set(rootId, item);
+                }
+            });
+            return [...visibleLatestByRoot.values()];
+        }
+
+        function scrollToItemCard(itemId) {
+            const card = document.getElementById(`item-card-${itemId}`);
+            if (!card) {
+                showToast('The latest item is hidden by your current filters or archive view.');
+                return;
+            }
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.remove('chain-jump-highlight');
+            void card.offsetWidth;
+            card.classList.add('chain-jump-highlight');
+            window.setTimeout(() => card.classList.remove('chain-jump-highlight'), 1500);
+        }
+
+        function jumpToLatestInChain(itemId) {
+            const allItems = appData.items || [];
+            const byId = new Map(allItems.map(item => [item.id, item]));
+            const source = byId.get(itemId);
+            if (!source) return;
+            const rootId = getLineageRootId(source, byId);
+            const members = allItems.filter(item => getLineageRootId(item, byId) === rootId);
+            if (members.length <= 1) return;
+            const latest = [...members].sort(compareItemsByDisplayDateAsc).at(-1);
+            if (!latest) return;
+            scrollToItemCard(latest.id);
+        }
+
+        function getChainBadgeHtml(item, chainMetadata) {
+            const rootId = getLineageRootId(item, chainMetadata.byId);
+            const meta = chainMetadata.metadata.get(rootId);
+            if (!meta || meta.count <= 1) return '';
+            if (meta.latestId === item.id) {
+                return `<button type="button" class="inline-flex items-center gap-1 text-[11px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-full font-semibold border border-indigo-100 dark:border-indigo-800/60" onclick="event.stopPropagation();" title="Latest item in a ${meta.count}-item chain">
+                    <i class="fas fa-link text-[9px]"></i> ${meta.count} in chain · latest
+                </button>`;
+            }
+            return `<button type="button" class="chain-jump-btn inline-flex items-center gap-1 text-[11px] bg-gray-100 dark:bg-gray-700/70 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full font-semibold border border-gray-200 dark:border-gray-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300 dark:hover:border-indigo-700 transition" onclick="jumpToLatestInChain('${escapeHtml(item.id)}'); event.stopPropagation();" title="Jump to the latest item in this ${meta.count}-item chain">
+                <i class="fas fa-link text-[9px]"></i> ${meta.count} in chain · latest →
+            </button>`;
+        }
+
         function renderItems() {
-            const filtered = filterItems();
+            let filtered = filterItems();
+            const chainMetadata = buildChainMetadata(appData.items || []);
+            if (chainViewMode === 'latest') {
+                filtered = getVisibleLatestChainItems(filtered, chainMetadata);
+            }
             if (!filtered.length) {
                 let msg;
                 if (activeStatFilter !== 'all') {
@@ -5314,23 +5498,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
                 return itemsList.innerHTML = `<div class="text-center py-6"><p class="text-gray-400 dark:text-gray-500">${msg}</p>${activeStatFilter !== 'all' ? `<button type="button" onclick="setStatFilter('all')" class="mt-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium">Clear selected filter</button>` : ''}</div>`;
             }
-            // Sort: pinned items first, then no-expiration items to the end, then by date ascending (and time if same date)
+            // Sort: pinned items first, then dated items in the selected direction,
+            // with no-expiration items kept at the end.
             filtered.sort((a, b) => {
-                // Pinned items always stay at the top of the visible list.
                 if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-                // Sort by noExpiration: false (has date) first, true (no expiry) last
-                if (a.noExpiration && !b.noExpiration) return 1;
-                if (!a.noExpiration && b.noExpiration) return -1;
-                // Both have same noExpiration status
-                if (!a.date && !b.date) return 0;
-                if (!a.date) return 1;
-                if (!b.date) return -1;
-                const dateCompare = new Date(a.date) - new Date(b.date);
-                if (dateCompare !== 0) return dateCompare;
-                // If same date, sort by time (earlier first)
-                const aTime = a.time || '00:00';
-                const bTime = b.time || '00:00';
-                return aTime.localeCompare(bTime);
+                const comparison = compareItemsByDisplayDateAsc(a, b);
+                return itemSortDirection === 'desc' ? -comparison : comparison;
             });
             itemsList.innerHTML = filtered.map(item => {
                 // Determine time info (for bottom-left)
@@ -5435,7 +5608,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const pinBadge = item.pinned ? `<span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium ml-1">📌 Pinned</span>` : '';
 
                 const isCompactExpanded = compactView && expandedCompactItems.has(item.id);
-                return `<div class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
+                return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="item-card-header flex items-start justify-between">
                             <div class="flex-1 min-w-0">
@@ -5443,6 +5616,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                     <span class="text-xs tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
                                     ${pinBadge}
                                     ${archiveBadge}
+                                    ${getChainBadgeHtml(item, chainMetadata)}
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                             </div>
@@ -5979,6 +6153,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         updateArchivedToggleUI();
         if (filterPanelToggle) filterPanelToggle.onclick = toggleFilters;
         if (searchClearBtn) searchClearBtn.onclick = clearSearch;
+        if (sortOrderSelect) sortOrderSelect.addEventListener('change', (e) => setSortDirectionFromSelect(e.target.value));
+        if (chainViewToggle) chainViewToggle.onclick = toggleChainView;
         if (viewModeToggle) viewModeToggle.onclick = toggleCompactView;
         const searchInputEl = document.getElementById('searchInput');
         searchInputEl.addEventListener('input', () => { updateSearchUI(); renderAll(); });
@@ -5991,6 +6167,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         updateSearchUI();
         updateFilterUI();
         updateViewModeUI();
+        updateListOrderingUI();
         document.getElementById('itemNotes').addEventListener('input', updateNotesCharCount);
         
         const tagInputEl = document.getElementById('tagInput');
