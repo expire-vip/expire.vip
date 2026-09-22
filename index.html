@@ -1028,6 +1028,10 @@
                             <i class="fas fa-archive text-xs"></i>
                             <span id="archivedToggleLabel">Show Archived</span>
                         </button>
+                        <button id="showDoneToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
+                            <i class="fas fa-check-circle text-xs"></i>
+                            <span id="doneToggleLabel">Show Done</span>
+                        </button>
                     </div>
                 </div>
                 <div id="itemsList" class="space-y-3">
@@ -1537,6 +1541,7 @@
         let activeTag = null;
         let isLoading = false;
         let archiveViewMode = 'active'; // active = hide archived, all = show all, archived = show only archived
+        let doneViewMode = localStorage.getItem('expire_doneViewMode') === 'all' ? 'all' : (localStorage.getItem('expire_doneViewMode') === 'done' ? 'done' : 'active'); // active = hide done, all = show all, done = show only done
         let activeStatFilter = 'all';
         let filtersCollapsed = localStorage.getItem('expire_filtersCollapsed') !== 'false';
         let compactView = localStorage.getItem('expire_compactView') === 'true';
@@ -1582,6 +1587,8 @@
         const settingsBtn = document.getElementById('settingsBtn');
         const showArchivedToggle = document.getElementById('showArchivedToggle');
         const archivedToggleLabel = document.getElementById('archivedToggleLabel');
+        const showDoneToggle = document.getElementById('showDoneToggle');
+        const doneToggleLabel = document.getElementById('doneToggleLabel');
         const jsonToggleBtn = document.getElementById('jsonToggleBtn');
         const editToggleBtn = document.getElementById('editToggleBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
@@ -2338,6 +2345,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.archived === undefined) item.archived = false;
                 // Ensure pinned field exists
                 if (item.pinned === undefined) item.pinned = false;
+                // Ensure completion status exists
+                if (item.done === undefined) item.done = false;
+                if (item.doneAt === undefined) item.doneAt = '';
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
                 // Linked attachments point to an existing physical Drive file; they are not duplicates.
@@ -4550,6 +4560,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         original_event_id: item.id,
                         archived: false,
                         pinned: false,
+                        done: false,
+                        doneAt: '',
                         attachments: [],
                         previewAttachments: [],
                         showNotes: item.showNotes !== false,
@@ -4608,6 +4620,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return getPreArchiveFilteredItems().filter(i => !!i.archived).length;
         }
 
+        function getDoneCount() {
+            return getPreArchiveFilteredItems().filter(i => !!i.done).length;
+        }
+
         function updateArchivedToggleUI() {
             if (!showArchivedToggle || !archivedToggleLabel) return;
             const count = getArchivedCount();
@@ -4634,6 +4650,63 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             else archiveViewMode = 'active';
             updateArchivedToggleUI();
             renderAll();
+        }
+
+        function updateDoneToggleUI() {
+            if (!showDoneToggle || !doneToggleLabel) return;
+            const count = getDoneCount();
+            const suffix = ` (${count})`;
+            if (doneViewMode === 'active') {
+                doneToggleLabel.textContent = `Show Done${suffix}`;
+                showDoneToggle.title = count ? 'Show completed and active items' : 'There are no completed items';
+            } else if (doneViewMode === 'all') {
+                doneToggleLabel.textContent = `Show Only Done${suffix}`;
+                showDoneToggle.title = 'Show only completed items';
+            } else {
+                doneToggleLabel.textContent = `Hide Done${suffix}`;
+                showDoneToggle.title = 'Hide completed items';
+            }
+            showDoneToggle.disabled = false;
+            showDoneToggle.setAttribute('aria-label', `${doneToggleLabel.textContent}. Click to change completed-item view.`);
+        }
+
+        function toggleShowDone() {
+            if (doneViewMode === 'active') doneViewMode = 'all';
+            else if (doneViewMode === 'all') doneViewMode = 'done';
+            else doneViewMode = 'active';
+            localStorage.setItem('expire_doneViewMode', doneViewMode);
+            updateDoneToggleUI();
+            renderAll();
+        }
+
+        async function toggleDoneItem(itemId) {
+            if (!(await ensureLatestCloudDataBeforeWrite('changing the completion status'))) return;
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) {
+                toastError('That item was changed or removed on another device. Please refresh the list.');
+                renderAll();
+                return;
+            }
+            const previousDone = !!item.done;
+            const previousDoneAt = item.doneAt || '';
+            item.done = !previousDone;
+            item.doneAt = item.done ? new Date().toISOString() : '';
+            try {
+                await withLoading(item.done ? 'Marking item as done...' : 'Marking item as active...', async () => {
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+                });
+                renderAll();
+                showToast(item.done ? 'Marked as done.' : 'Marked as active.');
+            } catch (error) {
+                item.done = previousDone;
+                item.doneAt = previousDoneAt;
+                renderAll();
+                toastError('Failed to update completion status: ' + error.message);
+            }
         }
 
         async function archiveItem(itemId) {
@@ -4825,6 +4898,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             eventId: newEventId || null,
                             archived: old.archived || false,
                             pinned: old.pinned || false,
+                            done: !!old.done,
+                            doneAt: old.doneAt || '',
                             attachments: [...formAttachments],
                             showNotes,
                             original_event_id: old.original_event_id || null,
@@ -4867,6 +4942,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             eventId: newEventId,
                             archived: false,
                             pinned: false,
+                            done: false,
+                            doneAt: '',
                             attachments: [...formAttachments],
                             previewAttachments: [],
                             showNotes,
@@ -5140,9 +5217,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function getBaseFilteredItems() {
             // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
-            const filtered = getPreArchiveFilteredItems();
-            if (archiveViewMode === 'active') return filtered.filter(i => !i.archived);
-            if (archiveViewMode === 'archived') return filtered.filter(i => !!i.archived);
+            let filtered = getPreArchiveFilteredItems();
+            if (archiveViewMode === 'active') filtered = filtered.filter(i => !i.archived);
+            else if (archiveViewMode === 'archived') filtered = filtered.filter(i => !!i.archived);
+            if (doneViewMode === 'active') return filtered.filter(i => !i.done);
+            if (doneViewMode === 'done') return filtered.filter(i => !!i.done);
             return filtered;
         }
 
@@ -5370,6 +5449,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
             el.textContent = explicitEnd || (!noExpiration && expiry) ? formatDateDiff(getDateOnly(reference), getDateOnly(end)) : `${formatDateDiff(getDateOnly(reference), getDateOnly(end))} (ongoing)`;
+        }
+
+        function formatDoneDate(doneAt) {
+            if (!doneAt) return '';
+            const date = new Date(doneAt);
+            if (Number.isNaN(date.getTime())) return '';
+            return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
         }
 
         function compareItemsByDisplayDateAsc(a, b) {
@@ -5606,9 +5692,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 // Archive / pin badges
                 const archiveBadge = item.archived ? `<span class="text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full font-medium ml-2">📦 Archived</span>` : '';
                 const pinBadge = item.pinned ? `<span class="text-xs bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full font-medium ml-1">📌 Pinned</span>` : '';
+                const doneBadge = item.done ? `<span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full font-medium ml-1">✅ Done${item.doneAt ? ` · ${escapeHtml(formatDoneDate(item.doneAt))}` : ''}</span>` : '';
 
                 const isCompactExpanded = compactView && expandedCompactItems.has(item.id);
-                return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
+                return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} ${item.done ? 'done-item opacity-75' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="item-card-header flex items-start justify-between">
                             <div class="flex-1 min-w-0">
@@ -5616,6 +5703,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                     <span class="text-xs tracking-wider font-semibold text-gray-500 dark:text-gray-400">${getCategoryEmoji(item.category)} ${item.category}</span>
                                     ${pinBadge}
                                     ${archiveBadge}
+                                    ${doneBadge}
                                     ${getChainBadgeHtml(item, chainMetadata)}
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
@@ -5662,6 +5750,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="Renew">
                                     <i class="fas fa-rotate-right text-base"></i>
+                                </button>
+                                <button onclick="toggleDoneItem('${item.id}')" 
+                                         class="${item.done ? 'text-green-600 bg-green-50 dark:bg-green-900/30' : 'text-gray-400'} hover:text-green-600 dark:hover:text-green-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
+                                         title="${item.done ? 'Mark as active' : 'Mark as done'}" aria-label="${item.done ? 'Mark item as active' : 'Mark item as done'}">
+                                    <i class="fas fa-check-circle text-base"></i>
                                 </button>
                                 <button onclick="archiveItem('${item.id}')" 
                                          class="text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
@@ -5912,6 +6005,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             renderCategoryChips(); 
             renderStatsBar();
             updateArchivedToggleUI();
+            updateDoneToggleUI();
             updateFilterUI();
             updateSearchUI();
             updateViewModeUI();
@@ -6025,10 +6119,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{value:28, unit:'days', method:'email'},{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{value:14, unit:'days', method:'email'},{value:3, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{value:14, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, attachments: [] }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{value:28, unit:'days', method:'email'},{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{value:14, unit:'days', method:'email'},{value:3, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{value:14, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
@@ -6150,7 +6244,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             };
         }
         showArchivedToggle.onclick = toggleShowArchived;
+        if (showDoneToggle) showDoneToggle.onclick = toggleShowDone;
         updateArchivedToggleUI();
+        updateDoneToggleUI();
         if (filterPanelToggle) filterPanelToggle.onclick = toggleFilters;
         if (searchClearBtn) searchClearBtn.onclick = clearSearch;
         if (sortOrderSelect) sortOrderSelect.addEventListener('change', (e) => setSortDirectionFromSelect(e.target.value));
