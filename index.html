@@ -2934,10 +2934,55 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return icons[action] || '•';
         }
 
+        function formatHistoryRelativeTime(timestamp, now = new Date()) {
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '';
+            let diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
+            if (diffSeconds < 0) {
+                const future = Math.abs(diffSeconds);
+                if (future < 60) return 'in a few seconds';
+                if (future < 3600) {
+                    const mins = Math.round(future / 60);
+                    return `in ${mins} minute${mins === 1 ? '' : 's'}`;
+                }
+                if (future < 86400) {
+                    const hours = Math.round(future / 3600);
+                    return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+                }
+                const days = Math.round(future / 86400);
+                return `in ${days} day${days === 1 ? '' : 's'}`;
+            }
+            if (diffSeconds < 60) return diffSeconds <= 5 ? 'just now' : `${diffSeconds} seconds ago`;
+            if (diffSeconds < 3600) {
+                const mins = Math.floor(diffSeconds / 60);
+                return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+            }
+            if (diffSeconds < 86400) {
+                const hours = Math.floor(diffSeconds / 3600);
+                return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+            }
+            if (diffSeconds < 604800) {
+                const days = Math.floor(diffSeconds / 86400);
+                return `${days} day${days === 1 ? '' : 's'} ago`;
+            }
+            if (diffSeconds < 2592000) {
+                const weeks = Math.floor(diffSeconds / 604800);
+                return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+            }
+            if (diffSeconds < 31536000) {
+                const months = Math.floor(diffSeconds / 2592000);
+                return `${months} month${months === 1 ? '' : 's'} ago`;
+            }
+            const years = Math.floor(diffSeconds / 31536000);
+            return `${years} year${years === 1 ? '' : 's'} ago`;
+        }
+
         function formatHistoryTimestamp(timestamp) {
             const date = new Date(timestamp);
             if (Number.isNaN(date.getTime())) return String(timestamp || '');
-            return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const absolute = date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const relative = formatHistoryRelativeTime(timestamp);
+            return relative ? `${absolute} (${relative})` : absolute;
         }
 
         function formatHistoryFieldValue(key, value) {
@@ -3150,7 +3195,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     <div class="history-entry-header">
                         <div class="min-w-0">
                             <div class="font-semibold text-sm text-gray-900 dark:text-gray-100">${historyActionIcon(entry.action)} ${escapeHtml(historyActionLabel(entry.action))}</div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${escapeHtml(formatHistoryTimestamp(entry.timestamp))}</div>
+                            <div class="history-entry-timestamp text-xs text-gray-500 dark:text-gray-400 mt-0.5" data-history-timestamp="${escapeHtml(entry.timestamp || '')}">${escapeHtml(formatHistoryTimestamp(entry.timestamp))}</div>
                         </div>
                     </div>`;
 
@@ -3186,6 +3231,28 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 html += `</div>`;
                 return html;
             }).join('')}</div>`;
+        }
+
+        let historyRelativeTimeTimer = null;
+
+        function refreshHistoryRelativeTimes() {
+            if (!itemHistoryModal || itemHistoryModal.classList.contains('hidden')) return;
+            itemHistoryListEl?.querySelectorAll('[data-history-timestamp]').forEach(el => {
+                const timestamp = el.getAttribute('data-history-timestamp');
+                el.textContent = formatHistoryTimestamp(timestamp);
+            });
+        }
+
+        function startHistoryRelativeTimeRefresh() {
+            stopHistoryRelativeTimeRefresh();
+            historyRelativeTimeTimer = setInterval(refreshHistoryRelativeTimes, 30000);
+        }
+
+        function stopHistoryRelativeTimeRefresh() {
+            if (historyRelativeTimeTimer) {
+                clearInterval(historyRelativeTimeTimer);
+                historyRelativeTimeTimer = null;
+            }
         }
 
         function lockItemHistoryScroll() {
@@ -3226,11 +3293,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             renderItemHistory(itemId);
             itemHistoryModal?.classList.remove('hidden');
             lockItemHistoryScroll();
+            startHistoryRelativeTimeRefresh();
         }
 
         function closeItemHistory() {
             historyModalItemId = null;
             itemHistoryModal?.classList.add('hidden');
+            stopHistoryRelativeTimeRefresh();
             unlockItemHistoryScroll();
         }
 
@@ -5936,6 +6005,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
+            let historyBefore = null;
             try {
               if (!wasEditing) {
                   if (!(await ensureLatestCloudDataBeforeWrite('creating the item'))) return;
@@ -5958,7 +6028,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         if (idx === -1) return;
         
                         const old = appData.items[idx];
-                        const historyBefore = historySnapshot(old);
+                        historyBefore = historySnapshot(old);
         
                         // Remove old calendar event if it exists (regardless of new state)
                         if (old.eventId && !isTestMode) {
