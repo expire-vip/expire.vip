@@ -840,6 +840,143 @@
             background: #4c1d95;
             color: #a78bfa;
         }
+
+        /* ---------- ITEM HISTORY ---------- */
+        .history-timeline {
+            position: relative;
+            padding-left: 1rem;
+        }
+        .history-timeline::before {
+            content: '';
+            position: absolute;
+            left: 0.38rem;
+            top: 0.55rem;
+            bottom: 0.55rem;
+            width: 1px;
+            background: rgba(129, 140, 248, 0.28);
+        }
+        .history-entry {
+            position: relative;
+            margin: 0 0 0.85rem 0.25rem;
+            padding: 0.8rem 0.9rem 0.85rem 1rem;
+            border: 1px solid rgba(156, 163, 175, 0.25);
+            border-radius: 0.95rem;
+            background: rgba(249, 250, 251, 0.92);
+        }
+        .dark .history-entry {
+            background: rgba(31, 41, 55, 0.7);
+            border-color: rgba(107, 114, 128, 0.28);
+        }
+        .history-entry::before {
+            content: '';
+            position: absolute;
+            left: -0.98rem;
+            top: 1.02rem;
+            width: 0.58rem;
+            height: 0.58rem;
+            border-radius: 999px;
+            background: #818cf8;
+            box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.11);
+        }
+        .history-entry-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+        .history-change-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.4rem 0.55rem;
+            margin-top: 0.45rem;
+            font-size: 0.78rem;
+        }
+        .history-change-label {
+            font-weight: 700;
+            color: #374151;
+        }
+        .dark .history-change-label { color: #e5e7eb; }
+        .history-change-arrow { color: #9ca3af; }
+        .history-value-before {
+            color: #b91c1c;
+            text-decoration: line-through;
+            text-decoration-thickness: 1px;
+        }
+        .history-value-after { color: #047857; }
+        .dark .history-value-before { color: #fca5a5; }
+        .dark .history-value-after { color: #6ee7b7; }
+        .history-note-preview {
+            width: 100%;
+            margin-top: 0.2rem;
+            color: #4b5563;
+            font-size: 0.74rem;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+        .dark .history-note-preview { color: #cbd5e1; }
+        .history-note-preview code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        }
+        .history-note-details {
+            margin-top: 0.55rem;
+            border-top: 1px solid rgba(156, 163, 175, 0.18);
+            padding-top: 0.55rem;
+        }
+        .history-diff-line {
+            margin-top: 0.45rem;
+            padding: 0.5rem 0.6rem;
+            border-radius: 0.7rem;
+            background: rgba(243, 244, 246, 0.9);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+            font-size: 0.72rem;
+            line-height: 1.55;
+            overflow-wrap: anywhere;
+        }
+        .dark .history-diff-line { background: rgba(17, 24, 39, 0.65); }
+        .history-diff-line .old { color: #b91c1c; }
+        .history-diff-line .new { color: #047857; }
+        .dark .history-diff-line .old { color: #fca5a5; }
+        .dark .history-diff-line .new { color: #6ee7b7; }
+        .history-diff-line del {
+            background: rgba(248, 113, 113, 0.16);
+            text-decoration-thickness: 1px;
+        }
+        .history-diff-line ins {
+            background: rgba(52, 211, 153, 0.16);
+            text-decoration: none;
+        }
+        .history-related-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-top: 0.55rem;
+            font-size: 0.73rem;
+            color: #6366f1;
+            font-weight: 600;
+        }
+        .dark .history-related-link { color: #a5b4fc; }
+        .history-empty {
+            padding: 2.5rem 1rem;
+            text-align: center;
+            color: #9ca3af;
+        }
+        .history-stat {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.12rem 0.42rem;
+            border-radius: 999px;
+            background: rgba(99, 102, 241, 0.08);
+            color: #6366f1;
+            font-size: 0.68rem;
+            font-weight: 700;
+        }
+        .dark .history-stat {
+            background: rgba(129, 140, 248, 0.13);
+            color: #a5b4fc;
+        }
+
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 transition-colors duration-300">
@@ -1352,6 +1489,27 @@
         </div>
     </div>
 
+    <!-- Item History Modal -->
+    <div id="itemHistoryModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[10040] hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="itemHistoryModalTitle" style="touch-action:none;">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-2xl my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col min-h-0 overflow-hidden">
+            <div class="p-5 sm:p-6 flex items-start justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
+                <div class="min-w-0 pr-3">
+                    <h3 id="itemHistoryModalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Item History</h3>
+                    <p id="itemHistoryModalSubtitle" class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">—</p>
+                </div>
+                <button type="button" onclick="closeItemHistory()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition flex-shrink-0" title="Close" aria-label="Close history dialog">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div id="itemHistoryList" class="p-5 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+                <!-- populated dynamically -->
+            </div>
+            <div class="p-4 sm:p-5 flex justify-end border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/95 dark:bg-gray-800/95 flex-shrink-0 modal-safe-bottom">
+                <button type="button" onclick="closeItemHistory()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Unsaved Changes Confirmation -->
     <div id="discardChangesModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] hidden backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="discardChangesTitle">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-gray-200 dark:border-gray-700">
@@ -1588,6 +1746,14 @@
         const expandedNotesItems = new Set();
         let accountEmailVisible = false;
 
+        // Item history is stored separately in expire_history.json on Google Drive.
+        let historyDriveFileId = null;
+        let historyModifiedTime = '';
+        let historyEntries = [];
+        let historyLoaded = false;
+        let historyModalItemId = null;
+        let historyModalScrollY = 0;
+
         // DOM elements
         const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
@@ -1645,6 +1811,10 @@
         const renewReferenceModeEl = document.getElementById('renewReferenceMode');
         const renewReferenceDateEl = document.getElementById('renewReferenceDate');
         const confirmDuplicateBtn = document.getElementById('confirmDuplicateBtn');
+        const itemHistoryModal = document.getElementById('itemHistoryModal');
+        const itemHistoryModalTitleEl = document.getElementById('itemHistoryModalTitle');
+        const itemHistoryModalSubtitleEl = document.getElementById('itemHistoryModalSubtitle');
+        const itemHistoryListEl = document.getElementById('itemHistoryList');
         const linkAttachmentModal = document.getElementById('linkAttachmentModal');
         const linkAttachmentSearch = document.getElementById('linkAttachmentSearch');
         const linkAttachmentList = document.getElementById('linkAttachmentList');
@@ -2513,6 +2683,584 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return metadata;
         }
 
+
+        // ---------- ITEM HISTORY ----------
+        function historyJsonClone(value) {
+            if (value === undefined) return undefined;
+            try { return JSON.parse(JSON.stringify(value)); } catch (_) { return value; }
+        }
+
+        function canonicalizeHistoryArray(arr, sortFn = null) {
+            const copy = Array.isArray(arr) ? arr.map(historyJsonClone) : [];
+            if (sortFn) copy.sort(sortFn);
+            return copy;
+        }
+
+        function historySnapshot(item) {
+            if (!item) return null;
+            const reminders = canonicalizeHistoryArray(item.reminders || [], (a, b) => {
+                const am = getReminderMinutes(a); const bm = getReminderMinutes(b);
+                if (am !== bm) return am - bm;
+                return String(a.method || '').localeCompare(String(b.method || ''));
+            });
+            const attachments = canonicalizeHistoryArray(item.attachments || [], (a, b) => {
+                const ak = `${a.name || ''}|${a.mimeType || ''}|${a.driveFileId || ''}`;
+                const bk = `${b.name || ''}|${b.mimeType || ''}|${b.driveFileId || ''}`;
+                return ak.localeCompare(bk);
+            }).map(att => ({
+                name: att.name || '',
+                mimeType: att.mimeType || '',
+                driveFileId: att.driveFileId || '',
+                linked: att.linked === true
+            }));
+            return {
+                name: item.name || '',
+                category: item.category || '',
+                date: item.date || '',
+                noExpiration: !!item.noExpiration,
+                time: item.time || '',
+                durationMinutes: Number(item.durationMinutes) || 30,
+                reminders,
+                tags: canonicalizeHistoryArray(item.tags || [], (a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })),
+                notes: item.notes || '',
+                done: !!item.done,
+                archived: !!item.archived,
+                pinned: !!item.pinned,
+                referenceDate: item.referenceDate || '',
+                endDate: item.endDate || '',
+                renewal: item.renewal ? {
+                    enabled: !!item.renewal.enabled,
+                    value: Number(item.renewal.value) || 1,
+                    unit: item.renewal.unit || 'years',
+                    base: item.renewal.base || 'previous'
+                } : { enabled: false, value: 1, unit: 'years', base: 'previous' },
+                attachments,
+                showNotes: item.showNotes !== false
+            };
+        }
+
+        function historyValueEqual(a, b) {
+            try { return JSON.stringify(a) === JSON.stringify(b); } catch (_) { return a === b; }
+        }
+
+        function buildItemHistoryChanges(before, after) {
+            const b = before || {};
+            const a = after || {};
+            const changes = {};
+            const add = (key, beforeValue, afterValue) => {
+                if (!historyValueEqual(beforeValue, afterValue)) changes[key] = { before: historyJsonClone(beforeValue), after: historyJsonClone(afterValue) };
+            };
+            add('name', b.name || '', a.name || '');
+            add('category', b.category || '', a.category || '');
+            add('expiration', { date: b.date || '', noExpiration: !!b.noExpiration }, { date: a.date || '', noExpiration: !!a.noExpiration });
+            add('time', b.time || '', a.time || '');
+            add('durationMinutes', Number(b.durationMinutes) || 30, Number(a.durationMinutes) || 30);
+            add('reminders', b.reminders || [], a.reminders || []);
+            add('tags', b.tags || [], a.tags || []);
+            add('notes', b.notes || '', a.notes || '');
+            add('status', !!b.done, !!a.done);
+            add('archived', !!b.archived, !!a.archived);
+            add('pinned', !!b.pinned, !!a.pinned);
+            add('referenceDate', b.referenceDate || '', a.referenceDate || '');
+            add('endDate', b.endDate || '', a.endDate || '');
+            add('renewal', b.renewal || {}, a.renewal || {});
+            add('attachments', b.attachments || [], a.attachments || []);
+            add('showNotes', b.showNotes !== false, a.showNotes !== false);
+            return changes;
+        }
+
+        function getHistoryFileSearchUrl() {
+            return 'https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name="expire_history.json"&fields=files(id,name,modifiedTime)&pageSize=10';
+        }
+
+        async function getHistoryFileMetadata(fileId = historyDriveFileId) {
+            const url = fileId
+                ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,modifiedTime`
+                : getHistoryFileSearchUrl();
+            const response = await callGoogleAPI(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error?.message || `History metadata lookup failed (${response.status})`);
+            return fileId ? data : (data.files && data.files.length ? data.files[0] : null);
+        }
+
+        function normalizeHistoryDocument(raw) {
+            const source = raw && !Array.isArray(raw) ? raw : { version: 1, entries: Array.isArray(raw) ? raw : [] };
+            const entries = Array.isArray(source.entries) ? source.entries.filter(Boolean) : [];
+            return { version: 1, entries };
+        }
+
+        async function downloadHistoryDocument(fileId) {
+            const response = await callGoogleAPI(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const raw = await response.json();
+            if (!response.ok) throw new Error(raw.error?.message || `History download failed (${response.status})`);
+            return normalizeHistoryDocument(raw);
+        }
+
+        async function uploadHistoryDocument(fileId, document) {
+            const response = await callGoogleAPI(`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(fileId)}?uploadType=media&fields=id,modifiedTime`, {
+                method: 'PATCH',
+                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(document)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error?.message || `History save failed (${response.status})`);
+            historyDriveFileId = data.id || fileId;
+            historyModifiedTime = data.modifiedTime || historyModifiedTime || '';
+            historyLoaded = true;
+            return data;
+        }
+
+        async function loadHistoryFromCloud(options = {}) {
+            const force = !!options.force;
+            if (isTestMode) {
+                const stored = localStorage.getItem('expire_testHistory');
+                try {
+                    historyEntries = stored ? normalizeHistoryDocument(JSON.parse(stored)).entries : [];
+                } catch (_) {
+                    historyEntries = [];
+                }
+                historyDriveFileId = null;
+                historyModifiedTime = '';
+                historyLoaded = true;
+                return false;
+            }
+            if (!accessToken) return false;
+            const meta = await getHistoryFileMetadata();
+            if (!meta) {
+                historyDriveFileId = null;
+                historyModifiedTime = '';
+                historyEntries = [];
+                historyLoaded = true;
+                return false;
+            }
+            const needsData = force || !historyLoaded || !historyModifiedTime || meta.modifiedTime !== historyModifiedTime;
+            if (!needsData) return false;
+            const doc = await downloadHistoryDocument(meta.id);
+            historyDriveFileId = meta.id;
+            historyModifiedTime = meta.modifiedTime || '';
+            historyEntries = doc.entries;
+            historyLoaded = true;
+            return true;
+        }
+
+        function mergeHistoryEntries(existing, additions) {
+            const byId = new Map((existing || []).map(entry => [entry.id, entry]));
+            (additions || []).forEach(entry => {
+                if (entry && entry.id) byId.set(entry.id, entry);
+            });
+            return [...byId.values()].sort((a, b) => String(a.timestamp || '').localeCompare(String(b.timestamp || '')));
+        }
+
+        async function appendHistoryEntries(entries) {
+            if (!entries || !entries.length) return;
+            if (isTestMode) {
+                historyEntries = mergeHistoryEntries(historyEntries, entries);
+                localStorage.setItem('expire_testHistory', JSON.stringify({ version: 1, entries: historyEntries }));
+                historyLoaded = true;
+                return;
+            }
+
+            let pending = entries.map(historyJsonClone);
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const meta = await getHistoryFileMetadata();
+                if (!meta) {
+                    const createResponse = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: 'expire_history.json', parents: ['appDataFolder'], mimeType: 'application/json' })
+                    });
+                    const created = await createResponse.json().catch(() => ({}));
+                    if (!createResponse.ok) throw new Error(created.error?.message || `Could not create history file (${createResponse.status})`);
+                    historyDriveFileId = created.id;
+                    const initialDoc = { version: 1, entries: mergeHistoryEntries([], pending) };
+                    const saved = await uploadHistoryDocument(historyDriveFileId, initialDoc);
+                    historyEntries = initialDoc.entries;
+                    historyModifiedTime = saved.modifiedTime || '';
+                    historyLoaded = true;
+                    return;
+                }
+
+                const doc = await downloadHistoryDocument(meta.id);
+                const check = await getHistoryFileMetadata(meta.id);
+                if (!check || check.modifiedTime !== meta.modifiedTime) {
+                    continue;
+                }
+                const merged = mergeHistoryEntries(doc.entries, pending);
+                try {
+                    const saved = await uploadHistoryDocument(meta.id, { version: 1, entries: merged });
+                    historyDriveFileId = meta.id;
+                    historyEntries = merged;
+                    historyModifiedTime = saved.modifiedTime || check.modifiedTime || '';
+                    historyLoaded = true;
+                    return;
+                } catch (error) {
+                    if (attempt === 3) throw error;
+                }
+            }
+            throw new Error('History changed on another device while saving. Please try again.');
+        }
+
+        function historyActionLabel(action) {
+            const labels = {
+                created: 'Created',
+                updated: 'Updated',
+                renewed: 'Renewed',
+                duplicated: 'Duplicated',
+                marked_done: 'Marked Done',
+                marked_active: 'Marked Active',
+                archived: 'Archived',
+                unarchived: 'Unarchived',
+                pinned: 'Pinned',
+                unpinned: 'Unpinned',
+                attachment_added: 'Attachment Added',
+                attachment_removed: 'Attachment Removed',
+                attachment_linked: 'Attachment Linked',
+                attachment_unlinked: 'Attachment Unlinked',
+                attachment_renamed: 'Attachment Renamed',
+                deleted: 'Deleted'
+            };
+            return labels[action] || 'Updated';
+        }
+
+        function historyActionIcon(action) {
+            const icons = {
+                created: '✨', updated: '✏️', renewed: '🔄', duplicated: '📄',
+                marked_done: '✅', marked_active: '↩️', archived: '📦', unarchived: '📤',
+                pinned: '📌', unpinned: '📍', attachment_added: '📎', attachment_removed: '🗑️',
+                attachment_linked: '🔗', attachment_unlinked: '🔓', attachment_renamed: '✏️', deleted: '🗑️'
+            };
+            return icons[action] || '•';
+        }
+
+        function formatHistoryTimestamp(timestamp) {
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return String(timestamp || '');
+            return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function formatHistoryFieldValue(key, value) {
+            switch (key) {
+                case 'expiration': {
+                    if (!value || value.noExpiration) return 'No expiry';
+                    if (!value.date) return 'No date';
+                    const d = getDateOnly(value.date);
+                    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+                }
+                case 'status': return value ? 'Done' : 'Active';
+                case 'archived': return value ? 'Archived' : 'Not archived';
+                case 'pinned': return value ? 'Pinned' : 'Not pinned';
+                case 'time': return value || 'No specific time';
+                case 'durationMinutes': return `${value} min`;
+                case 'reminders': return value && value.length ? value.map(r => `${r.value} ${r.unit} (${r.method})`).join(', ') : 'None';
+                case 'tags': return value && value.length ? value.map(t => `#${t}`).join(' ') : 'None';
+                case 'referenceDate': return value ? formatHistoryFieldValue('expiration', { date: value, noExpiration: false }) : 'None';
+                case 'endDate': return value ? formatHistoryFieldValue('expiration', { date: value, noExpiration: false }) : 'Automatic';
+                case 'renewal': {
+                    if (!value || !value.enabled) return 'Disabled';
+                    return `Every ${formatRenewalInterval(value.value, value.unit)} · base: ${value.base === 'current' ? 'current date' : 'previous expiry'}`;
+                }
+                case 'showNotes': return value ? 'Shown' : 'Hidden';
+                case 'attachments': return value && value.length ? `${value.length} file${value.length === 1 ? '' : 's'}` : 'None';
+                default: return String(value ?? '');
+            }
+        }
+
+        function formatHistoryNotePreview(text) {
+            const firstLine = String(text || '').split(/\r?\n/)[0].trim();
+            if (!firstLine) return 'No text';
+            const compact = firstLine.length > 220 ? firstLine.slice(0, 217) + '…' : firstLine;
+            return `“${compact}”`;
+        }
+
+        function commonChangeSpan(beforeText, afterText) {
+            const before = String(beforeText || '');
+            const after = String(afterText || '');
+            let start = 0;
+            const minLen = Math.min(before.length, after.length);
+            while (start < minLen && before[start] === after[start]) start++;
+            let beforeEnd = before.length;
+            let afterEnd = after.length;
+            while (beforeEnd > start && afterEnd > start && before[beforeEnd - 1] === after[afterEnd - 1]) {
+                beforeEnd--; afterEnd--;
+            }
+            return { start, beforeEnd, afterEnd };
+        }
+
+        function renderContextualText(text, start, end, tagName) {
+            const source = String(text || '');
+            const context = 100;
+            if (source.length <= 260) {
+                return `${escapeHtml(source.slice(0, start))}<${tagName}>${escapeHtml(source.slice(start, end))}</${tagName}>${escapeHtml(source.slice(end))}`;
+            }
+            const from = Math.max(0, start - context);
+            const to = Math.min(source.length, end + context);
+            const prefix = from > 0 ? '…' : '';
+            const suffix = to < source.length ? '…' : '';
+            return `${prefix}${escapeHtml(source.slice(from, start))}<${tagName}>${escapeHtml(source.slice(start, Math.max(start, Math.min(end, to))))}</${tagName}>${escapeHtml(source.slice(Math.max(start, Math.min(end, to)), to))}${suffix}`;
+        }
+
+        function buildNoteLineDiff(beforeLine, afterLine) {
+            const before = String(beforeLine ?? '');
+            const after = String(afterLine ?? '');
+            const span = commonChangeSpan(before, after);
+            return {
+                beforeHtml: renderContextualText(before, span.start, span.beforeEnd, 'del'),
+                afterHtml: renderContextualText(after, span.start, span.afterEnd, 'ins')
+            };
+        }
+
+        function buildLineDiff(beforeText, afterText) {
+            const oldLines = String(beforeText || '').split(/\r?\n/);
+            const newLines = String(afterText || '').split(/\r?\n/);
+            const n = oldLines.length;
+            const m = newLines.length;
+            const maxCells = 90000;
+            let ops;
+
+            if (n * m <= maxCells) {
+                const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+                for (let i = n - 1; i >= 0; i--) {
+                    for (let j = m - 1; j >= 0; j--) {
+                        dp[i][j] = oldLines[i] === newLines[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+                    }
+                }
+                ops = [];
+                let i = 0, j = 0;
+                while (i < n && j < m) {
+                    if (oldLines[i] === newLines[j]) { ops.push({ type: 'equal', line: oldLines[i] }); i++; j++; }
+                    else if (dp[i + 1][j] >= dp[i][j + 1]) { ops.push({ type: 'remove', line: oldLines[i++] }); }
+                    else { ops.push({ type: 'add', line: newLines[j++] }); }
+                }
+                while (i < n) ops.push({ type: 'remove', line: oldLines[i++] });
+                while (j < m) ops.push({ type: 'add', line: newLines[j++] });
+            } else {
+                // Long/pathological notes: use index-based fallback rather than spending
+                // excessive CPU on an O(n²) diff.
+                const max = Math.max(n, m);
+                ops = [];
+                for (let i = 0; i < max; i++) {
+                    if (i < n && i < m && oldLines[i] === newLines[i]) ops.push({ type: 'equal', line: oldLines[i] });
+                    else {
+                        if (i < n) ops.push({ type: 'remove', line: oldLines[i] });
+                        if (i < m) ops.push({ type: 'add', line: newLines[i] });
+                    }
+                }
+            }
+
+            const changedPairs = [];
+            const stats = { updated: 0, added: 0, removed: 0 };
+            for (let i = 0; i < ops.length; i++) {
+                if (ops[i].type === 'remove' && ops[i + 1]?.type === 'add') {
+                    let r = i, a = i;
+                    const removed = [];
+                    const added = [];
+                    while (r < ops.length && ops[r]?.type === 'remove') { removed.push(ops[r].line); r++; }
+                    a = r;
+                    while (a < ops.length && ops[a]?.type === 'add') { added.push(ops[a].line); a++; }
+                    const pairs = Math.min(removed.length, added.length);
+                    for (let k = 0; k < pairs; k++) {
+                        stats.updated++;
+                        changedPairs.push({ kind: 'updated', before: removed[k], after: added[k] });
+                    }
+                    for (let k = pairs; k < removed.length; k++) { stats.removed++; changedPairs.push({ kind: 'removed', before: removed[k], after: null }); }
+                    for (let k = pairs; k < added.length; k++) { stats.added++; changedPairs.push({ kind: 'added', before: null, after: added[k] }); }
+                    i = a - 1;
+                } else if (ops[i].type === 'remove') {
+                    stats.removed++; changedPairs.push({ kind: 'removed', before: ops[i].line, after: null });
+                } else if (ops[i].type === 'add') {
+                    stats.added++; changedPairs.push({ kind: 'added', before: null, after: ops[i].line });
+                }
+            }
+            const firstLine = changedPairs.find(p => p.after !== null)?.after ?? changedPairs.find(p => p.before !== null)?.before ?? '';
+            return { stats, changedPairs, firstLine };
+        }
+
+        function noteStatsLabel(stats) {
+            return `${stats.updated} updated · ${stats.added} added · ${stats.removed} removed`;
+        }
+
+        function historyEntriesForItem(itemId) {
+            return (historyEntries || []).filter(entry => entry.itemId === itemId).sort((a, b) => String(b.timestamp || '').localeCompare(String(a.timestamp || '')));
+        }
+
+        function getItemHistoryCount(itemId) {
+            return historyEntriesForItem(itemId).length;
+        }
+
+        function renderHistoryChange(key, change, entryIndex, changeIndex) {
+            const before = change?.before;
+            const after = change?.after;
+            if (key === 'notes') {
+                const diff = buildLineDiff(before || '', after || '');
+                const statsText = noteStatsLabel(diff.stats);
+                const previewText = formatHistoryNotePreview(diff.firstLine);
+                const detailId = `history-note-${entryIndex}-${changeIndex}`;
+                const pairs = diff.changedPairs.slice(0, 12).map(pair => {
+                    if (pair.kind === 'updated') {
+                        const lineDiff = buildNoteLineDiff(pair.before, pair.after);
+                        return `<div class="history-diff-line"><div class="old">− ${lineDiff.beforeHtml}</div><div class="new">+ ${lineDiff.afterHtml}</div></div>`;
+                    }
+                    if (pair.kind === 'removed') return `<div class="history-diff-line"><div class="old">− ${escapeHtml(pair.before || '')}</div></div>`;
+                    return `<div class="history-diff-line"><div class="new">+ ${escapeHtml(pair.after || '')}</div></div>`;
+                }).join('');
+                const omitted = Math.max(0, diff.changedPairs.length - Math.min(12, diff.changedPairs.length));
+                return `<div class="history-change-row">
+                    <span class="history-change-label">Notes changed</span>
+                    <span class="history-stat">${escapeHtml(statsText)}</span>
+                    <span class="history-note-preview"><code>${escapeHtml(previewText)}</code></span>
+                    ${diff.changedPairs.length ? `<button type="button" class="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline" onclick="toggleHistoryNoteDetails('${detailId}')">View diff</button>` : ''}
+                    ${diff.changedPairs.length ? `<div id="${detailId}" class="history-note-details hidden w-full">${pairs}${omitted ? `<div class="text-xs text-gray-400 dark:text-gray-500 mt-2">${omitted} more changed line${omitted === 1 ? '' : 's'}…</div>` : ''}</div>` : ''}
+                </div>`;
+            }
+
+            const labelMap = {
+                name: 'Name', category: 'Category', expiration: 'Expiration', time: 'Time', durationMinutes: 'Duration',
+                reminders: 'Reminders', tags: 'Tags', status: 'Status', archived: 'Archive', pinned: 'Pin',
+                referenceDate: 'Reference date', endDate: 'End date', renewal: 'Renewal', attachments: 'Attachments', showNotes: 'Notes visibility'
+            };
+            const label = labelMap[key] || key;
+            return `<div class="history-change-row">
+                <span class="history-change-label">${escapeHtml(label)}</span>
+                <span class="history-value-before">${escapeHtml(formatHistoryFieldValue(key, before))}</span>
+                <span class="history-change-arrow">→</span>
+                <span class="history-value-after">${escapeHtml(formatHistoryFieldValue(key, after))}</span>
+            </div>`;
+        }
+
+        function toggleHistoryNoteDetails(detailId) {
+            const el = document.getElementById(detailId);
+            if (!el) return;
+            el.classList.toggle('hidden');
+        }
+
+        function renderItemHistory(itemId) {
+            if (!itemHistoryListEl) return;
+            const entries = historyEntriesForItem(itemId);
+            if (!entries.length) {
+                itemHistoryListEl.innerHTML = `<div class="history-empty"><div class="text-3xl mb-2">🕘</div><div class="text-sm">No history recorded for this item yet.</div></div>`;
+                return;
+            }
+            itemHistoryListEl.innerHTML = `<div class="history-timeline">${entries.map((entry, entryIndex) => {
+                const changes = entry.changes || {};
+                const changeKeys = Object.keys(changes);
+                const details = entry.details || {};
+                let html = `<div class="history-entry">
+                    <div class="history-entry-header">
+                        <div class="min-w-0">
+                            <div class="font-semibold text-sm text-gray-900 dark:text-gray-100">${historyActionIcon(entry.action)} ${escapeHtml(historyActionLabel(entry.action))}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${escapeHtml(formatHistoryTimestamp(entry.timestamp))}</div>
+                        </div>
+                    </div>`;
+
+                if (details.interval) {
+                    html += `<div class="history-change-row"><span class="history-change-label">Renewal interval</span><span class="history-value-after">Every ${escapeHtml(formatRenewalInterval(details.interval.value, details.interval.unit))}</span></div>`;
+                }
+                if (details.childItemName) {
+                    html += `<div class="history-change-row"><span class="history-change-label">New item</span><span class="history-value-after">${escapeHtml(details.childItemName)}</span></div>`;
+                }
+                if (details.parentItemName) {
+                    html += `<div class="history-change-row"><span class="history-change-label">Parent item</span><span class="history-value-after">${escapeHtml(details.parentItemName)}</span></div>`;
+                }
+                if (details.fileName) {
+                    html += `<div class="history-change-row"><span class="history-change-label">File</span><span class="history-value-after">${escapeHtml(details.fileName)}</span></div>`;
+                }
+                if (details.relatedItemName) {
+                    html += `<div class="history-change-row"><span class="history-change-label">Related item</span><span class="history-value-after">${escapeHtml(details.relatedItemName)}</span></div>`;
+                }
+
+                changeKeys.forEach((key, changeIndex) => {
+                    html += renderHistoryChange(key, changes[key], entryIndex, changeIndex);
+                });
+
+                if (!changeKeys.length && !details.interval && !details.childItemName && !details.parentItemName && !details.fileName && !details.relatedItemName && entry.action !== 'created') {
+                    html += `<div class="text-xs text-gray-500 dark:text-gray-400 mt-2">No field-level changes.</div>`;
+                }
+                if (entry.sourceItemId) {
+                    const related = (appData.items || []).find(i => i.id === entry.sourceItemId);
+                    if (related) {
+                        html += `<button type="button" class="history-related-link" onclick="closeItemHistory(); scrollToItemCard('${escapeHtml(related.id)}')"><i class="fas fa-link text-[10px]"></i> View related item</button>`;
+                    }
+                }
+                html += `</div>`;
+                return html;
+            }).join('')}</div>`;
+        }
+
+        function lockItemHistoryScroll() {
+            if (!itemHistoryModal || document.body.classList.contains('modal-scroll-locked')) return;
+            historyModalScrollY = window.scrollY || window.pageYOffset || 0;
+            document.body.classList.add('modal-scroll-locked');
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${historyModalScrollY}px`;
+            document.body.style.left = '0';
+            document.body.style.right = '0';
+            document.body.style.width = '100%';
+        }
+
+        function unlockItemHistoryScroll() {
+            if (!document.body.classList.contains('modal-scroll-locked')) return;
+            document.body.classList.remove('modal-scroll-locked');
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.left = '';
+            document.body.style.right = '';
+            document.body.style.width = '';
+            window.scrollTo(0, historyModalScrollY);
+        }
+
+        async function openItemHistory(itemId) {
+            const item = appData.items.find(i => i.id === itemId);
+            if (!item) return;
+            try {
+                if (!isTestMode) await loadHistoryFromCloud({ force: true });
+            } catch (error) {
+                toastError('Could not load item history: ' + error.message);
+                return;
+            }
+            historyModalItemId = itemId;
+            const freshItem = appData.items.find(i => i.id === itemId) || item;
+            if (itemHistoryModalTitleEl) itemHistoryModalTitleEl.textContent = 'Item History';
+            if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${freshItem.name || '(Unnamed item)'} · ${getItemHistoryCount(itemId)} entr${getItemHistoryCount(itemId) === 1 ? 'y' : 'ies'}`;
+            renderItemHistory(itemId);
+            itemHistoryModal?.classList.remove('hidden');
+            lockItemHistoryScroll();
+        }
+
+        function closeItemHistory() {
+            historyModalItemId = null;
+            itemHistoryModal?.classList.add('hidden');
+            unlockItemHistoryScroll();
+        }
+
+        async function recordItemHistory(itemId, action, source, before, after, details = {}, options = {}) {
+            if (!itemId) return;
+            const changes = (before && after) ? buildItemHistoryChanges(before, after) : {};
+            if (action === 'updated' && Object.keys(changes).length === 0) return;
+            const entry = {
+                id: `history-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                itemId,
+                timestamp: new Date().toISOString(),
+                action,
+                source: source || '',
+                changes,
+                details: historyJsonClone(details || {})
+            };
+            try {
+                await appendHistoryEntries([entry]);
+                if (historyModalItemId === itemId) {
+                    const item = appData.items.find(i => i.id === itemId);
+                    if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${item?.name || '(Unnamed item)'} · ${getItemHistoryCount(itemId)} entr${getItemHistoryCount(itemId) === 1 ? 'y' : 'ies'}`;
+                    renderItemHistory(itemId);
+                }
+            } catch (error) {
+                console.warn('History save failed:', error);
+                if (!options.silent) toastWarning('Item saved, but its history could not be updated.');
+            }
+            return entry;
+        }
+
         // ---------- CALENDAR ----------
         function getReminderMinutes(reminder) {
             const value = reminder.value || 0;
@@ -3180,6 +3928,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             try {
                 if (!(await ensureLatestCloudDataBeforeWrite(`renaming ${oldName}`))) return;
                 const item = (appData.items || []).find(i => i.id === previewData.itemId);
+                const attachmentHistoryBeforeByItem = new Map();
+                (appData.items || []).forEach(refItem => {
+                    if ((refItem.attachments || []).some(ref => ref.driveFileId === previewData.fileId)) {
+                        attachmentHistoryBeforeByItem.set(refItem.id, historySnapshot(refItem));
+                    }
+                });
                 const att = item && (item.attachments || []).find(a => a.driveFileId === previewData.fileId);
                 if (!att) {
                     toastError('That file is no longer attached to this item. Please reopen the item.');
@@ -3200,6 +3954,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (titleEl) titleEl.textContent = newName;
                 cancelPreviewRename();
                 await syncToCloud();
+                for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
+                    const afterItem = appData.items.find(i => i.id === historyItemId);
+                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName }, { silent: true });
+                }
                 renderAll();
                 updatePreviewNavigation();
                 showToast('File renamed successfully.');
@@ -3315,6 +4073,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     return;
                 }
                 targetItem.attachments = Array.isArray(targetItem.attachments) ? targetItem.attachments : [];
+                const sourceHistoryBefore = historySnapshot(sourceItem);
+                const targetHistoryBefore = historySnapshot(targetItem);
                 const linkedRef = {
                     driveFileId: sourceAtt.driveFileId,
                     name: sourceAtt.name,
@@ -3332,6 +4092,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     targetItem.attachments = targetItem.attachments.filter(a => a !== linkedRef);
                     throw err;
                 }
+                await recordItemHistory(targetItem.id, 'attachment_linked', 'link', targetHistoryBefore, historySnapshot(targetItem), { fileName: sourceAtt.name, relatedItemName: sourceItem.name }, { silent: true });
+                await recordItemHistory(sourceItem.id, 'attachment_linked', 'link', sourceHistoryBefore, historySnapshot(sourceItem), { fileName: sourceAtt.name, relatedItemName: targetItem.name }, { silent: true });
                 closeLinkAttachmentModal();
                 renderAll();
                 showToast(`Linked “${sourceAtt.name}” to ${targetItem.name}.`);
@@ -3863,6 +4625,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!newName || newName === att.name) return;
             try {
                 if (!(await ensureLatestCloudDataBeforeWrite(`renaming ${att.name}`))) return;
+                const attachmentHistoryBeforeByItem = new Map();
+                (appData.items || []).forEach(item => {
+                    if ((item.attachments || []).some(ref => ref.driveFileId === att.driveFileId)) attachmentHistoryBeforeByItem.set(item.id, historySnapshot(item));
+                });
                 if (editingItemId !== null) {
                     const freshItem = appData.items.find(i => i.id === editingItemId);
                     if (!freshItem) { toastError('This item was changed or removed on another device. Please reopen it.'); return; }
@@ -3882,7 +4648,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 att.name = newName;
                 renderAttachments();
                 // Auto-save item
-                await autoSaveItem();
+                const autoSaveOk = await autoSaveItem();
+                if (!autoSaveOk) return;
+                for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
+                    const afterItem = appData.items.find(i => i.id === historyItemId);
+                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName }, { silent: true });
+                }
                 showToast('Renamed attachment.');
             } catch (err) {
                 toastError('Rename failed: ' + err.message);
@@ -3904,6 +4675,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     att = freshAtt;
                 }
                 const removedAttachmentId = att.driveFileId;
+                const currentEditableItemForHistory = getCurrentEditableItem();
+                const attachmentHistoryBefore = currentEditableItemForHistory ? historySnapshot(currentEditableItemForHistory) : null;
+                const removedFileName = att.name;
                 const keepPhysicalFile = isAttachmentShared(removedAttachmentId, editingItemId);
                 if (!keepPhysicalFile) {
                     await deleteFile(removedAttachmentId);
@@ -3918,7 +4692,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 formAttachments.splice(idx, 1);
                 renderAttachments();
                 // Auto-save item to update JSON
-                await autoSaveItem();
+                const autoSaveOk = await autoSaveItem();
+                if (!autoSaveOk) return;
+                const currentEditableItemAfterRemove = getCurrentEditableItem();
+                if (currentEditableItemForHistory && currentEditableItemAfterRemove) {
+                    await recordItemHistory(editingItemId, 'attachment_removed', 'attachment', attachmentHistoryBefore, historySnapshot(currentEditableItemAfterRemove), { fileName: removedFileName }, { silent: true });
+                }
                 showToast(keepPhysicalFile ? 'Attachment unlinked from this item; the shared file remains available.' : 'Attachment removed.');
             } catch (err) {
                 // If file not found on Drive, just remove it from the list
@@ -4771,6 +5550,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 : selectedParentAction;
             const previousParentDone = !!item.done;
             const previousParentDoneAt = item.doneAt || '';
+            const parentHistoryBefore = historySnapshot(item);
             const previousRenewal = item.renewal ? { ...item.renewal } : item.renewal;
             const chainRootId = getChainIdForItem(item);
             const previousSavedPreference = chainRootId ? appData.settings?.chainCompletionModes?.[chainRootId] : undefined;
@@ -4865,6 +5645,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         showLoading(isRenew ? 'Syncing renewed item to cloud' : 'Syncing duplicate to cloud');
                         await syncToCloud();
                     }
+
+                    const operationDetails = {
+                        childItemName: newItem.name,
+                        parentItemName: item.name,
+                        ...(isRenew ? { interval: { value: renewalValue, unit: renewalUnit } } : {})
+                    };
+                    await recordItemHistory(newItem.id, isRenew ? 'renewed' : 'duplicated', isRenew ? 'renew' : 'duplicate', null, historySnapshot(newItem), { parentItemName: item.name, interval: isRenew ? { value: renewalValue, unit: renewalUnit } : undefined }, { silent: true });
+                    await recordItemHistory(item.id, isRenew ? 'renewed' : 'duplicated', isRenew ? 'renew' : 'duplicate', parentHistoryBefore, historySnapshot(item), operationDetails, { silent: true });
                     renderAll();
                     closeDuplicateModal();
                 });
@@ -4991,6 +5779,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             const previousDone = !!item.done;
             const previousDoneAt = item.doneAt || '';
+            const historyBefore = historySnapshot(item);
             item.done = !previousDone;
             item.doneAt = item.done ? new Date().toISOString() : '';
             let calendarTitleChanged = false;
@@ -5007,6 +5796,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         await syncToCloud();
                     }
                 });
+                await recordItemHistory(itemId, item.done ? 'marked_done' : 'marked_active', 'completion', historyBefore, historySnapshot(item));
                 renderAll();
                 showToast(item.done ? 'Marked as done.' : 'Marked as active.');
             } catch (error) {
@@ -5031,6 +5821,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const currentArchived = !!appData.items[idx].archived;
             const action = currentArchived ? 'unarchive' : 'archive';
             if (!confirm(`Are you sure you want to ${action} this item?`)) return;
+            const historyBefore = historySnapshot(appData.items[idx]);
             appData.items[idx].archived = !currentArchived;
             
             if (isTestMode) {
@@ -5041,6 +5832,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 });
             }
             
+            await recordItemHistory(appData.items[idx]?.id || '', currentArchived ? 'unarchived' : 'archived', 'archive', historyBefore, historySnapshot(appData.items[idx]));
             showToast(`Item ${action}d.`);
             renderAll();
         }
@@ -5069,6 +5861,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             const freshEventId = freshItem.eventId;
             const freshAttachments = freshItem.attachments || [];
+            const historyBeforeDelete = historySnapshot(freshItem);
         
             await withLoading("Deleting item and attachments...", async () => {
                 // Delete only physical files that no other item references.
@@ -5095,6 +5888,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 } else {
                     await syncToCloud();
                 }
+                await recordItemHistory(itemId, 'deleted', 'delete', historyBeforeDelete, null, { parentItemName: freshItem.name }, { silent: true });
         
                 renderAll();
             });
@@ -5164,6 +5958,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         if (idx === -1) return;
         
                         const old = appData.items[idx];
+                        const historyBefore = historySnapshot(old);
         
                         // Remove old calendar event if it exists (regardless of new state)
                         if (old.eventId && !isTestMode) {
@@ -5269,13 +6064,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     }
 
                     registerKnownTags(formTags);
-        
+
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
                         showLoading("Syncing data to cloud...");
                         updateStatus("Syncing data to cloud...");
                         await syncToCloud();
+                    }
+
+                    if (wasEditing) {
+                        const savedItem = appData.items.find(i => i.id === editingItemId);
+                        const historyAfter = historySnapshot(savedItem);
+                        await recordItemHistory(editingItemId, 'updated', 'edit', historyBefore, historyAfter);
+                    } else {
+                        const createdItem = appData.items[appData.items.length - 1];
+                        if (createdItem) await recordItemHistory(createdItem.id, 'created', 'create', null, historySnapshot(createdItem));
                     }
         
                     closeItemModal();
@@ -6055,6 +6859,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          title="Edit">
                                     <i class="fas fa-edit text-base"></i>
                                 </button>
+                                <button onclick="openItemHistory('${item.id}')" 
+                                         class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition relative" 
+                                         title="History">
+                                    <i class="fas fa-clock-rotate-left text-base"></i>
+                                    ${getItemHistoryCount(item.id) > 0 ? `<span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[8px] leading-[14px] text-center font-bold">${Math.min(getItemHistoryCount(item.id), 99)}</span>` : ''}
+                                </button>
                                 <button onclick="openDuplicateModal('${item.id}')" 
                                          class="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
                                          title="Duplicate">
@@ -6137,12 +6947,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${file.name}`))) return;
                     const item = appData.items.find(i => i.id === itemId);
                     if (!item) { toastError('That item was changed or removed on another device. Please refresh the list.'); return; }
+                    const historyBefore = historySnapshot(item);
                     let fileId;
                     await withLoading(`Uploading ${file.name}...`, async () => { fileId = await uploadFileToAppData(file, file.name); });
                     item.attachments = item.attachments || [];
                     item.attachments.push({ driveFileId: fileId, name: file.name, mimeType: file.type || 'application/octet-stream', addedDate: getTodayDateString() });
                     if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
                     else await syncToCloud();
+                    await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), { fileName: file.name });
                     renderAll();
                     toastSuccess(`Uploaded ${file.name}`);
                 } catch (err) {
@@ -6178,6 +6990,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                     return;
                 }
+                const historyBefore = historySnapshot(freshItem);
+                historyBefore.notes = latestOldNotes;
                 await withLoading('Saving notes...', async () => {
                     freshItem.notes = notes;
                     await updateCalendarEventNotes(freshItem.eventId, notes, freshItem.tags || []);
@@ -6187,6 +7001,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         await syncToCloud();
                     }
                 });
+                await recordItemHistory(itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem));
                 inlineNoteEditItemId = null;
                 renderAll();
                 toastSuccess('Notes saved.');
@@ -6298,6 +7113,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!item) { toastError('That item was changed or removed on another device. Please refresh the list.'); renderAll(); return; }
 
             const previous = !!item.pinned;
+            const historyBefore = historySnapshot(item);
             item.pinned = !previous;
             try {
                 await withLoading(item.pinned ? 'Pinning item...' : 'Unpinning item...', async () => {
@@ -6307,6 +7123,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         await syncToCloud();
                     }
                 });
+                await recordItemHistory(itemId, item.pinned ? 'pinned' : 'unpinned', 'pin', historyBefore, historySnapshot(item));
                 renderAll();
                 showToast(item.pinned ? 'Pinned to the top.' : 'Unpinned.');
             } catch (error) {
@@ -6323,7 +7140,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             updateFilterUI();
             updateSearchUI();
             updateViewModeUI();
-            renderItems(); 
+            renderItems();
+            if (historyModalItemId && itemHistoryModal && !itemHistoryModal.classList.contains('hidden')) {
+                const historyItem = appData.items.find(i => i.id === historyModalItemId);
+                if (historyItem) {
+                    if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${historyItem.name || '(Unnamed item)'} · ${getItemHistoryCount(historyModalItemId)} entr${getItemHistoryCount(historyModalItemId) === 1 ? 'y' : 'ies'}`;
+                    renderItemHistory(historyModalItemId);
+                }
+            }
         }
         
         function showAppUI() {
@@ -6400,7 +7224,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // ---------- INIT ----------
         async function initAppData() {
             updateStatus("Syncing cloud data...");
-            try { await withLoading("Loading data...", async () => {await loadFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
+            try { await withLoading("Loading data...", async () => {await loadFromCloud(); await loadHistoryFromCloud();}); updateStatus("✅ Cloud Synced"); showAppUI(); }
             catch(e) { 
                 console.error(e); 
                 updateStatus("❌ Sync Error"); 
@@ -6420,6 +7244,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function loadTestData() {
+            const testHistoryStored = localStorage.getItem('expire_testHistory');
+            try { historyEntries = testHistoryStored ? normalizeHistoryDocument(JSON.parse(testHistoryStored)).entries : []; } catch (_) { historyEntries = []; }
+            historyDriveFileId = null; historyModifiedTime = ''; historyLoaded = true;
             const stored = localStorage.getItem('expire_testData');
             if (stored) {
                 try {
@@ -6546,6 +7373,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // Also reset app data
             appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: '' } };
             driveFileId = null;
+            historyDriveFileId = null;
+            historyModifiedTime = '';
+            historyEntries = [];
+            historyLoaded = false;
         };
 
         // ---------- OTHER INITIALIZATIONS ----------
@@ -6625,6 +7456,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
+        if (itemHistoryModal) {
+            itemHistoryModal.addEventListener('click', (e) => {
+                if (e.target === itemHistoryModal) closeItemHistory();
+            });
+        }
         document.getElementById('discardChangesModal').addEventListener('click', (e) => {
             if (e.target === document.getElementById('discardChangesModal')) resolveDiscardChanges(false);
         });
@@ -6637,6 +7473,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // let the modal-specific Escape handler close only the topmost dialog first.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (itemHistoryModal && !itemHistoryModal.classList.contains('hidden')) {
+                    e.preventDefault();
+                    closeItemHistory();
+                    return;
+                }
                 if (linkAttachmentModal && !linkAttachmentModal.classList.contains('hidden')) return;
                 closePreview();
                 if (inlineNoteEditItemId !== null) {
