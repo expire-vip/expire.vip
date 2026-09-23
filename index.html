@@ -1264,14 +1264,18 @@
                     <p id="duplicateDateHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
                 </div>
                 <div>
-                    <label for="parentStateAction" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">After creating the new item</label>
-                    <select id="parentStateAction" class="w-full h-11 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
-                        <option value="smart">🧠 Smart</option>
-                        <option value="unchanged">Leave unchanged</option>
-                        <option value="done">Mark current item as Done</option>
-                        <option value="active">Mark current item as Active</option>
-                    </select>
-                    <p id="parentStateActionHint" class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed"></p>
+                    <label for="parentStateAction" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Parent item status will be updated to</label>
+                    <div class="relative">
+                        <select id="parentStateAction" class="w-full h-11 pl-3 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                            <option value="smart">🧠 Smart</option>
+                            <option value="unchanged">Leave unchanged</option>
+                            <option value="done">Mark current item as Done</option>
+                            <option value="active">Mark current item as Active</option>
+                        </select>
+                        <span id="parentStateActionInfo" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 cursor-help" title="Smart uses the saved preference for this chain when available; otherwise Renew defaults to Done and Duplicate defaults to leaving the parent unchanged.">
+                            <i class="fas fa-info-circle text-xs"></i>
+                        </span>
+                    </div>
                 </div>
                 <div id="renewOptions" class="hidden space-y-4">
                     <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
@@ -1632,7 +1636,7 @@
         const duplicateDateHintEl = document.getElementById('duplicateDateHint');
         const duplicateDescriptionEl = document.getElementById('duplicateDescription');
         const parentStateActionEl = document.getElementById('parentStateAction');
-        const parentStateActionHintEl = document.getElementById('parentStateActionHint');
+        const parentStateActionInfoEl = document.getElementById('parentStateActionInfo');
         const duplicateOriginalLabelEl = document.getElementById('duplicateOriginalLabel');
         const renewOptionsEl = document.getElementById('renewOptions');
         const renewIntervalValueEl = document.getElementById('renewIntervalValue');
@@ -4598,33 +4602,55 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        function formatSmartParentStateLabel(sourceState, resolvedAction) {
+            const targetState = resolvedAction === 'done' ? 'Done' : resolvedAction === 'active' ? 'Active' : sourceState;
+            return `🧠 Smart ${sourceState} → ${targetState}`;
+        }
+
         function updateParentStateActionHint(item = null) {
-            if (!parentStateActionEl || !parentStateActionHintEl) return;
+            if (!parentStateActionEl) return;
             const source = item || appData.items.find(i => i.id === duplicatingItemId);
             if (!source) return;
 
             const selected = parentStateActionEl.value || 'smart';
+            const sourceState = source.done ? 'Done' : 'Active';
+            let resolved;
+            let tooltip;
+
             if (selected === 'smart') {
-                const resolved = getSmartParentStateAction(source, duplicateMode);
+                resolved = getSmartParentStateAction(source, duplicateMode);
                 const rootId = getChainIdForItem(source);
                 const saved = rootId ? appData.settings?.chainCompletionModes?.[rootId] : null;
                 const historyCount = getChainCompletionHistory(rootId).length;
-                const sourceState = source.done ? 'Done' : 'Active';
-                let reason;
+
                 if (['done', 'active', 'unchanged'].includes(saved)) {
-                    reason = `Smart is using this chain's saved preference: ${describeParentStateAction(saved)}.`;
+                    tooltip = `Smart is using this chain's saved preference: ${describeParentStateAction(saved)}.`;
                 } else if (historyCount > 0) {
-                    reason = `Smart is using this chain's previous choices.`;
+                    tooltip = `Smart is using this chain's previous choices to select ${describeParentStateAction(resolved).toLowerCase()}.`;
                 } else {
-                    reason = duplicateMode === 'renew'
+                    tooltip = duplicateMode === 'renew'
                         ? 'Renew defaults to Done because the previous item represents the occurrence being replaced.'
                         : 'Duplicate defaults to leaving the current item unchanged.';
                 }
-                parentStateActionHintEl.textContent = `${reason} Current item is ${sourceState}; this action will: ${describeParentStateAction(resolved)}.`;
+                parentStateActionEl.options[parentStateActionEl.selectedIndex].textContent = formatSmartParentStateLabel(sourceState, resolved);
             } else {
-                parentStateActionHintEl.textContent = `Current item is ${source.done ? 'Done' : 'Active'}. This action will: ${describeParentStateAction(selected)}.`;
+                resolved = selected;
+                // Keep Smart dynamic while preserving the explicit option labels.
+                const smartOption = parentStateActionEl.querySelector('option[value="smart"]');
+                if (smartOption) {
+                    const smartResolved = getSmartParentStateAction(source, duplicateMode);
+                    smartOption.textContent = formatSmartParentStateLabel(sourceState, smartResolved);
+                }
+                tooltip = `Current item is ${sourceState}. ${describeParentStateAction(selected)} will be applied.`;
+            }
+
+            const targetState = resolved === 'done' ? 'Done' : resolved === 'active' ? 'Active' : sourceState;
+            parentStateActionEl.title = `${sourceState} → ${targetState}. ${tooltip}`;
+            if (parentStateActionInfoEl) {
+                parentStateActionInfoEl.title = tooltip;
             }
         }
+
 
         function setChainCompletionPreference(item, action) {
             if (!item || !['done', 'active', 'unchanged'].includes(action)) return;
@@ -4708,7 +4734,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
             if (renewIntervalHintEl) renewIntervalHintEl.textContent = '';
             if (parentStateActionEl) parentStateActionEl.value = 'smart';
-            if (parentStateActionHintEl) parentStateActionHintEl.textContent = '';
             if (confirmDuplicateBtn) {
                 confirmDuplicateBtn.disabled = false;
                 confirmDuplicateBtn.textContent = 'Duplicate';
