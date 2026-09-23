@@ -1263,6 +1263,16 @@
                     <input type="date" id="duplicateDate" class="w-full h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                     <p id="duplicateDateHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
                 </div>
+                <div>
+                    <label for="parentStateAction" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">After creating the new item</label>
+                    <select id="parentStateAction" class="w-full h-11 px-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
+                        <option value="smart">🧠 Smart</option>
+                        <option value="unchanged">Leave unchanged</option>
+                        <option value="done">Mark current item as Done</option>
+                        <option value="active">Mark current item as Active</option>
+                    </select>
+                    <p id="parentStateActionHint" class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed"></p>
+                </div>
                 <div id="renewOptions" class="hidden space-y-4">
                     <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Renewal interval</label>
@@ -1620,6 +1630,8 @@
         const duplicateDateEl = document.getElementById('duplicateDate');
         const duplicateDateHintEl = document.getElementById('duplicateDateHint');
         const duplicateDescriptionEl = document.getElementById('duplicateDescription');
+        const parentStateActionEl = document.getElementById('parentStateAction');
+        const parentStateActionHintEl = document.getElementById('parentStateActionHint');
         const duplicateOriginalLabelEl = document.getElementById('duplicateOriginalLabel');
         const renewOptionsEl = document.getElementById('renewOptions');
         const renewIntervalValueEl = document.getElementById('renewIntervalValue');
@@ -2331,6 +2343,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // ---------- CLOUD STORAGE (Google Drive) ----------
         // Migration function to add noExpiration flag and ensure date is a string
         function migrateItems() {
+            appData.settings = appData.settings || {};
+            if (!appData.settings.chainCompletionModes || typeof appData.settings.chainCompletionModes !== 'object' || Array.isArray(appData.settings.chainCompletionModes)) {
+                appData.settings.chainCompletionModes = {};
+            }
             appData.items.forEach(item => {
                 if (item.noExpiration === undefined) {
                     // If date is empty or null, treat as no expiration
@@ -2348,6 +2364,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 // Ensure completion status exists
                 if (item.done === undefined) item.done = false;
                 if (item.doneAt === undefined) item.doneAt = '';
+                if (item.parentStateAction === undefined) item.parentStateAction = '';
                 // Ensure attachments array exists
                 if (item.attachments === undefined) item.attachments = [];
                 // Linked attachments point to an existing physical Drive file; they are not duplicates.
@@ -2429,7 +2446,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return true;
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz } };
+                appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz, chainCompletionModes: {} } };
                 cloudDataModifiedTime = '';
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -4461,6 +4478,87 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             window.scrollTo(0, duplicateModalScrollY);
         }
 
+        function getChainIdForItem(item) {
+            if (!item) return null;
+            const byId = new Map((appData.items || []).map(existing => [existing.id, existing]));
+            return getLineageRootId(item, byId);
+        }
+
+        function getChainCompletionHistory(rootId) {
+            const byId = new Map((appData.items || []).map(existing => [existing.id, existing]));
+            const actions = [];
+            (appData.items || []).forEach(existing => {
+                if (!existing.parentStateAction) return;
+                if (getLineageRootId(existing, byId) !== rootId) return;
+                if (['done', 'active', 'unchanged'].includes(existing.parentStateAction)) {
+                    actions.push(existing.parentStateAction);
+                }
+            });
+            return actions;
+        }
+
+        function getSmartParentStateAction(item, mode) {
+            const rootId = getChainIdForItem(item);
+            const saved = rootId ? appData.settings?.chainCompletionModes?.[rootId] : null;
+            if (['done', 'active', 'unchanged'].includes(saved)) return saved;
+
+            const history = getChainCompletionHistory(rootId);
+            if (history.length > 0) {
+                const counts = { done: 0, active: 0, unchanged: 0 };
+                history.forEach(action => counts[action]++);
+                const max = Math.max(counts.done, counts.active, counts.unchanged);
+                const winners = Object.keys(counts).filter(key => counts[key] === max);
+                if (winners.length === 1) return winners[0];
+                // Tie-break with the natural default for the current action.
+            }
+
+            return mode === 'renew' ? 'done' : 'unchanged';
+        }
+
+        function describeParentStateAction(action) {
+            switch (action) {
+                case 'done': return 'Mark current item as Done';
+                case 'active': return 'Mark current item as Active';
+                default: return 'Leave current item unchanged';
+            }
+        }
+
+        function updateParentStateActionHint(item = null) {
+            if (!parentStateActionEl || !parentStateActionHintEl) return;
+            const source = item || appData.items.find(i => i.id === duplicatingItemId);
+            if (!source) return;
+
+            const selected = parentStateActionEl.value || 'smart';
+            if (selected === 'smart') {
+                const resolved = getSmartParentStateAction(source, duplicateMode);
+                const rootId = getChainIdForItem(source);
+                const saved = rootId ? appData.settings?.chainCompletionModes?.[rootId] : null;
+                const historyCount = getChainCompletionHistory(rootId).length;
+                const sourceState = source.done ? 'Done' : 'Active';
+                let reason;
+                if (['done', 'active', 'unchanged'].includes(saved)) {
+                    reason = `Smart is using this chain's saved preference: ${describeParentStateAction(saved)}.`;
+                } else if (historyCount > 0) {
+                    reason = `Smart is using this chain's previous choices.`;
+                } else {
+                    reason = duplicateMode === 'renew'
+                        ? 'Renew defaults to Done because the previous item represents the occurrence being replaced.'
+                        : 'Duplicate defaults to leaving the current item unchanged.';
+                }
+                parentStateActionHintEl.textContent = `${reason} Current item is ${sourceState}; this action will: ${describeParentStateAction(resolved)}.`;
+            } else {
+                parentStateActionHintEl.textContent = `Current item is ${source.done ? 'Done' : 'Active'}. This action will: ${describeParentStateAction(selected)}.`;
+            }
+        }
+
+        function setChainCompletionPreference(item, action) {
+            if (!item || !['done', 'active', 'unchanged'].includes(action)) return;
+            appData.settings = appData.settings || {};
+            appData.settings.chainCompletionModes = appData.settings.chainCompletionModes || {};
+            const rootId = getChainIdForItem(item);
+            if (rootId) appData.settings.chainCompletionModes[rootId] = action;
+        }
+
         function openDuplicateModal(itemId) {
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
@@ -4474,7 +4572,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateDateEl.value = getTodayDateString();
             duplicateDateHintEl.textContent = 'Defaults to today. The original item remains unchanged.';
             duplicateDescriptionEl.textContent = 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
+            if (parentStateActionEl) parentStateActionEl.value = 'smart';
             renewOptionsEl.classList.add('hidden');
+            updateParentStateActionHint(item);
             confirmDuplicateBtn.textContent = 'Duplicate';
             confirmDuplicateBtn.disabled = false;
             duplicateModal.classList.remove('hidden');
@@ -4494,7 +4594,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateOriginalLabelEl.textContent = 'Current event';
             duplicateDateHintEl.textContent = 'Suggested from the renewal interval. You can still change the date manually.';
             duplicateDescriptionEl.textContent = 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
+            if (parentStateActionEl) parentStateActionEl.value = 'smart';
             renewOptionsEl.classList.remove('hidden');
+            updateParentStateActionHint(item);
             const renewal = item.renewal || {};
             renewIntervalValueEl.value = renewal.value || 1;
             renewIntervalUnitEl.value = renewal.unit || 'years';
@@ -4526,6 +4628,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (duplicateDateEl) duplicateDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
+            if (parentStateActionEl) parentStateActionEl.value = 'smart';
+            if (parentStateActionHintEl) parentStateActionHintEl.textContent = '';
             if (confirmDuplicateBtn) {
                 confirmDuplicateBtn.disabled = false;
                 confirmDuplicateBtn.textContent = 'Duplicate';
@@ -4556,8 +4660,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 renderAll();
                 return;
             }
+
+            const selectedParentAction = parentStateActionEl?.value || 'smart';
+            const resolvedParentAction = selectedParentAction === 'smart'
+                ? getSmartParentStateAction(item, duplicateMode)
+                : selectedParentAction;
+            const previousParentDone = !!item.done;
+            const previousParentDoneAt = item.doneAt || '';
+            const previousRenewal = item.renewal ? { ...item.renewal } : item.renewal;
+            const chainRootId = getChainIdForItem(item);
+            const previousSavedPreference = chainRootId ? appData.settings?.chainCompletionModes?.[chainRootId] : undefined;
+
             confirmDuplicateBtn.disabled = true;
             confirmDuplicateBtn.textContent = isRenew ? 'Renewing...' : 'Duplicating...';
+
+            let newItem = null;
+            let calendarEventCreated = false;
+            let parentCalendarTitleChanged = false;
 
             try {
                 await withLoading(isRenew ? 'Creating renewed item...' : 'Creating duplicate...', async () => {
@@ -4569,7 +4688,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (isRenew) {
                         item.renewal = { enabled: true, value: renewalValue, unit: renewalUnit, base: renewalBase };
                     }
-                    const newItem = {
+
+                    newItem = {
                         id: Date.now().toString(),
                         name: newName,
                         category: item.category,
@@ -4586,6 +4706,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         pinned: false,
                         done: false,
                         doneAt: '',
+                        parentStateAction: resolvedParentAction,
                         attachments: [],
                         previewAttachments: [],
                         showNotes: item.showNotes !== false,
@@ -4603,12 +4724,34 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         notes: newItem.notes,
                         tags: newItem.tags,
                         reminders: newItem.reminders,
-                        noExpiration: false
+                        noExpiration: false,
+                        done: false
                     };
                     showLoading('Adding new calendar event');
                     newItem.eventId = isTestMode ? `test-${Date.now()}` : await addCalendarEvent(eventData);
+                    calendarEventCreated = true;
 
                     appData.items.push(newItem);
+
+                    // Smart/explicit parent completion behavior applies to the source item.
+                    if (resolvedParentAction === 'done') {
+                        item.done = true;
+                        if (!item.doneAt) item.doneAt = new Date().toISOString();
+                    } else if (resolvedParentAction === 'active') {
+                        item.done = false;
+                        item.doneAt = '';
+                    }
+
+                    if (selectedParentAction !== 'smart') {
+                        setChainCompletionPreference(item, selectedParentAction);
+                    }
+
+                    if (item.eventId && !isTestMode && item.done !== previousParentDone) {
+                        showLoading(item.done ? 'Updating parent calendar event...' : 'Restoring parent calendar event...');
+                        await updateCalendarEventTitle(item.eventId, item);
+                        parentCalendarTitleChanged = true;
+                    }
+
                     registerKnownTags(newItem.tags);
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
@@ -4619,9 +4762,35 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                     closeDuplicateModal();
                 });
-                toastSuccess(isRenew ? 'Renewed item created.' : 'Duplicate created.');
+                toastSuccess(isRenew
+                    ? (resolvedParentAction === 'done' ? 'Renewed item created; previous item marked done.' : 'Renewed item created.')
+                    : (resolvedParentAction === 'done' ? 'Duplicate created; previous item marked done.' : 'Duplicate created.'));
             } catch (error) {
                 console.error(isRenew ? 'Failed to renew item:' : 'Failed to duplicate item:', error);
+
+                // Roll back in-memory changes when the operation fails.
+                if (newItem) {
+                    appData.items = appData.items.filter(existing => existing.id !== newItem.id);
+                }
+                item.done = previousParentDone;
+                item.doneAt = previousParentDoneAt;
+                item.renewal = previousRenewal;
+                if (chainRootId) {
+                    appData.settings = appData.settings || {};
+                    appData.settings.chainCompletionModes = appData.settings.chainCompletionModes || {};
+                    if (previousSavedPreference === undefined) delete appData.settings.chainCompletionModes[chainRootId];
+                    else appData.settings.chainCompletionModes[chainRootId] = previousSavedPreference;
+                }
+
+                // Best-effort cleanup of the newly created Calendar event.
+                if (calendarEventCreated && newItem?.eventId && !isTestMode) {
+                    await removeCalendarEvent(newItem.eventId).catch(() => {});
+                }
+                if (parentCalendarTitleChanged && item.eventId && !isTestMode) {
+                    await updateCalendarEventTitle(item.eventId, item).catch(() => {});
+                }
+
+                renderAll();
                 showToast(`Could not ${isRenew ? 'renew' : 'duplicate'} item: ${error.message || error}`, 'error');
                 confirmDuplicateBtn.disabled = false;
                 confirmDuplicateBtn.textContent = isRenew ? 'Renew' : 'Duplicate';
@@ -4934,6 +5103,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             pinned: old.pinned || false,
                             done: !!old.done,
                             doneAt: old.doneAt || '',
+                            parentStateAction: old.parentStateAction || '',
                             attachments: [...formAttachments],
                             showNotes,
                             original_event_id: old.original_event_id || null,
@@ -4978,6 +5148,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             pinned: false,
                             done: false,
                             doneAt: '',
+                            parentStateAction: '',
                             attachments: [...formAttachments],
                             previewAttachments: [],
                             showNotes,
@@ -6148,22 +6319,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (!appData.knownTags) appData.knownTags = [];
                     migrateItems();
                 } catch(e) {
-                    appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' } };
+                    appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes:{} } };
                 }
             } else {
                 appData = {
                     items: [
-                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{value:28, unit:'days', method:'email'},{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
-                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{value:14, unit:'days', method:'email'},{value:3, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
-                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] },
-                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{value:14, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', attachments: [] }
+                        { id:'sample1', name:'Passport', category:'Document', date:'2026-12-15', tags:['travel', 'personal'], notes:'Renewal requires 2 passport photos and appointment.', eventId:'test-1', reminders:[{value:28, unit:'days', method:'email'},{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', parentStateAction: '', attachments: [] },
+                        { id:'sample2', name:'Car Insurance', category:'Vehicle', date:'2026-08-01', tags:['car', 'recurring'], notes:'Policy #GA-892144. Compare rates before renewal.', eventId:'test-2', reminders:[{value:14, unit:'days', method:'email'},{value:3, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', parentStateAction: '', attachments: [] },
+                        { id:'sample3', name:'Domain Registration', category:'Subscription', date:'2026-06-20', tags:['web', 'recurring'], notes:'', eventId:'test-3', reminders:[{value:7, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', parentStateAction: '', attachments: [] },
+                        { id:'sample4', name:'Annual Dental Checkup', category:'Health', date:'2026-10-05', tags:['health', 'personal'], notes:'Dr. Smith clinic, bring dental insurance card.', eventId:'test-4', reminders:[{value:14, unit:'days', method:'email'}], noExpiration: false, time:'', durationMinutes:30, archived: false, done: false, doneAt: '', parentStateAction: '', attachments: [] }
                     ],
                     customCategories: [
                         { id: 'cat_1', name: 'Health', emoji: '🏥' },
                         { id: 'cat_2', name: 'Pet', emoji: '🐶' }
                     ],
                     knownTags: ['travel', 'personal', 'car', 'recurring', 'web', 'health'],
-                    settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC' }
+                    settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes: {} }
                 };
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
             }
@@ -6313,6 +6484,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         if (renewIntervalValueEl) renewIntervalValueEl.addEventListener('input', updateRenewDatePreview);
         if (renewIntervalUnitEl) renewIntervalUnitEl.addEventListener('change', updateRenewDatePreview);
         if (renewReferenceModeEl) renewReferenceModeEl.addEventListener('change', updateRenewReferenceDate);
+        if (parentStateActionEl) parentStateActionEl.addEventListener('change', () => updateParentStateActionHint());
         document.querySelectorAll('input[name="renewBase"]').forEach(el => el.addEventListener('change', updateRenewDatePreview));
         if (duplicateDateEl) duplicateDateEl.addEventListener('change', () => {
             if (duplicateMode === 'renew') {
