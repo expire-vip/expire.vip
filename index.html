@@ -7001,7 +7001,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         await syncToCloud();
                     }
                 });
-                await recordItemHistory(itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem));
+                await withLoading('Saving note history...', async () => {
+                    await recordItemHistory(itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem));
+                });
                 inlineNoteEditItemId = null;
                 renderAll();
                 toastSuccess('Notes saved.');
