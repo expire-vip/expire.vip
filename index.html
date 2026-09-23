@@ -1284,6 +1284,7 @@
                                 <option value="days">Days</option>
                             </select>
                         </div>
+                        <p id="renewIntervalHint" class="text-xs text-gray-500 dark:text-gray-400 mt-1.5 leading-relaxed"></p>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Apply interval from</label>
@@ -1636,6 +1637,7 @@
         const renewOptionsEl = document.getElementById('renewOptions');
         const renewIntervalValueEl = document.getElementById('renewIntervalValue');
         const renewIntervalUnitEl = document.getElementById('renewIntervalUnit');
+        const renewIntervalHintEl = document.getElementById('renewIntervalHint');
         const renewReferenceModeEl = document.getElementById('renewReferenceMode');
         const renewReferenceDateEl = document.getElementById('renewReferenceDate');
         const confirmDuplicateBtn = document.getElementById('confirmDuplicateBtn');
@@ -2347,6 +2349,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!appData.settings.chainCompletionModes || typeof appData.settings.chainCompletionModes !== 'object' || Array.isArray(appData.settings.chainCompletionModes)) {
                 appData.settings.chainCompletionModes = {};
             }
+            if (!appData.settings.chainRenewalIntervals || typeof appData.settings.chainRenewalIntervals !== 'object' || Array.isArray(appData.settings.chainRenewalIntervals)) {
+                appData.settings.chainRenewalIntervals = {};
+            }
             appData.items.forEach(item => {
                 if (item.noExpiration === undefined) {
                     // If date is empty or null, treat as no expiration
@@ -2446,7 +2451,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return true;
             } else {
                 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz, chainCompletionModes: {} } };
+                appData = { items: [], customCategories: [], knownTags: [], settings: { timezone: tz, chainCompletionModes: {}, chainRenewalIntervals: {} } };
                 cloudDataModifiedTime = '';
                 const createRes = await callGoogleAPI('https://www.googleapis.com/drive/v3/files', {
                     method: 'POST', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -4497,6 +4502,76 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return actions;
         }
 
+        function normalizeRenewalInterval(value, unit) {
+            const normalizedValue = Math.max(1, parseInt(value, 10) || 1);
+            const normalizedUnit = ['days', 'months', 'years'].includes(unit) ? unit : 'years';
+            return { value: normalizedValue, unit: normalizedUnit };
+        }
+
+        function getChainRenewalInterval(item) {
+            const rootId = getChainIdForItem(item);
+            const saved = rootId ? appData.settings?.chainRenewalIntervals?.[rootId] : null;
+            if (saved && saved.value !== undefined && saved.unit) {
+                return { ...normalizeRenewalInterval(saved.value, saved.unit), source: 'saved' };
+            }
+
+            // Walk backwards through the lineage. The first renewal interval encountered
+            // is the one actually used to create the current branch of the chain.
+            const byId = new Map((appData.items || []).map(existing => [existing.id, existing]));
+            let current = item;
+            while (current) {
+                if (current.renewal?.enabled && current.renewal.value && current.renewal.unit) {
+                    return { ...normalizeRenewalInterval(current.renewal.value, current.renewal.unit), source: 'item' };
+                }
+                current = current.original_event_id ? byId.get(current.original_event_id) : null;
+            }
+
+            return { value: 1, unit: 'years', source: 'default' };
+        }
+
+        function updateRenewIntervalHint(item = null) {
+            if (!renewIntervalHintEl || duplicateMode !== 'renew') return;
+            const source = item || appData.items.find(i => i.id === duplicatingItemId);
+            if (!source) {
+                renewIntervalHintEl.textContent = '';
+                return;
+            }
+            const interval = getChainRenewalInterval(source);
+            const label = `${interval.value} ${interval.unit.replace(/s$/, '')}${interval.value === 1 ? '' : 's'}`;
+            const selectedValue = Math.max(1, parseInt(renewIntervalValueEl?.value, 10) || 1);
+            const selectedUnit = renewIntervalUnitEl?.value || 'years';
+            const selectedLabel = formatRenewalInterval(selectedValue, selectedUnit);
+            const changedFromDefault = selectedValue !== interval.value || selectedUnit !== interval.unit;
+            let prefix;
+            if (interval.source === 'saved') {
+                prefix = `Smart default from this chain: every ${label}.`;
+            } else if (interval.source === 'item') {
+                prefix = `Default from the previous renewal interval used in this chain: every ${label}.`;
+            } else {
+                prefix = `No previous renewal interval is stored for this chain; the default is every ${label}.`;
+            }
+            renewIntervalHintEl.textContent = changedFromDefault
+                ? `${prefix} Current selection: every ${selectedLabel}. This selection will be remembered for future renewals in this chain.`
+                : `${prefix} This selection will be remembered for future renewals in this chain.`;
+        }
+
+        function setChainRenewalInterval(item, value, unit) {
+            if (!item) return;
+            appData.settings = appData.settings || {};
+            appData.settings.chainRenewalIntervals = appData.settings.chainRenewalIntervals || {};
+            const rootId = getChainIdForItem(item);
+            if (rootId) {
+                const interval = normalizeRenewalInterval(value, unit);
+                appData.settings.chainRenewalIntervals[rootId] = { value: interval.value, unit: interval.unit };
+            }
+        }
+
+        function formatRenewalInterval(value, unit) {
+            const interval = normalizeRenewalInterval(value, unit);
+            const label = interval.value === 1 ? interval.unit.slice(0, -1) : interval.unit;
+            return `${interval.value} ${label}`;
+        }
+
         function getSmartParentStateAction(item, mode) {
             const rootId = getChainIdForItem(item);
             const saved = rootId ? appData.settings?.chainCompletionModes?.[rootId] : null;
@@ -4574,6 +4649,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateDescriptionEl.textContent = 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
             if (parentStateActionEl) parentStateActionEl.value = 'smart';
             renewOptionsEl.classList.add('hidden');
+            if (renewIntervalHintEl) renewIntervalHintEl.textContent = '';
             updateParentStateActionHint(item);
             confirmDuplicateBtn.textContent = 'Duplicate';
             confirmDuplicateBtn.disabled = false;
@@ -4597,10 +4673,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (parentStateActionEl) parentStateActionEl.value = 'smart';
             renewOptionsEl.classList.remove('hidden');
             updateParentStateActionHint(item);
-            const renewal = item.renewal || {};
-            renewIntervalValueEl.value = renewal.value || 1;
-            renewIntervalUnitEl.value = renewal.unit || 'years';
-            const baseRadio = document.querySelector(`input[name="renewBase"][value="${renewal.base || 'previous'}"]`);
+            const renewalInterval = getChainRenewalInterval(item);
+            renewIntervalValueEl.value = renewalInterval.value;
+            renewIntervalUnitEl.value = renewalInterval.unit;
+            updateRenewIntervalHint(item);
+            const currentRenewal = item.renewal || {};
+            const baseRadio = document.querySelector(`input[name="renewBase"][value="${currentRenewal.base || 'previous'}"]`);
             if (baseRadio) baseRadio.checked = true;
             if (item.referenceDate) {
                 renewReferenceModeEl.value = 'custom';
@@ -4628,6 +4706,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (duplicateDateEl) duplicateDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
+            if (renewIntervalHintEl) renewIntervalHintEl.textContent = '';
             if (parentStateActionEl) parentStateActionEl.value = 'smart';
             if (parentStateActionHintEl) parentStateActionHintEl.textContent = '';
             if (confirmDuplicateBtn) {
@@ -4670,6 +4749,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const previousRenewal = item.renewal ? { ...item.renewal } : item.renewal;
             const chainRootId = getChainIdForItem(item);
             const previousSavedPreference = chainRootId ? appData.settings?.chainCompletionModes?.[chainRootId] : undefined;
+            const previousSavedRenewalInterval = chainRootId ? appData.settings?.chainRenewalIntervals?.[chainRootId] : undefined;
 
             confirmDuplicateBtn.disabled = true;
             confirmDuplicateBtn.textContent = isRenew ? 'Renewing...' : 'Duplicating...';
@@ -4687,6 +4767,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     const renewalBase = isRenew ? (document.querySelector('input[name="renewBase"]:checked')?.value || 'previous') : (item.renewal?.base || 'previous');
                     if (isRenew) {
                         item.renewal = { enabled: true, value: renewalValue, unit: renewalUnit, base: renewalBase };
+                        setChainRenewalInterval(item, renewalValue, renewalUnit);
                     }
 
                     newItem = {
@@ -4778,8 +4859,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (chainRootId) {
                     appData.settings = appData.settings || {};
                     appData.settings.chainCompletionModes = appData.settings.chainCompletionModes || {};
+                    appData.settings.chainRenewalIntervals = appData.settings.chainRenewalIntervals || {};
                     if (previousSavedPreference === undefined) delete appData.settings.chainCompletionModes[chainRootId];
                     else appData.settings.chainCompletionModes[chainRootId] = previousSavedPreference;
+                    if (previousSavedRenewalInterval === undefined) delete appData.settings.chainRenewalIntervals[chainRootId];
+                    else appData.settings.chainRenewalIntervals[chainRootId] = previousSavedRenewalInterval;
                 }
 
                 // Best-effort cleanup of the newly created Calendar event.
@@ -6319,7 +6403,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (!appData.knownTags) appData.knownTags = [];
                     migrateItems();
                 } catch(e) {
-                    appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes:{} } };
+                    appData = { items:[], customCategories: [], knownTags: [], settings:{ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes:{}, chainRenewalIntervals:{} } };
                 }
             } else {
                 appData = {
@@ -6334,7 +6418,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         { id: 'cat_2', name: 'Pet', emoji: '🐶' }
                     ],
                     knownTags: ['travel', 'personal', 'car', 'recurring', 'web', 'health'],
-                    settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes: {} }
+                    settings: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC', chainCompletionModes: {}, chainRenewalIntervals: {} }
                 };
                 localStorage.setItem('expire_testData', JSON.stringify(appData));
             }
@@ -6481,8 +6565,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        if (renewIntervalValueEl) renewIntervalValueEl.addEventListener('input', updateRenewDatePreview);
-        if (renewIntervalUnitEl) renewIntervalUnitEl.addEventListener('change', updateRenewDatePreview);
+        if (renewIntervalValueEl) renewIntervalValueEl.addEventListener('input', () => { updateRenewDatePreview(); updateRenewIntervalHint(); });
+        if (renewIntervalUnitEl) renewIntervalUnitEl.addEventListener('change', () => { updateRenewDatePreview(); updateRenewIntervalHint(); });
         if (renewReferenceModeEl) renewReferenceModeEl.addEventListener('change', updateRenewReferenceDate);
         if (parentStateActionEl) parentStateActionEl.addEventListener('change', () => updateParentStateActionHint());
         document.querySelectorAll('input[name="renewBase"]').forEach(el => el.addEventListener('change', updateRenewDatePreview));
