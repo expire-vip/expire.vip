@@ -3118,7 +3118,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     stats.added++; changedPairs.push({ kind: 'added', before: null, after: ops[i].line });
                 }
             }
-            const firstLine = changedPairs.find(p => p.after !== null)?.after ?? changedPairs.find(p => p.before !== null)?.before ?? '';
+            // Prefer the first non-empty changed line so leading blank lines in a note
+            // do not make the history preview look like there was no text change.
+            const firstLine =
+                changedPairs.find(p => p.after !== null && String(p.after ?? '').trim() !== '')?.after
+                ?? changedPairs.find(p => p.before !== null && String(p.before ?? '').trim() !== '')?.before
+                ?? '';
             return { stats, changedPairs, firstLine };
         }
 
@@ -7024,7 +7029,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     item.attachments.push({ driveFileId: fileId, name: file.name, mimeType: file.type || 'application/octet-stream', addedDate: getTodayDateString() });
                     if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
                     else await syncToCloud();
-                    await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), { fileName: file.name });
+                    await withLoading('Saving attachment history...', async () => {
+                        await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), { fileName: file.name });
+                    });
                     renderAll();
                     toastSuccess(`Uploaded ${file.name}`);
                 } catch (err) {
