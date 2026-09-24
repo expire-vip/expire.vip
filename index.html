@@ -4635,8 +4635,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
-                // Auto-save item
-                await autoSaveItem();
+                // Save the updated item with an explicit loading state so there is no silent gap after upload.
+                await withLoading('Saving attachment...', async () => {
+                    await autoSaveItem();
+                });
                 showToast(`Uploaded ${file.name}`);
             } catch (err) {
                 toastError('Upload failed: ' + err.message);
@@ -4667,8 +4669,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     addedDate: new Date().toISOString().split('T')[0]
                 });
                 renderAttachments();
-                // Auto-save item
-                await autoSaveItem();
+                // Save the updated item with an explicit loading state so there is no silent gap after creation.
+                await withLoading('Saving attachment...', async () => {
+                    await autoSaveItem();
+                });
                 showToast(`Created ${fileName}`);
             } catch (err) {
                 toastError('Creation failed: ' + err.message);
@@ -7027,8 +7031,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     await withLoading(`Uploading ${file.name}...`, async () => { fileId = await uploadFileToAppData(file, file.name); });
                     item.attachments = item.attachments || [];
                     item.attachments.push({ driveFileId: fileId, name: file.name, mimeType: file.type || 'application/octet-stream', addedDate: getTodayDateString() });
-                    if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData));
-                    else await syncToCloud();
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await withLoading('Saving attachment...', async () => {
+                            await syncToCloud();
+                        });
+                    }
                     await withLoading('Saving attachment history...', async () => {
                         await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), { fileName: file.name });
                     });
