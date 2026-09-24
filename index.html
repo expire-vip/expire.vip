@@ -976,6 +976,52 @@
             background: rgba(129, 140, 248, 0.13);
             color: #a5b4fc;
         }
+        .history-filter-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            flex-wrap: wrap;
+            padding: 0.65rem 1.25rem;
+            border-bottom: 1px solid rgba(156, 163, 175, 0.18);
+            background: rgba(249, 250, 251, 0.72);
+        }
+        .dark .history-filter-bar {
+            background: rgba(17, 24, 39, 0.42);
+        }
+        .history-filter-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            border: 1px solid rgba(156, 163, 175, 0.32);
+            background: rgba(255, 255, 255, 0.85);
+            color: #4b5563;
+            font-size: 0.72rem;
+            font-weight: 700;
+            transition: all 0.15s ease;
+        }
+        .history-filter-btn:hover {
+            background: rgba(243, 244, 246, 0.95);
+        }
+        .history-filter-btn.active {
+            border-color: rgba(99, 102, 241, 0.65);
+            background: rgba(99, 102, 241, 0.12);
+            color: #4f46e5;
+        }
+        .dark .history-filter-btn {
+            background: rgba(31, 41, 55, 0.82);
+            color: #d1d5db;
+            border-color: rgba(107, 114, 128, 0.4);
+        }
+        .dark .history-filter-btn:hover {
+            background: rgba(55, 65, 81, 0.9);
+        }
+        .dark .history-filter-btn.active {
+            border-color: rgba(129, 140, 248, 0.8);
+            background: rgba(99, 102, 241, 0.2);
+            color: #c7d2fe;
+        }
 
     </style>
 </head>
@@ -1501,6 +1547,12 @@
                     <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
+            <div id="historyFilterBar" class="history-filter-bar flex-shrink-0">
+                <span class="text-[11px] font-semibold text-gray-500 dark:text-gray-400 mr-1">Show:</span>
+                <button type="button" class="history-filter-btn" data-history-filter="all" onclick="setHistoryFilter('all')">All changes</button>
+                <button type="button" class="history-filter-btn" data-history-filter="notes" onclick="setHistoryFilter('notes')">📝 Notes only</button>
+                <button type="button" class="history-filter-btn" data-history-filter="other" onclick="setHistoryFilter('other')">Other changes</button>
+            </div>
             <div id="itemHistoryList" class="p-5 sm:p-6 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
                 <!-- populated dynamically -->
             </div>
@@ -1753,6 +1805,7 @@
         let historyLoaded = false;
         let historyModalItemId = null;
         let historyModalScrollY = 0;
+        let historyFilter = 'all';
 
         // DOM elements
         const landingPage = document.getElementById('landingPage');
@@ -3013,7 +3066,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function formatHistoryNotePreview(text) {
-            const firstLine = String(text || '').split(/\r?\n/)[0].trim();
+            const lines = String(text || '').split(/\r?\n/);
+            const firstLine = lines.find(line => line.trim() !== '')?.trim() || '';
             if (!firstLine) return 'No text';
             const compact = firstLine.length > 220 ? firstLine.slice(0, 217) + '…' : firstLine;
             return `“${compact}”`;
@@ -3185,17 +3239,55 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             el.classList.toggle('hidden');
         }
 
+        function setHistoryFilter(filter) {
+            const allowed = ['all', 'notes', 'other'];
+            historyFilter = allowed.includes(filter) ? filter : 'all';
+            document.querySelectorAll('[data-history-filter]').forEach(button => {
+                button.classList.toggle('active', button.dataset.historyFilter === historyFilter);
+            });
+            if (historyModalItemId) renderItemHistory(historyModalItemId);
+        }
+
+        function getVisibleHistoryChangeKeys(changes) {
+            const keys = Object.keys(changes || {});
+            if (historyFilter === 'notes') return keys.filter(key => key === 'notes');
+            if (historyFilter === 'other') return keys.filter(key => key !== 'notes');
+            return keys;
+        }
+
+        function historyEntryMatchesFilter(entry) {
+            if (historyFilter === 'all') return true;
+            const changes = entry.changes || {};
+            if (historyFilter === 'notes') return Object.prototype.hasOwnProperty.call(changes, 'notes');
+            return Object.keys(changes).some(key => key !== 'notes');
+        }
+
         function renderItemHistory(itemId) {
             if (!itemHistoryListEl) return;
-            const entries = historyEntriesForItem(itemId);
+            setTimeout(() => {
+                document.querySelectorAll('[data-history-filter]').forEach(button => {
+                    button.classList.toggle('active', button.dataset.historyFilter === historyFilter);
+                });
+            }, 0);
+
+            const allEntries = historyEntriesForItem(itemId);
+            const entries = allEntries.filter(historyEntryMatchesFilter);
             if (!entries.length) {
-                itemHistoryListEl.innerHTML = `<div class="history-empty"><div class="text-3xl mb-2">🕘</div><div class="text-sm">No history recorded for this item yet.</div></div>`;
+                const emptyLabel = historyFilter === 'notes' ? 'No note changes recorded for this item yet.'
+                    : historyFilter === 'other' ? 'No other changes recorded for this item yet.'
+                    : 'No history recorded for this item yet.';
+                itemHistoryListEl.innerHTML = `<div class="history-empty"><div class="text-3xl mb-2">🕘</div><div class="text-sm">${escapeHtml(emptyLabel)}</div></div>`;
                 return;
             }
+
             itemHistoryListEl.innerHTML = `<div class="history-timeline">${entries.map((entry, entryIndex) => {
                 const changes = entry.changes || {};
-                const changeKeys = Object.keys(changes);
+                const changeKeys = getVisibleHistoryChangeKeys(changes);
                 const details = entry.details || {};
+                const showDetails = historyFilter !== 'notes';
+                const hasVisibleDetails = showDetails && (
+                    details.interval || details.childItemName || details.parentItemName || details.fileName || details.previousFileName || details.relatedItemName
+                );
                 let html = `<div class="history-entry">
                     <div class="history-entry-header">
                         <div class="min-w-0">
@@ -3204,19 +3296,25 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         </div>
                     </div>`;
 
-                if (details.interval) {
+                if (showDetails && details.interval) {
                     html += `<div class="history-change-row"><span class="history-change-label">Renewal interval</span><span class="history-value-after">Every ${escapeHtml(formatRenewalInterval(details.interval.value, details.interval.unit))}</span></div>`;
                 }
-                if (details.childItemName) {
+                if (showDetails && details.childItemName) {
                     html += `<div class="history-change-row"><span class="history-change-label">New item</span><span class="history-value-after">${escapeHtml(details.childItemName)}</span></div>`;
                 }
-                if (details.parentItemName) {
+                if (showDetails && details.parentItemName) {
                     html += `<div class="history-change-row"><span class="history-change-label">Parent item</span><span class="history-value-after">${escapeHtml(details.parentItemName)}</span></div>`;
                 }
-                if (details.fileName) {
+                if (showDetails && details.fileName && entry.action !== 'attachment_renamed') {
                     html += `<div class="history-change-row"><span class="history-change-label">File</span><span class="history-value-after">${escapeHtml(details.fileName)}</span></div>`;
                 }
-                if (details.relatedItemName) {
+                if (showDetails && entry.action === 'attachment_renamed' && details.fileName) {
+                    const oldName = details.previousFileName || '';
+                    html += oldName
+                        ? `<div class="history-change-row"><span class="history-change-label">File name</span><span class="history-value-before">${escapeHtml(oldName)}</span><span class="history-change-arrow">→</span><span class="history-value-after">${escapeHtml(details.fileName)}</span></div>`
+                        : `<div class="history-change-row"><span class="history-change-label">File name</span><span class="history-value-after">${escapeHtml(details.fileName)}</span></div>`;
+                }
+                if (showDetails && details.relatedItemName) {
                     html += `<div class="history-change-row"><span class="history-change-label">Related item</span><span class="history-value-after">${escapeHtml(details.relatedItemName)}</span></div>`;
                 }
 
@@ -3224,10 +3322,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     html += renderHistoryChange(key, changes[key], entryIndex, changeIndex);
                 });
 
-                if (!changeKeys.length && !details.interval && !details.childItemName && !details.parentItemName && !details.fileName && !details.relatedItemName && entry.action !== 'created') {
-                    html += `<div class="text-xs text-gray-500 dark:text-gray-400 mt-2">No field-level changes.</div>`;
+                if (!changeKeys.length && !hasVisibleDetails && entry.action !== 'created') {
+                    html += `<div class="text-xs text-gray-500 dark:text-gray-400 mt-2">No ${historyFilter === 'notes' ? 'note' : historyFilter === 'other' ? 'other' : 'field-level'} changes.</div>`;
                 }
-                if (entry.sourceItemId) {
+                if (historyFilter !== 'notes' && entry.sourceItemId) {
                     const related = (appData.items || []).find(i => i.id === entry.sourceItemId);
                     if (related) {
                         html += `<button type="button" class="history-related-link" onclick="closeItemHistory(); scrollToItemCard('${escapeHtml(related.id)}')"><i class="fas fa-link text-[10px]"></i> View related item</button>`;
@@ -3292,6 +3390,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
             historyModalItemId = itemId;
+            historyFilter = 'all';
             const freshItem = appData.items.find(i => i.id === itemId) || item;
             if (itemHistoryModalTitleEl) itemHistoryModalTitleEl.textContent = 'Item History';
             if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${freshItem.name || '(Unnamed item)'} · ${getItemHistoryCount(itemId)} entr${getItemHistoryCount(itemId) === 1 ? 'y' : 'ies'}`;
@@ -4030,7 +4129,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 await syncToCloud();
                 for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
                     const afterItem = appData.items.find(i => i.id === historyItemId);
-                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName }, { silent: true });
+                    const previousAttachment = (beforeSnapshot?.attachments || []).find(a => a.driveFileId === att.driveFileId);
+                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName, previousFileName: previousAttachment?.name || oldName }, { silent: true });
                 }
                 renderAll();
                 updatePreviewNavigation();
@@ -4730,7 +4830,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!autoSaveOk) return;
                 for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
                     const afterItem = appData.items.find(i => i.id === historyItemId);
-                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName }, { silent: true });
+                    const previousAttachment = (beforeSnapshot?.attachments || []).find(a => a.driveFileId === att.driveFileId);
+                    if (afterItem) await recordItemHistory(historyItemId, 'attachment_renamed', 'attachment', beforeSnapshot, historySnapshot(afterItem), { fileName: newName, previousFileName: previousAttachment?.name || '' }, { silent: true });
                 }
                 showToast('Renamed attachment.');
             } catch (err) {
