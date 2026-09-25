@@ -1765,6 +1765,9 @@
         let formTags = [];
         let activeTag = null;
         let isLoading = false;
+        // Keep loading indicators stable when user actions contain nested async stages.
+        // Each nested withLoading() restores the parent message instead of hiding the overlay.
+        let loadingStack = [];
         let archiveViewMode = 'active'; // active = hide archived, all = show all, archived = show only archived
         let doneViewMode = localStorage.getItem('expire_doneViewMode') === 'all' ? 'all' : (localStorage.getItem('expire_doneViewMode') === 'done' ? 'done' : 'active'); // active = hide done, all = show all, done = show only done
         let activeStatFilter = 'all';
@@ -1886,13 +1889,19 @@
         }
 
         async function withLoading(message, callback) {
+            loadingStack.push(message);
             showLoading(message);
         
             try {
                 return await callback();
             }
             finally {
-                hideLoading();
+                loadingStack.pop();
+                if (loadingStack.length > 0) {
+                    showLoading(loadingStack[loadingStack.length - 1]);
+                } else {
+                    hideLoading();
+                }
             }
         }
         
@@ -3384,7 +3393,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
             try {
-                if (!isTestMode) await loadHistoryFromCloud({ force: true });
+                if (!isTestMode) {
+                    await withLoading('Loading item history...', async () => {
+                        await loadHistoryFromCloud({ force: true });
+                    });
+                }
             } catch (error) {
                 toastError('Could not load item history: ' + error.message);
                 return;
@@ -3420,17 +3433,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 changes,
                 details: historyJsonClone(details || {})
             };
-            try {
-                await appendHistoryEntries([entry]);
-                if (historyModalItemId === itemId) {
-                    const item = appData.items.find(i => i.id === itemId);
-                    if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${item?.name || '(Unnamed item)'} · ${getItemHistoryCount(itemId)} entr${getItemHistoryCount(itemId) === 1 ? 'y' : 'ies'}`;
-                    renderItemHistory(itemId);
+            const saveHistory = async () => {
+                try {
+                    await appendHistoryEntries([entry]);
+                    if (historyModalItemId === itemId) {
+                        const item = appData.items.find(i => i.id === itemId);
+                        if (itemHistoryModalSubtitleEl) itemHistoryModalSubtitleEl.textContent = `${item?.name || '(Unnamed item)'} · ${getItemHistoryCount(itemId)} entr${getItemHistoryCount(itemId) === 1 ? 'y' : 'ies'}`;
+                        renderItemHistory(itemId);
+                    }
+                } catch (error) {
+                    console.warn('History save failed:', error);
+                    if (!options.silent) toastWarning('Item saved, but its history could not be updated.');
                 }
-            } catch (error) {
-                console.warn('History save failed:', error);
-                if (!options.silent) toastWarning('Item saved, but its history could not be updated.');
-            }
+            };
+            await withLoading('Saving history...', saveHistory);
             return entry;
         }
 
@@ -3961,7 +3977,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             previewData.pdfViewer = 'custom';
-            await renderPdfPreview(previewData.pdfUrl, body);
+            await withLoading('Rendering PDF...', async () => {
+                await renderPdfPreview(previewData.pdfUrl, body);
+            });
             updatePdfViewerToggleButton();
         }
 
@@ -4126,7 +4144,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const titleEl = document.getElementById('previewTitle');
                 if (titleEl) titleEl.textContent = newName;
                 cancelPreviewRename();
-                await syncToCloud();
+                await withLoading('Saving attachment...', async () => {
+                    await syncToCloud();
+                });
                 for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
                     const afterItem = appData.items.find(i => i.id === historyItemId);
                     const previousAttachment = (beforeSnapshot?.attachments || []).find(a => a.driveFileId === att.driveFileId);
@@ -4342,7 +4362,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!textarea) return;
             const newContent = textarea.value;
             try {
-                await updateFileContent(previewData.fileId, newContent, previewData.mimeType || 'text/plain');
+                await withLoading('Saving file...', async () => {
+                    await updateFileContent(previewData.fileId, newContent, previewData.mimeType || 'text/plain');
+                });
                 // Update stored content
                 previewData.rawText = newContent;
                 previewData.originalContent = newContent;
@@ -4518,24 +4540,30 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (item.previewAttachments.some(p => p.attachmentId === attachmentId)) return;
                 if (item.previewAttachments.length >= 4) { toastInfo('You can select up to 4 featured previews.'); return; }
                 try {
-                    showLoading('Creating thumbnail...');
-                    const thumbnailId = await createThumbnailForAttachment(att);
-                    item.previewAttachments.push({ attachmentId, thumbnailId, cover: item.previewAttachments.length === 0 });
-                    if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                    await withLoading('Adding featured preview...', async () => {
+                        showLoading('Creating thumbnail...');
+                        const thumbnailId = await createThumbnailForAttachment(att);
+                        item.previewAttachments.push({ attachmentId, thumbnailId, cover: item.previewAttachments.length === 0 });
+                        showLoading('Saving featured preview...');
+                        if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                    });
                     toastSuccess('Added to featured previews.');
                 } catch (err) { toastError('Could not create thumbnail: ' + err.message); }
-                finally { hideLoading(); }
             } else {
                 const removedEntry = item.previewAttachments.find(p => p.attachmentId === attachmentId);
                 const wasCover = !!removedEntry?.cover;
                 item.previewAttachments = item.previewAttachments.filter(p => p.attachmentId !== attachmentId);
                 if (wasCover && item.previewAttachments[0]) item.previewAttachments[0].cover = true;
-                if (removedEntry?.thumbnailId) {
-                    const cachedUrl = thumbnailCache.get(removedEntry.thumbnailId);
-                    if (cachedUrl) { URL.revokeObjectURL(cachedUrl); thumbnailCache.delete(removedEntry.thumbnailId); }
-                    try { await deleteFile(removedEntry.thumbnailId); } catch (_) {}
-                }
-                if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                await withLoading('Removing featured preview...', async () => {
+                    if (removedEntry?.thumbnailId) {
+                        const cachedUrl = thumbnailCache.get(removedEntry.thumbnailId);
+                        if (cachedUrl) { URL.revokeObjectURL(cachedUrl); thumbnailCache.delete(removedEntry.thumbnailId); }
+                        showLoading('Removing thumbnail...');
+                        try { await deleteFile(removedEntry.thumbnailId); } catch (_) {}
+                    }
+                    showLoading('Saving featured preview...');
+                    if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+                });
                 toastSuccess('Removed from featured previews.');
             }
             renderAll();
@@ -4549,7 +4577,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const entry = (item.previewAttachments || []).find(p => p.attachmentId === attachmentId);
             if (!entry) { await setAttachmentFeatured(itemId, attachmentId, true); return; }
             item.previewAttachments.forEach(p => p.cover = p.attachmentId === attachmentId);
-            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            await withLoading('Saving cover preview...', async () => {
+                if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            });
             renderAll();
             if (editingItemId === itemId) renderAttachments();
         }
@@ -4562,7 +4592,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (next < 0 || next >= item.previewAttachments.length) return;
             const arr = item.previewAttachments;
             [arr[index], arr[next]] = [arr[next], arr[index]];
-            if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            await withLoading('Saving preview order...', async () => {
+                if (isTestMode) localStorage.setItem('expire_testData', JSON.stringify(appData)); else await syncToCloud();
+            });
             renderAll();
             if (editingItemId === itemId) renderAttachments();
         }
@@ -4783,14 +4815,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const att = formAttachments[idx];
             if (!att) return;
             try {
-                const response = await downloadFile(att.driveFileId);
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = att.name;
-                a.click();
-                URL.revokeObjectURL(url);
+                await withLoading(`Downloading ${att.name}...`, async () => {
+                    const response = await downloadFile(att.driveFileId);
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = att.name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
             } catch (err) {
                 toastError('Download failed: ' + err.message);
             }
@@ -4825,8 +4859,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 });
                 att.name = newName;
                 renderAttachments();
-                // Auto-save item
-                const autoSaveOk = await autoSaveItem();
+                // Auto-save item with an explicit loading state. Keeping this inside withLoading()
+                // also lets nested cloud-refresh checks preserve the visible status.
+                const autoSaveOk = await withLoading('Saving attachment...', async () => {
+                    return await autoSaveItem();
+                });
                 if (!autoSaveOk) return;
                 for (const [historyItemId, beforeSnapshot] of attachmentHistoryBeforeByItem.entries()) {
                     const afterItem = appData.items.find(i => i.id === historyItemId);
@@ -4858,21 +4895,25 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const attachmentHistoryBefore = currentEditableItemForHistory ? historySnapshot(currentEditableItemForHistory) : null;
                 const removedFileName = att.name;
                 const keepPhysicalFile = isAttachmentShared(removedAttachmentId, editingItemId);
-                if (!keepPhysicalFile) {
-                    await deleteFile(removedAttachmentId);
-                }
-                // Remove from formAttachments regardless of whether the physical file remains shared.
-                const currentItem = getCurrentEditableItem();
-                if (currentItem && Array.isArray(currentItem.previewAttachments)) {
-                    const removed = currentItem.previewAttachments.find(p => p.attachmentId === removedAttachmentId);
-                    currentItem.previewAttachments = currentItem.previewAttachments.filter(p => p.attachmentId !== removedAttachmentId);
-                    if (removed && removed.cover && currentItem.previewAttachments[0]) currentItem.previewAttachments[0].cover = true;
-                }
-                formAttachments.splice(idx, 1);
-                renderAttachments();
-                // Auto-save item to update JSON
-                const autoSaveOk = await autoSaveItem();
-                if (!autoSaveOk) return;
+                await withLoading('Removing attachment...', async () => {
+                    if (!keepPhysicalFile) {
+                        showLoading('Deleting file...');
+                        await deleteFile(removedAttachmentId);
+                    }
+                    // Remove from formAttachments regardless of whether the physical file remains shared.
+                    const currentItem = getCurrentEditableItem();
+                    if (currentItem && Array.isArray(currentItem.previewAttachments)) {
+                        const removed = currentItem.previewAttachments.find(p => p.attachmentId === removedAttachmentId);
+                        currentItem.previewAttachments = currentItem.previewAttachments.filter(p => p.attachmentId !== removedAttachmentId);
+                        if (removed && removed.cover && currentItem.previewAttachments[0]) currentItem.previewAttachments[0].cover = true;
+                    }
+                    formAttachments.splice(idx, 1);
+                    renderAttachments();
+                    // Auto-save item to update JSON
+                    showLoading('Saving attachment...');
+                    const autoSaveOk = await autoSaveItem();
+                    if (!autoSaveOk) throw new Error('Attachment changes could not be saved.');
+                });
                 const currentEditableItemAfterRemove = getCurrentEditableItem();
                 if (currentEditableItemForHistory && currentEditableItemAfterRemove) {
                     await recordItemHistory(editingItemId, 'attachment_removed', 'attachment', attachmentHistoryBefore, historySnapshot(currentEditableItemAfterRemove), { fileName: removedFileName }, { silent: true });
@@ -4883,7 +4924,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (err.message.includes('404') || err.message.includes('not found')) {
                     formAttachments.splice(idx, 1);
                     renderAttachments();
-                    await autoSaveItem();
+                    await withLoading('Saving attachment...', async () => {
+                        await autoSaveItem();
+                    });
                     showToast('Attachment removed (file already missing).');
                 } else {
                     toastError('Delete failed: ' + err.message);
@@ -5160,14 +5203,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
         async function ensureLatestCloudDataBeforeWrite(actionLabel = 'saving changes') {
             if (isTestMode || !accessToken || !driveFileId) return true;
-            try {
-                await loadFromCloud();
-                return true;
-            } catch (error) {
-                console.error(`Failed to get latest cloud data before ${actionLabel}:`, error);
-                toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
-                return false;
-            }
+            const checkLatest = async () => {
+                try {
+                    await loadFromCloud();
+                    return true;
+                } catch (error) {
+                    console.error(`Failed to get latest cloud data before ${actionLabel}:`, error);
+                    toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
+                    return false;
+                }
+            };
+            return withLoading(`Checking latest data before ${actionLabel}...`, checkLatest);
         }
 
         async function refreshLatestFromCloudBeforeEdit(actionLabel = 'edit') {
@@ -7086,14 +7132,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // Helper to download attachment from item card
         async function downloadFileById(fileId, fileName) {
             try {
-                const response = await downloadFile(fileId);
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                a.click();
-                URL.revokeObjectURL(url);
+                await withLoading(`Downloading ${fileName}...`, async () => {
+                    const response = await downloadFile(fileId);
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
             } catch (err) {
                 toastError('Download failed: ' + err.message);
             }
