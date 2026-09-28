@@ -6515,6 +6515,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 .toLowerCase();
         }
 
+        // Presentation/search-only ID format. The original numeric ID stored in
+        // appData / expire_data.json is never changed.
+        function getDisplayItemId(id) {
+            const raw = String(id ?? '');
+            if (!/^\d+$/.test(raw)) return raw;
+            try {
+                return BigInt(raw).toString(36);
+            } catch (e) {
+                return raw;
+            }
+        }
+
         function parseSearchQuery(value) {
             const normalized = normalizeSearchText(value).trim();
             if (!normalized) return { phrases: [], words: [] };
@@ -6533,8 +6545,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const itemCategory = item.category || 'Other';
             const itemTags = item.tags || [];
             const attachmentNames = (item.attachments || []).map(a => a && a.name ? a.name : '');
+            const displayId = getDisplayItemId(item.id);
             return normalizeSearchText([
-                item.id || '', item.name || '', item.notes || '', itemCategory, ...itemTags, ...attachmentNames
+                item.id || '', displayId, item.name || '', item.notes || '', itemCategory, ...itemTags, ...attachmentNames
             ].join(' '));
         }
 
@@ -6547,7 +6560,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 normalized = normalized.slice(1, -1).trim();
             }
             if (!normalized) return null;
-            return (appData.items || []).find(item => normalizeSearchText(item.id) === normalized) || null;
+            return (appData.items || []).find(item => {
+                const rawId = normalizeSearchText(item.id);
+                const displayId = normalizeSearchText(getDisplayItemId(item.id));
+                return rawId === normalized || displayId === normalized;
+            }) || null;
         }
 
         function isExactItemIdSearch() {
@@ -6592,7 +6609,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function searchForItemId(itemId) {
             const input = document.getElementById('searchInput');
             if (!input || itemId === undefined || itemId === null) return;
-            input.value = String(itemId);
+            // Use the compact display/search form in the search box, while
+            // getExactItemIdSearchMatch() also accepts the original raw ID.
+            input.value = getDisplayItemId(itemId);
             persistSearchQuery(input.value);
             updateSearchUI();
             renderAll();
@@ -7176,6 +7195,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const doneBadge = item.done ? `<span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full font-medium ml-1">✅ Done${item.doneAt ? ` · ${escapeHtml(formatDoneDate(item.doneAt))}` : ''}</span>` : '';
 
                 const isCompactExpanded = compactView && expandedCompactItems.has(item.id);
+                const displayItemId = getDisplayItemId(item.id);
                 return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} ${item.done ? 'done-item opacity-75' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="item-card-header flex items-start justify-between">
@@ -7189,7 +7209,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
                                 <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
-                                    <span>ID: ${escapeHtml(item.id)}</span>
+                                    <span title="Stored ID: ${escapeHtml(item.id)}">ID: ${escapeHtml(displayItemId)}</span>
                                     <button type="button" onclick="searchForItemId('${escapeHtml(item.id)}'); event.stopPropagation();" class="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300 transition" title="Find only this item" aria-label="Find only this item">
                                         <i class="fas fa-search text-[9px]"></i>
                                     </button>
