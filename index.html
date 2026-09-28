@@ -1166,7 +1166,7 @@
                 </button>
 
                 <!-- Collapsible Filters -->
-                <section id="filterPanel" class="filter-panel collapsed mb-4" aria-label="Search filters">
+                <section id="filterPanel" class="filter-panel collapsed mb-4" aria-label="Search filters and view options">
                     <div class="filter-panel-header">
                         <button type="button" id="filterPanelToggle" class="filter-panel-toggle" aria-expanded="false" aria-controls="filterPanelContent">
                             <i class="fas fa-sliders-h text-xs"></i>
@@ -1174,7 +1174,7 @@
                             <span id="filterSummary" class="filter-summary"></span>
                             <i class="fas fa-chevron-down filter-chevron text-[10px]"></i>
                         </button>
-                        <span class="text-[11px] text-gray-400 dark:text-gray-500">Categories, tags &amp; expiry</span>
+                        <span class="text-[11px] text-gray-400 dark:text-gray-500">Categories, tags, expiry, &amp; view</span>
                     </div>
                     <div id="filterPanelContent" class="filter-panel-content">
                         <div id="categoryChips" class="flex flex-wrap gap-2">
@@ -1184,38 +1184,45 @@
                             <!-- Tag filter chips injected -->
                         </div>
                         <div id="statsBar" class="stats-bar mt-2"></div>
+
+                        <div class="mt-3 pt-3 border-t border-gray-200/70 dark:border-gray-700/70">
+                            <div class="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                                <i class="fas fa-display text-[10px]"></i>
+                                <span>View &amp; sorting</span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <label class="list-sort-control inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" title="Choose item date order">
+                                    <i class="fas fa-arrow-down-wide-short text-xs text-gray-400 dark:text-gray-500"></i>
+                                    <span class="sr-only">Sort order</span>
+                                    <select id="sortOrderSelect" class="bg-transparent border-0 outline-none focus:ring-0 text-sm font-medium text-gray-700 dark:text-gray-200 pr-5 cursor-pointer">
+                                        <option value="asc">Oldest → Newest</option>
+                                        <option value="desc">Newest → Oldest</option>
+                                    </select>
+                                </label>
+                                <button id="chainViewToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Show all items in duplicate/renew chains">
+                                    <i id="chainViewIcon" class="fas fa-link text-xs"></i>
+                                    <span id="chainViewLabel">All Chain Items</span>
+                                </button>
+                                <button id="viewModeToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Toggle compact/detailed view">
+                                    <i id="viewModeIcon" class="fas fa-list text-xs"></i>
+                                    <span id="viewModeLabel">Compact</span>
+                                </button>
+                                <button id="showArchivedToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
+                                    <i class="fas fa-archive text-xs"></i>
+                                    <span id="archivedToggleLabel">Show Archived</span>
+                                </button>
+                                <button id="showDoneToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
+                                    <i class="fas fa-check-circle text-xs"></i>
+                                    <span id="doneToggleLabel">Show Done</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
                 <!-- Items List -->
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
+                <div class="flex items-center justify-between gap-2 mb-3">
                     <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-100">Your Tracked Items</h2>
-                    <div class="flex flex-wrap items-center gap-1.5">
-                        <label class="list-sort-control inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200" title="Choose item date order">
-                            <i class="fas fa-arrow-down-wide-short text-xs text-gray-400 dark:text-gray-500"></i>
-                            <span class="sr-only">Sort order</span>
-                            <select id="sortOrderSelect" class="bg-transparent border-0 outline-none focus:ring-0 text-sm font-medium text-gray-700 dark:text-gray-200 pr-5 cursor-pointer">
-                                <option value="asc">Oldest → Newest</option>
-                                <option value="desc">Newest → Oldest</option>
-                            </select>
-                        </label>
-                        <button id="chainViewToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Show all items in duplicate/renew chains">
-                            <i id="chainViewIcon" class="fas fa-link text-xs"></i>
-                            <span id="chainViewLabel">All Chain Items</span>
-                        </button>
-                        <button id="viewModeToggle" type="button" class="view-mode-btn text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5" title="Toggle compact/detailed view">
-                            <i id="viewModeIcon" class="fas fa-list text-xs"></i>
-                            <span id="viewModeLabel">Compact</span>
-                        </button>
-                        <button id="showArchivedToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
-                            <i class="fas fa-archive text-xs"></i>
-                            <span id="archivedToggleLabel">Show Archived</span>
-                        </button>
-                        <button id="showDoneToggle" class="text-sm font-medium px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 transition flex items-center gap-1.5">
-                            <i class="fas fa-check-circle text-xs"></i>
-                            <span id="doneToggleLabel">Show Done</span>
-                        </button>
-                    </div>
                 </div>
                 <div id="itemsList" class="space-y-3">
                     <!-- Items injected -->
@@ -5921,6 +5928,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- ARCHIVE ----------
         function getPreArchiveFilteredItems(options = {}) {
+            const exactItem = getExactItemIdSearchMatch();
+            if (exactItem) return [exactItem];
+
             const ignoreCategory = !!options.ignoreCategory;
             const ignoreTag = !!options.ignoreTag;
             const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
@@ -5968,6 +5978,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function getFacetFilteredItems(options = {}) {
+            const exactItem = getExactItemIdSearchMatch();
+            if (exactItem) return [exactItem];
+
             let filtered = getPreArchiveFilteredItems(options);
             filtered = applyArchiveAndDoneFilters(filtered);
             filtered = applyStatFilter(filtered);
@@ -6233,6 +6246,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         
             const wasEditing = editingItemId !== null;
+            let newlyCreatedItemId = null;
             const saveBtn = document.getElementById("saveItemButton");
             saveBtn.disabled = true;
             saveBtn.textContent = "Saving...";
@@ -6337,8 +6351,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 : await addCalendarEvent(eventData);
                         }
         
+                        const newItemId = Date.now().toString();
+                        newlyCreatedItemId = newItemId;
                         appData.items.push({
-                            id: Date.now().toString(),
+                            id: newItemId,
                             name,
                             category,
                             date,
@@ -6395,6 +6411,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 saveBtn.textContent = "Save";
             }
             if (document.getElementById('itemModal').classList.contains('hidden')) {
+                if (!wasEditing && newlyCreatedItemId) {
+                    searchForItemId(newlyCreatedItemId);
+                }
                 showToast(wasEditing ? 'Updated.' : 'Added.');
             }
         }
@@ -6515,8 +6534,24 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const itemTags = item.tags || [];
             const attachmentNames = (item.attachments || []).map(a => a && a.name ? a.name : '');
             return normalizeSearchText([
-                item.name || '', item.notes || '', itemCategory, ...itemTags, ...attachmentNames
+                item.id || '', item.name || '', item.notes || '', itemCategory, ...itemTags, ...attachmentNames
             ].join(' '));
+        }
+
+        function getExactItemIdSearchMatch(value = null) {
+            const raw = value === null
+                ? document.getElementById('searchInput')?.value || ''
+                : String(value);
+            let normalized = normalizeSearchText(raw).trim();
+            if (normalized.length >= 2 && normalized.startsWith('"') && normalized.endsWith('"')) {
+                normalized = normalized.slice(1, -1).trim();
+            }
+            if (!normalized) return null;
+            return (appData.items || []).find(item => normalizeSearchText(item.id) === normalized) || null;
+        }
+
+        function isExactItemIdSearch() {
+            return !!getExactItemIdSearchMatch();
         }
 
         function itemMatchesSearch(item, query) {
@@ -6528,14 +6563,48 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function updateSearchUI() {
             if (!searchClearBtn) return;
-            const hasSearch = !!document.getElementById('searchInput').value.trim();
+            const input = document.getElementById('searchInput');
+            const hasSearch = !!input?.value.trim();
             searchClearBtn.style.display = hasSearch ? 'inline-flex' : 'none';
+            if (input) {
+                const exactMatch = getExactItemIdSearchMatch(input.value);
+                input.title = exactMatch
+                    ? `Exact item ID lookup: ${exactMatch.id}. Other filters are bypassed.`
+                    : '';
+                input.setAttribute('aria-label', exactMatch
+                    ? `Search items. Exact item ID lookup is active for ${exactMatch.id}.`
+                    : 'Search items');
+            }
+        }
+
+        function persistSearchQuery(value) {
+            const query = String(value || '');
+            if (query.trim()) localStorage.setItem('expire_searchQuery', query);
+            else localStorage.removeItem('expire_searchQuery');
+        }
+
+        function restoreSearchQuery() {
+            const input = document.getElementById('searchInput');
+            if (!input) return;
+            input.value = localStorage.getItem('expire_searchQuery') || '';
+        }
+
+        function searchForItemId(itemId) {
+            const input = document.getElementById('searchInput');
+            if (!input || itemId === undefined || itemId === null) return;
+            input.value = String(itemId);
+            persistSearchQuery(input.value);
+            updateSearchUI();
+            renderAll();
+            input.focus();
+            input.select();
         }
 
         function clearSearch() {
             const input = document.getElementById('searchInput');
             if (!input) return;
             input.value = '';
+            persistSearchQuery('');
             updateSearchUI();
             renderAll();
             input.focus();
@@ -6606,7 +6675,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             chainViewMode = mode === 'latest' ? 'latest' : 'all';
             localStorage.setItem('expire_chainViewMode', chainViewMode);
             updateListOrderingUI();
-            renderItems();
+            // Chain mode changes affect facet counts as well as the visible list.
+            renderAll();
         }
 
         function toggleChainView() {
@@ -6635,6 +6705,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function getBaseFilteredItems() {
+            // Exact item-ID search is a direct lookup and intentionally bypasses
+            // archive/done filters so the requested item is always visible.
+            const exactItem = getExactItemIdSearchMatch();
+            if (exactItem) return [exactItem];
+
             // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
             return applyArchiveAndDoneFilters(getPreArchiveFilteredItems());
         }
@@ -6812,6 +6887,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function filterItems() {
+            const exactItem = getExactItemIdSearchMatch();
+            if (exactItem) return [exactItem];
             return applyStatFilter(getBaseFilteredItems());
         }
 
@@ -6974,7 +7051,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderItems() {
             let filtered = filterItems();
             const chainMetadata = buildChainMetadata(appData.items || []);
-            if (chainViewMode === 'latest') {
+            if (chainViewMode === 'latest' && !isExactItemIdSearch()) {
                 filtered = getVisibleLatestChainItems(filtered, chainMetadata);
             }
             if (!filtered.length) {
@@ -7111,6 +7188,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                     ${getChainBadgeHtml(item, chainMetadata)}
                                 </div>
                                 <h2 class="font-bold text-gray-900 dark:text-gray-100 mt-0.5 truncate">${escapeHtml(item.name)}</h2>
+                                <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-400 dark:text-gray-500">
+                                    <span>ID: ${escapeHtml(item.id)}</span>
+                                    <button type="button" onclick="searchForItemId('${escapeHtml(item.id)}'); event.stopPropagation();" class="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-900/30 dark:hover:text-indigo-300 transition" title="Find only this item" aria-label="Find only this item">
+                                        <i class="fas fa-search text-[9px]"></i>
+                                    </button>
+                                </div>
                             </div>
                             <button type="button" class="compact-toggle flex-shrink-0 ml-2" onclick="toggleItemExpanded(event, '${escapeHtml(item.id)}')" title="${isCompactExpanded ? 'Collapse item' : 'Expand item'}" aria-label="${isCompactExpanded ? 'Collapse item' : 'Expand item'}">
                                 <i class="fas ${isCompactExpanded ? 'fa-chevron-up' : 'fa-chevron-down'} text-xs"></i>
@@ -7454,6 +7537,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
             reminderBanner.style.display = 'block';
             updateAccountEmailUI();
+            restoreSearchQuery();
             updateArchivedToggleUI();
             updateFilterUI();
             updateViewModeUI();
@@ -7695,7 +7779,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         if (chainViewToggle) chainViewToggle.onclick = toggleChainView;
         if (viewModeToggle) viewModeToggle.onclick = toggleCompactView;
         const searchInputEl = document.getElementById('searchInput');
-        searchInputEl.addEventListener('input', () => { updateSearchUI(); renderAll(); });
+        searchInputEl.addEventListener('input', () => {
+            persistSearchQuery(searchInputEl.value);
+            updateSearchUI();
+            renderAll();
+        });
         searchInputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && searchInputEl.value) {
                 e.preventDefault();
