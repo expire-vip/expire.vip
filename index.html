@@ -5920,15 +5920,90 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- ARCHIVE ----------
-        function getPreArchiveFilteredItems() {
+        function getPreArchiveFilteredItems(options = {}) {
+            const ignoreCategory = !!options.ignoreCategory;
+            const ignoreTag = !!options.ignoreTag;
             const searchQuery = parseSearchQuery(document.getElementById('searchInput').value);
             return (appData.items || []).filter(i => {
                 const itemCategory = i.category || 'Other';
-                const matchesCategory = (activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase());
+                const matchesCategory = ignoreCategory || activeCategory === 'All' || itemCategory.toLowerCase() === activeCategory.toLowerCase();
                 const itemTags = (i.tags || []).map(t => String(t).toLowerCase());
-                const matchesTag = !activeTag || itemTags.includes(activeTag.toLowerCase());
+                const matchesTag = ignoreTag || !activeTag || itemTags.includes(activeTag.toLowerCase());
                 return matchesCategory && matchesTag && itemMatchesSearch(i, searchQuery);
             });
+        }
+
+        function applyArchiveAndDoneFilters(items) {
+            let filtered = Array.isArray(items) ? items : [];
+            if (archiveViewMode === 'active') filtered = filtered.filter(i => !i.archived);
+            else if (archiveViewMode === 'archived') filtered = filtered.filter(i => !!i.archived);
+            if (doneViewMode === 'active') filtered = filtered.filter(i => !i.done);
+            else if (doneViewMode === 'done') filtered = filtered.filter(i => !!i.done);
+            return filtered;
+        }
+
+        function applyStatFilter(items) {
+            let filtered = Array.isArray(items) ? items : [];
+            if (activeStatFilter === 'all') return filtered;
+
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            if (activeStatFilter === 'noExpiry') {
+                return filtered.filter(i => !i.date || i.noExpiration);
+            }
+
+            return filtered.filter(i => {
+                if (!i.date || i.noExpiration) return false;
+                const targetDate = getDateOnly(i.date);
+                const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+                switch (activeStatFilter) {
+                    case 'expiredRecent': return diffDays < 0 && diffDays >= -7;
+                    case 'expiredOld': return diffDays < -7;
+                    case 'urgent': return diffDays >= 0 && diffDays <= 7;
+                    case 'upcoming': return diffDays >= 8 && diffDays <= 30;
+                    case 'later': return diffDays > 30;
+                    default: return true;
+                }
+            });
+        }
+
+        function getFacetFilteredItems(options = {}) {
+            let filtered = getPreArchiveFilteredItems(options);
+            filtered = applyArchiveAndDoneFilters(filtered);
+            filtered = applyStatFilter(filtered);
+            if (chainViewMode === 'latest') {
+                const chainMetadata = buildChainMetadata(appData.items || []);
+                filtered = getVisibleLatestChainItems(filtered, chainMetadata);
+            }
+            return filtered;
+        }
+
+        function getCategoryFacetCounts() {
+            const candidates = getFacetFilteredItems({ ignoreCategory: true });
+            const counts = new Map();
+            candidates.forEach(item => {
+                const category = item.category || 'Other';
+                const key = String(category).toLowerCase();
+                counts.set(key, (counts.get(key) || 0) + 1);
+            });
+            return counts;
+        }
+
+        function getTagFacetCounts() {
+            const candidates = getFacetFilteredItems({ ignoreTag: true });
+            const counts = new Map();
+            candidates.forEach(item => {
+                const seen = new Set();
+                (item.tags || []).forEach(tag => {
+                    const value = String(tag || '').trim();
+                    if (!value) return;
+                    const key = value.toLowerCase();
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    counts.set(key, (counts.get(key) || 0) + 1);
+                });
+            });
+            return counts;
         }
 
         function getArchivedCount() {
@@ -6561,12 +6636,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function getBaseFilteredItems() {
             // Search covers the same fields as before: name, notes, category, tags, and attachment filenames.
-            let filtered = getPreArchiveFilteredItems();
-            if (archiveViewMode === 'active') filtered = filtered.filter(i => !i.archived);
-            else if (archiveViewMode === 'archived') filtered = filtered.filter(i => !!i.archived);
-            if (doneViewMode === 'active') return filtered.filter(i => !i.done);
-            if (doneViewMode === 'done') return filtered.filter(i => !!i.done);
-            return filtered;
+            return applyArchiveAndDoneFilters(getPreArchiveFilteredItems());
         }
 
         function computeStats(items) {
@@ -6666,20 +6736,27 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function renderCategoryChips() {
             const customCats = (appData.customCategories || []).map(c => c.name);
-            const itemCats = appData.items
+            const itemCats = (appData.items || [])
                 .filter(i => archiveViewMode !== 'active' || !i.archived)
                 .map(i => i.category || 'Other');
             const builtinCats = BUILTIN_CATEGORIES.map(c => c.name);
             const allUniqueCats = [...new Set([...builtinCats, ...customCats, ...itemCats])];
+            const categoryCounts = getCategoryFacetCounts();
             
             const container = document.getElementById('categoryChips');
             if (container) {
-                let html = `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${activeCategory === 'All' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='All';renderAll()">All</span>`;
+                const allCount = getFacetFilteredItems({ ignoreCategory: true }).length;
+                const allActive = activeCategory === 'All';
+                const allBadgeClass = allActive ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300';
+                let html = `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${allActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='All';renderAll()">All <span class="inline-flex items-center justify-center min-w-[1.2rem] h-5 px-1 rounded-full text-[11px] font-semibold ${allBadgeClass}">${allCount}</span></span>`;
                 
                 allUniqueCats.forEach(cat => {
                     const emoji = getCategoryEmoji(cat);
                     const isActive = activeCategory.toLowerCase() === cat.toLowerCase();
-                    html += `<span class="px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='${escapeHtml(cat)}';renderAll()">${emoji} ${escapeHtml(cat)}</span>`;
+                    const count = categoryCounts.get(String(cat).toLowerCase()) || 0;
+                    const badgeClass = isActive ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300';
+                    const zeroClass = count === 0 && !isActive ? 'opacity-55' : '';
+                    html += `<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium cursor-pointer select-none transition ${zeroClass} ${isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}" onclick="activeCategory='${escapeHtml(cat)}';renderAll()">${emoji} ${escapeHtml(cat)} <span class="inline-flex items-center justify-center min-w-[1.2rem] h-5 px-1 rounded-full text-[11px] font-semibold ${badgeClass}">${count}</span></span>`;
                 });
                 
                 container.innerHTML = html;
@@ -6692,6 +6769,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (allTags.length === 0) {
                     tagContainer.innerHTML = '';
                 } else {
+                    const tagCounts = getTagFacetCounts();
                     let tagHtml = `
                         <div class="flex flex-wrap items-center gap-1.5 pt-1 w-full">
                             <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 mr-1 flex items-center gap-1">
@@ -6700,17 +6778,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     `;
                     allTags.forEach(t => {
                         const isActive = activeTag && activeTag.toLowerCase() === t.toLowerCase();
+                        const count = tagCounts.get(String(t).toLowerCase()) || 0;
+                        const badgeClass = isActive ? 'bg-white/20 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300';
+                        const zeroClass = count === 0 && !isActive ? 'opacity-55' : '';
                         if (isActive) {
                             tagHtml += `
-                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white shadow-xs transition" title="Click to clear filter">
+                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-600 text-white shadow-xs transition" title="Click to clear filter">
                                     #${escapeHtml(t)}
+                                    <span class="inline-flex items-center justify-center min-w-[1.1rem] h-4 px-1 rounded-full text-[10px] font-semibold ${badgeClass}">${count}</span>
                                     <i class="fas fa-times text-[10px]"></i>
                                 </button>
                             `;
                         } else {
                             tagHtml += `
-                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200/60 dark:border-gray-600/60 transition">
+                                <button type="button" onclick="setTagFilter('${escapeHtml(t)}')" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${zeroClass} bg-gray-100 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-200/60 dark:border-gray-600/60 transition">
                                     #${escapeHtml(t)}
+                                    <span class="inline-flex items-center justify-center min-w-[1.1rem] h-4 px-1 rounded-full text-[10px] font-semibold ${badgeClass}">${count}</span>
                                 </button>
                             `;
                         }
@@ -6729,30 +6812,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function filterItems() {
-            const baseItems = getBaseFilteredItems();
-            // Apply stat filter on top
-            if (activeStatFilter === 'all') return baseItems;
-            
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            
-            if (activeStatFilter === 'noExpiry') {
-                return baseItems.filter(i => !i.date || i.noExpiration);
-            }
-            
-            return baseItems.filter(i => {
-                if (!i.date || i.noExpiration) return false;
-                const targetDate = getDateOnly(i.date);
-                const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
-                switch (activeStatFilter) {
-                    case 'expiredRecent': return diffDays < 0 && diffDays >= -7;
-                    case 'expiredOld': return diffDays < -7;
-                    case 'urgent': return diffDays >= 0 && diffDays <= 7;
-                    case 'upcoming': return diffDays >= 8 && diffDays <= 30;
-                    case 'later': return diffDays > 30;
-                    default: return true;
-                }
-            });
+            return applyStatFilter(getBaseFilteredItems());
         }
 
         function getEffectiveLifetimeEndDate(item) {
