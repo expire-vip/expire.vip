@@ -6981,6 +6981,25 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return String(a.id || '').localeCompare(String(b.id || ''));
         }
 
+        // Chain "latest" means the newest-created item, not the item with the
+        // furthest/most-recent expiration date. A duplicate/renewal gets a new
+        // timestamp-based id, so it should become the visible chain tip even when
+        // the parent is pinned or has a later expiration date.
+        function compareItemsByCreationAsc(a, b) {
+            const aNum = Number(a?.id);
+            const bNum = Number(b?.id);
+            if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) {
+                return aNum - bNum;
+            }
+            return String(a?.id || '').localeCompare(String(b?.id || ''));
+        }
+
+        function getLatestChainItem(members) {
+            const list = Array.isArray(members) ? members : [];
+            if (!list.length) return null;
+            return [...list].sort(compareItemsByCreationAsc).at(-1) || null;
+        }
+
         function getLineageRootId(item, byId) {
             let current = item;
             const visited = new Set();
@@ -7009,7 +7028,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     metadata.set(rootId, { count: 1, latestId: members[0]?.id || null });
                     return;
                 }
-                const latest = [...members].sort(compareItemsByDisplayDateAsc).at(-1);
+                const latest = getLatestChainItem(members);
                 metadata.set(rootId, { count: members.length, latestId: latest?.id || null });
             });
             return { byId, metadata };
@@ -7020,7 +7039,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             (filtered || []).forEach(item => {
                 const rootId = getLineageRootId(item, chainMetadata.byId);
                 const current = visibleLatestByRoot.get(rootId);
-                if (!current || compareItemsByDisplayDateAsc(current, item) < 0) {
+                if (!current || compareItemsByCreationAsc(current, item) < 0) {
                     visibleLatestByRoot.set(rootId, item);
                 }
             });
@@ -7048,7 +7067,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const rootId = getLineageRootId(source, byId);
             const members = allItems.filter(item => getLineageRootId(item, byId) === rootId);
             if (members.length <= 1) return;
-            const latest = [...members].sort(compareItemsByDisplayDateAsc).at(-1);
+            const latest = getLatestChainItem(members);
             if (!latest) return;
             scrollToItemCard(latest.id);
         }
