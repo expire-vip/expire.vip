@@ -297,6 +297,161 @@
         .attachment-item .file-actions .preview-attachment:hover {
             color: #8b5cf6;
         }
+        /* Local photo review shown after the camera/file picker returns a single image. */
+        #photoReviewModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 12000;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            padding-top: max(1rem, env(safe-area-inset-top));
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+            background: rgba(3, 7, 18, .88);
+            overscroll-behavior: contain;
+        }
+        #photoReviewModal.show { display: flex; }
+        #photoReviewModal .photo-review-panel {
+            width: min(100%, 900px);
+            height: min(92dvh, 900px);
+            max-height: calc(100dvh - 2rem);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(156, 163, 175, .35);
+            border-radius: 1rem;
+            background: #fff;
+            color: #111827;
+            box-shadow: 0 24px 80px rgba(0,0,0,.5);
+        }
+        .dark #photoReviewModal .photo-review-panel { background: #1f2937; color: #f3f4f6; }
+        #photoReviewModal .photo-review-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .75rem;
+            padding: .9rem 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        .dark #photoReviewModal .photo-review-header { border-color: #374151; }
+        #photoReviewModal .photo-review-header { padding-top: max(.9rem, env(safe-area-inset-top)); }
+        #photoReviewModal .photo-review-filename {
+            margin-top: .2rem;
+            max-width: min(70vw, 680px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: .75rem;
+            color: #6b7280;
+        }
+        .dark #photoReviewModal .photo-review-filename { color: #9ca3af; }
+        #photoReviewModal .photo-review-close {
+            border: 0;
+            border-radius: .65rem;
+            min-width: 2.5rem;
+            min-height: 2.5rem;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 1.35rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .dark #photoReviewModal .photo-review-close { background: #374151; color: #f3f4f6; }
+        #photoReviewModal .photo-review-stage {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 1 1 auto;
+            min-height: 0;
+            overflow: hidden;
+            background: #111827;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            overscroll-behavior: contain;
+        }
+        #photoReviewModal #photoReviewImage {
+            display: block;
+            flex: 0 1 auto;
+            width: auto;
+            height: auto;
+            max-width: calc(100% - 1rem);
+            max-height: calc(100% - 1rem);
+            object-fit: contain;
+            transform-origin: center center;
+            will-change: transform;
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+        #photoReviewModal .photo-review-load-error {
+            position: absolute;
+            inset: auto 1rem 1rem;
+            padding: .7rem .8rem;
+            border-radius: .75rem;
+            color: #fff;
+            background: rgba(127, 29, 29, .92);
+            font-size: .82rem;
+            text-align: center;
+        }
+        #photoReviewModal .photo-review-zoom-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: .65rem;
+            padding: .65rem 1rem;
+            flex-shrink: 0;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .dark #photoReviewModal .photo-review-zoom-row { background: #111827; border-color: #374151; }
+        #photoReviewModal .photo-review-zoom-row button {
+            min-width: 2.75rem;
+            min-height: 2.5rem;
+            padding: .35rem .7rem;
+            border: 1px solid #d1d5db;
+            border-radius: .7rem;
+            background: #fff;
+            color: #374151;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .dark #photoReviewModal .photo-review-zoom-row button { background: #1f2937; color: #f3f4f6; border-color: #4b5563; }
+        #photoReviewModal .photo-review-zoom-hint { font-size: .72rem; color: #6b7280; text-align: center; }
+        .dark #photoReviewModal .photo-review-zoom-hint { color: #9ca3af; }
+        #photoReviewModal .photo-review-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: .65rem;
+            padding: .85rem 1rem;
+            padding-bottom: max(.85rem, env(safe-area-inset-bottom));
+            border-top: 1px solid #e5e7eb;
+            flex-shrink: 0;
+        }
+        .dark #photoReviewModal .photo-review-footer { border-color: #374151; }
+        #photoReviewModal .photo-review-footer button {
+            min-height: 2.75rem;
+            border-radius: .75rem;
+            padding: .65rem 1rem;
+            font-size: .9rem;
+            font-weight: 650;
+            cursor: pointer;
+        }
+        #photoReviewModal .photo-review-retake { border: 1px solid #d1d5db; background: #fff; color: #374151; }
+        .dark #photoReviewModal .photo-review-retake { border-color: #4b5563; background: #374151; color: #f3f4f6; }
+        #photoReviewModal .photo-review-use { border: 1px solid #4f46e5; background: #4f46e5; color: white; }
+        #photoReviewModal .photo-review-use:hover { background: #4338ca; }
+        @media (max-width: 640px) {
+            #photoReviewModal { padding: 0; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+            #photoReviewModal .photo-review-panel { width: 100%; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+            #photoReviewModal .photo-review-header { padding-left: 1rem; padding-right: .75rem; }
+            #photoReviewModal .photo-review-footer { padding-left: 1rem; padding-right: 1rem; }
+        }
+
         /* Preview Modal */
         #previewModal {
             display: none;
@@ -1682,6 +1837,33 @@
             <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80 flex-shrink-0">
                 <button onclick="closeSettings()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Close</button>
                 <button onclick="saveSettings()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- In-app review for a single local photo before it is uploaded. -->
+    <div id="photoReviewModal" aria-hidden="true">
+        <div class="photo-review-panel" role="dialog" aria-modal="true" aria-labelledby="photoReviewTitle">
+            <div class="photo-review-header">
+                <div class="min-w-0">
+                    <h2 id="photoReviewTitle" class="text-base font-semibold">Review photo</h2>
+                    <div id="photoReviewFileName" class="photo-review-filename"></div>
+                </div>
+                <button type="button" class="photo-review-close" onclick="cancelPhotoReview()" aria-label="Cancel photo review" title="Cancel">×</button>
+            </div>
+            <div id="photoReviewStage" class="photo-review-stage" aria-label="Photo zoom and pan area">
+                <img id="photoReviewImage" alt="Photo selected for attachment" draggable="false">
+                <div id="photoReviewLoadError" class="photo-review-load-error" style="display:none;">This image cannot be previewed in the browser. You can still use the photo, or choose another one.</div>
+            </div>
+            <div class="photo-review-zoom-row">
+                <button type="button" onclick="adjustPhotoReviewZoom(-0.5)" aria-label="Zoom out" title="Zoom out">−</button>
+                <button type="button" onclick="resetPhotoReviewZoom()" title="Reset zoom">Reset</button>
+                <button type="button" onclick="adjustPhotoReviewZoom(0.5)" aria-label="Zoom in" title="Zoom in">+</button>
+                <span class="photo-review-zoom-hint">Pinch to zoom · Drag to inspect text</span>
+            </div>
+            <div class="photo-review-footer">
+                <button type="button" class="photo-review-retake" onclick="retakePhotoFromReview()">↻ Retake</button>
+                <button type="button" class="photo-review-use" onclick="confirmPhotoReview()">✓ Use Photo</button>
             </div>
         </div>
     </div>
@@ -4790,6 +4972,226 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return { fileCount: names.length, fileNames: names };
         }
 
+        // ---------- LOCAL PHOTO REVIEW (before upload) ----------
+        let pendingPhotoReviewResolve = null;
+        let photoReviewCurrentInput = null;
+        let photoReviewPickerOpenedByRetake = false;
+        let photoReviewObjectUrl = null;
+        let photoReviewScale = 1;
+        let photoReviewTranslateX = 0;
+        let photoReviewTranslateY = 0;
+        let photoReviewPointers = new Map();
+        let photoReviewPanStart = null;
+        let photoReviewPinchStart = null;
+
+        function isReviewableImageFile(file) {
+            if (!file) return false;
+            const mime = typeof file.type === 'string' ? file.type.toLowerCase() : '';
+            const name = String(file.name || '');
+            return mime.startsWith('image/') || /\.(?:jpe?g|png|gif|webp|bmp|tiff?|heic|heif|avif)$/i.test(name);
+        }
+
+        function applyPhotoReviewTransform() {
+            const stage = document.getElementById('photoReviewStage');
+            const image = document.getElementById('photoReviewImage');
+            if (!stage || !image) return;
+            const scale = Math.max(1, Math.min(6, photoReviewScale));
+            photoReviewScale = scale;
+            const maxX = Math.max(0, (image.clientWidth * scale - stage.clientWidth) / 2);
+            const maxY = Math.max(0, (image.clientHeight * scale - stage.clientHeight) / 2);
+            photoReviewTranslateX = Math.max(-maxX, Math.min(maxX, photoReviewTranslateX));
+            photoReviewTranslateY = Math.max(-maxY, Math.min(maxY, photoReviewTranslateY));
+            image.style.transform = `translate3d(${photoReviewTranslateX}px, ${photoReviewTranslateY}px, 0) scale(${photoReviewScale})`;
+        }
+
+        function resetPhotoReviewZoom() {
+            photoReviewScale = 1;
+            photoReviewTranslateX = 0;
+            photoReviewTranslateY = 0;
+            applyPhotoReviewTransform();
+        }
+
+        function adjustPhotoReviewZoom(delta) {
+            photoReviewScale = Math.max(1, Math.min(6, photoReviewScale + delta));
+            if (photoReviewScale === 1) {
+                photoReviewTranslateX = 0;
+                photoReviewTranslateY = 0;
+            }
+            applyPhotoReviewTransform();
+        }
+
+        function getPhotoReviewPointerDistance(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function showPhotoReview(file, fileInput) {
+            const modal = document.getElementById('photoReviewModal');
+            const image = document.getElementById('photoReviewImage');
+            const filename = document.getElementById('photoReviewFileName');
+            const loadError = document.getElementById('photoReviewLoadError');
+            if (!modal || !image) return Promise.resolve('cancel');
+            if (pendingPhotoReviewResolve) finishPhotoReview('cancel');
+            photoReviewCurrentInput = fileInput || null;
+            photoReviewPickerOpenedByRetake = false;
+
+            photoReviewScale = 1;
+            photoReviewTranslateX = 0;
+            photoReviewTranslateY = 0;
+            photoReviewPointers = new Map();
+            photoReviewPanStart = null;
+            photoReviewPinchStart = null;
+            if (photoReviewObjectUrl) URL.revokeObjectURL(photoReviewObjectUrl);
+            photoReviewObjectUrl = URL.createObjectURL(file);
+            filename.textContent = file.name || 'Selected photo';
+            loadError.style.display = 'none';
+            image.style.transform = 'translate3d(0, 0, 0) scale(1)';
+            image.onload = () => {
+                loadError.style.display = 'none';
+                resetPhotoReviewZoom();
+            };
+            image.onerror = () => { loadError.style.display = 'block'; };
+            image.src = photoReviewObjectUrl;
+            modal.classList.add('show');
+            modal.setAttribute('aria-hidden', 'false');
+
+            return new Promise(resolve => { pendingPhotoReviewResolve = resolve; });
+        }
+
+        function finishPhotoReview(decision) {
+            const modal = document.getElementById('photoReviewModal');
+            const image = document.getElementById('photoReviewImage');
+            if (modal) {
+                modal.classList.remove('show');
+                modal.setAttribute('aria-hidden', 'true');
+            }
+            if (image) {
+                image.onload = null;
+                image.onerror = null;
+                image.removeAttribute('src');
+                image.style.transform = '';
+            }
+            if (photoReviewObjectUrl) {
+                URL.revokeObjectURL(photoReviewObjectUrl);
+                photoReviewObjectUrl = null;
+            }
+            photoReviewPointers.clear();
+            photoReviewPanStart = null;
+            photoReviewPinchStart = null;
+            const resolve = pendingPhotoReviewResolve;
+            pendingPhotoReviewResolve = null;
+            photoReviewCurrentInput = null;
+            if (resolve) resolve(decision);
+        }
+
+        function confirmPhotoReview() { finishPhotoReview('use'); }
+        function cancelPhotoReview() { finishPhotoReview('cancel'); }
+        function retakePhotoFromReview() {
+            // Open the native chooser synchronously from this tap so iOS Safari keeps
+            // the user activation needed to launch the camera/photo picker.
+            const input = photoReviewCurrentInput;
+            finishPhotoReview('retake');
+            if (!input) return;
+            try {
+                input.value = '';
+                photoReviewPickerOpenedByRetake = true;
+                input.click();
+            } catch (error) {
+                photoReviewPickerOpenedByRetake = false;
+                toastError('Could not reopen the camera picker. Tap Upload Files to try again.');
+            }
+        }
+
+        // Implement pinch-to-zoom and one-finger panning on touch devices; zoom buttons
+        // remain available for mouse/keyboard users as well.
+        (function bindPhotoReviewGestures() {
+            const modal = document.getElementById('photoReviewModal');
+            const stage = document.getElementById('photoReviewStage');
+            if (!modal || !stage) return;
+
+            stage.addEventListener('pointerdown', event => {
+                if (!modal.classList.contains('show')) return;
+                if (event.pointerType === 'mouse' && event.button !== 0) return;
+                try { stage.setPointerCapture(event.pointerId); } catch (_) {}
+                photoReviewPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                if (photoReviewPointers.size >= 2) {
+                    const points = Array.from(photoReviewPointers.values()).slice(0, 2);
+                    photoReviewPinchStart = {
+                        distance: Math.max(1, getPhotoReviewPointerDistance(points[0], points[1])),
+                        scale: photoReviewScale,
+                        x: photoReviewTranslateX,
+                        y: photoReviewTranslateY
+                    };
+                    photoReviewPanStart = null;
+                } else {
+                    photoReviewPanStart = {
+                        pointerId: event.pointerId,
+                        x: event.clientX,
+                        y: event.clientY,
+                        translateX: photoReviewTranslateX,
+                        translateY: photoReviewTranslateY
+                    };
+                    photoReviewPinchStart = null;
+                }
+                event.preventDefault();
+            });
+
+            stage.addEventListener('pointermove', event => {
+                if (!photoReviewPointers.has(event.pointerId)) return;
+                photoReviewPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+                if (photoReviewPointers.size >= 2 && photoReviewPinchStart) {
+                    const points = Array.from(photoReviewPointers.values()).slice(0, 2);
+                    const distance = Math.max(1, getPhotoReviewPointerDistance(points[0], points[1]));
+                    photoReviewScale = Math.max(1, Math.min(6, photoReviewPinchStart.scale * distance / photoReviewPinchStart.distance));
+                    photoReviewTranslateX = photoReviewPinchStart.x;
+                    photoReviewTranslateY = photoReviewPinchStart.y;
+                    if (photoReviewScale === 1) {
+                        photoReviewTranslateX = 0;
+                        photoReviewTranslateY = 0;
+                    }
+                    applyPhotoReviewTransform();
+                    event.preventDefault();
+                } else if (photoReviewPointers.size === 1 && photoReviewPanStart && photoReviewPanStart.pointerId === event.pointerId && photoReviewScale > 1) {
+                    photoReviewTranslateX = photoReviewPanStart.translateX + event.clientX - photoReviewPanStart.x;
+                    photoReviewTranslateY = photoReviewPanStart.translateY + event.clientY - photoReviewPanStart.y;
+                    applyPhotoReviewTransform();
+                    event.preventDefault();
+                }
+            });
+
+            const finishPointer = event => {
+                if (!photoReviewPointers.has(event.pointerId)) return;
+                photoReviewPointers.delete(event.pointerId);
+                try { stage.releasePointerCapture(event.pointerId); } catch (_) {}
+                photoReviewPinchStart = null;
+                if (photoReviewPointers.size === 1) {
+                    const [pointerId, point] = Array.from(photoReviewPointers.entries())[0];
+                    photoReviewPanStart = {
+                        pointerId,
+                        x: point.x,
+                        y: point.y,
+                        translateX: photoReviewTranslateX,
+                        translateY: photoReviewTranslateY
+                    };
+                } else {
+                    photoReviewPanStart = null;
+                }
+            };
+            stage.addEventListener('pointerup', finishPointer);
+            stage.addEventListener('pointercancel', finishPointer);
+            stage.addEventListener('lostpointercapture', finishPointer);
+
+            modal.addEventListener('click', event => {
+                if (event.target === modal) cancelPhotoReview();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && modal.classList.contains('show')) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    cancelPhotoReview();
+                }
+            }, true);
+        })();
+
         async function handleAttachmentUpload(event) {
             const fileInput = event.target;
             const files = Array.from(fileInput.files || []);
@@ -4797,7 +5199,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
             let uploadResults = [];
             let attachmentsSaved = false;
+            let reopenPickerForRetake = false;
             try {
+                // A single image commonly comes from the phone camera. Let the user inspect
+                // it before uploading; multi-file selections retain the fast bulk-upload flow.
+                if (files.length === 1 && isReviewableImageFile(files[0])) {
+                    const photoDecision = await showPhotoReview(files[0], fileInput);
+                    if (photoDecision === 'retake') {
+                        reopenPickerForRetake = true;
+                        return;
+                    }
+                    if (photoDecision !== 'use') return;
+                }
                 if (!confirmLargeAttachmentFiles(files)) return;
                 if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${files.length} attachment${files.length === 1 ? '' : 's'}`))) return;
 
@@ -4863,7 +5276,19 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     toastError('Upload failed: ' + err.message);
                 }
             } finally {
-                fileInput.value = '';
+                if (reopenPickerForRetake && photoReviewPickerOpenedByRetake) {
+                    // RetakePhotoFromReview already cleared the input and opened it directly
+                    // inside the user tap; do not reset it while the native chooser is open.
+                    photoReviewPickerOpenedByRetake = false;
+                } else {
+                    fileInput.value = '';
+                    // Fallback in case the browser rejected a synchronous programmatic click.
+                    if (reopenPickerForRetake) {
+                        setTimeout(() => {
+                            try { fileInput.click(); } catch (error) { toastError('Could not reopen the camera picker. Tap Upload Files to try again.'); }
+                        }, 250);
+                    }
+                }
             }
         }
 
