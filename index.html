@@ -1411,14 +1411,14 @@
                     <!-- Upload and create buttons -->
                     <div class="flex flex-wrap items-center gap-2">
                         <label class="cursor-pointer bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-800/60 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-xl text-sm font-medium transition border border-indigo-200 dark:border-indigo-700">
-                            <i class="fas fa-upload mr-1"></i> Upload File
-                            <input type="file" id="attachmentFileInput" class="hidden" onchange="handleAttachmentUpload(event)">
+                            <i class="fas fa-upload mr-1"></i> Upload Files
+                            <input type="file" id="attachmentFileInput" class="hidden" multiple onchange="handleAttachmentUpload(event)" aria-label="Upload one or more attachment files">
                         </label>
                         <button type="button" onclick="createEmptyTextFile()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-medium transition border border-gray-200 dark:border-gray-600">
                             <i class="fas fa-file-alt mr-1"></i> New Text File
                         </button>
                     </div>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">⚠️ Files larger than 5 MB will trigger a warning.</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Select multiple photos or files at once. Files larger than 5 MB will trigger a warning.</p>
                 </div>
             </div>
 
@@ -2971,7 +2971,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             throw new Error('History changed on another device while saving. Please try again.');
         }
 
-        function historyActionLabel(action) {
+        function historyActionLabel(action, details = {}) {
             const labels = {
                 created: 'Created',
                 updated: 'Updated',
@@ -2990,6 +2990,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 attachment_renamed: 'Attachment Renamed',
                 deleted: 'Deleted'
             };
+            if (action === 'attachment_added' && Number(details.fileCount || details.fileNames?.length || 0) > 1) {
+                return 'Attachments Added';
+            }
             return labels[action] || 'Updated';
         }
 
@@ -3300,14 +3303,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const changes = entry.changes || {};
                 const changeKeys = getVisibleHistoryChangeKeys(changes);
                 const details = entry.details || {};
+                const detailFileNames = Array.isArray(details.fileNames) && details.fileNames.length
+                    ? details.fileNames.filter(Boolean).map(String)
+                    : (details.fileName ? [String(details.fileName)] : []);
                 const showDetails = historyFilter !== 'notes';
                 const hasVisibleDetails = showDetails && (
-                    details.interval || details.childItemName || details.parentItemName || details.fileName || details.previousFileName || details.relatedItemName
+                    details.interval || details.childItemName || details.parentItemName || detailFileNames.length || details.previousFileName || details.relatedItemName
                 );
                 let html = `<div class="history-entry">
                     <div class="history-entry-header">
                         <div class="min-w-0">
-                            <div class="font-semibold text-sm text-gray-900 dark:text-gray-100">${historyActionIcon(entry.action)} ${escapeHtml(historyActionLabel(entry.action))}</div>
+                            <div class="font-semibold text-sm text-gray-900 dark:text-gray-100">${historyActionIcon(entry.action)} ${escapeHtml(historyActionLabel(entry.action, details))}</div>
                             <div class="history-entry-timestamp text-xs text-gray-500 dark:text-gray-400 mt-0.5" data-history-timestamp="${escapeHtml(entry.timestamp || '')}">${escapeHtml(formatHistoryTimestamp(entry.timestamp))}</div>
                         </div>
                     </div>`;
@@ -3321,8 +3327,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (showDetails && details.parentItemName) {
                     html += `<div class="history-change-row"><span class="history-change-label">Parent item</span><span class="history-value-after">${escapeHtml(details.parentItemName)}</span></div>`;
                 }
-                if (showDetails && details.fileName && entry.action !== 'attachment_renamed') {
-                    html += `<div class="history-change-row"><span class="history-change-label">File</span><span class="history-value-after">${escapeHtml(details.fileName)}</span></div>`;
+                if (showDetails && detailFileNames.length && entry.action !== 'attachment_renamed') {
+                    const fileLabel = detailFileNames.length > 1 ? `Files (${detailFileNames.length})` : 'File';
+                    html += `<div class="history-change-row"><span class="history-change-label">${escapeHtml(fileLabel)}</span><span class="history-value-after">${escapeHtml(detailFileNames.join(', '))}</span></div>`;
                 }
                 if (showDetails && entry.action === 'attachment_renamed' && details.fileName) {
                     const oldName = details.previousFileName || '';
@@ -4744,45 +4751,120 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             openPreview(att.name, att.driveFileId, att.mimeType, editingItemId, idx);
         }
 
+        function confirmLargeAttachmentFiles(files) {
+            const limitBytes = 5 * 1024 * 1024;
+            const largeFiles = files.filter(file => file.size > limitBytes);
+            if (!largeFiles.length) return true;
+            const fileList = largeFiles.map(file => `• ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`).join('\n');
+            return confirm(`${largeFiles.length} selected file${largeFiles.length === 1 ? '' : 's'} exceed the recommended 5 MB limit:\n\n${fileList}\n\nContinue uploading?`);
+        }
+
+        // Upload several files in parallel but cap concurrency to avoid overwhelming mobile devices.
+        // Results stay in selection order so any failed upload can be reported clearly.
+        async function uploadAttachmentFiles(files, onProgress = null) {
+            const results = new Array(files.length);
+            let nextIndex = 0;
+            let completed = 0;
+            const worker = async () => {
+                while (true) {
+                    const index = nextIndex++;
+                    if (index >= files.length) return;
+                    const file = files[index];
+                    try {
+                        const fileId = await uploadFileToAppData(file, file.name);
+                        results[index] = { file, fileId, error: null };
+                    } catch (error) {
+                        results[index] = { file, fileId: null, error };
+                    }
+                    completed++;
+                    if (typeof onProgress === 'function') onProgress(completed, files.length);
+                }
+            };
+            const concurrency = Math.min(3, files.length);
+            await Promise.all(Array.from({ length: concurrency }, () => worker()));
+            return results;
+        }
+
+        function getAttachmentUploadHistoryDetails(uploadResults) {
+            const names = uploadResults.filter(result => result && result.fileId).map(result => result.file.name);
+            return { fileCount: names.length, fileNames: names };
+        }
+
         async function handleAttachmentUpload(event) {
             const fileInput = event.target;
-            const file = fileInput.files[0];
-            if (!file) return;
+            const files = Array.from(fileInput.files || []);
+            if (!files.length) return;
 
-            // Warn if file > 5 MB
-            if (file.size > 5 * 1024 * 1024) {
-                if (!confirm(`File is ${(file.size / (1024*1024)).toFixed(1)} MB, which exceeds the recommended 5 MB limit. Continue?`)) {
-                    fileInput.value = '';
-                    return;
-                }
-            }
-
+            let uploadResults = [];
+            let attachmentsSaved = false;
             try {
-                if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${file.name}`))) return;
-                if (editingItemId !== null && !appData.items.some(i => i.id === editingItemId)) {
-                    toastError('This item was changed or removed on another device. Please reopen it before uploading a file.');
+                if (!confirmLargeAttachmentFiles(files)) return;
+                if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${files.length} attachment${files.length === 1 ? '' : 's'}`))) return;
+
+                const historyItemId = editingItemId;
+                let historyBefore = null;
+                if (historyItemId !== null) {
+                    const currentItem = appData.items.find(item => item.id === historyItemId);
+                    if (!currentItem) {
+                        toastError('This item was changed or removed on another device. Please reopen it before uploading files.');
+                        return;
+                    }
+                    historyBefore = historySnapshot(currentItem);
+                }
+
+                await withLoading(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`, async () => {
+                    uploadResults = await uploadAttachmentFiles(files, (completed, total) => {
+                        showLoading(`Uploading files (${completed}/${total})...`);
+                    });
+                });
+
+                const successfulUploads = uploadResults.filter(result => result && result.fileId);
+                const failedUploads = uploadResults.filter(result => !result || !result.fileId);
+                if (!successfulUploads.length) {
+                    const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
+                    toastError(`No files were uploaded successfully.${failedNames ? ` Failed: ${failedNames}.` : ''}`);
                     return;
                 }
-                let fileId;
-                await withLoading(`Uploading ${file.name}...`, async () => {
-                    fileId = await uploadFileToAppData(file, file.name);
-                });
-                formAttachments.push({
-                    driveFileId: fileId,
-                    name: file.name,
-                    mimeType: file.type || 'application/octet-stream',
-                    addedDate: new Date().toISOString().split('T')[0]
+
+                const addedDate = getTodayDateString();
+                successfulUploads.forEach(result => {
+                    formAttachments.push({
+                        driveFileId: result.fileId,
+                        name: result.file.name,
+                        mimeType: result.file.type || 'application/octet-stream',
+                        addedDate
+                    });
                 });
                 renderAttachments();
-                // Save the updated item with an explicit loading state so there is no silent gap after upload.
-                await withLoading('Saving attachment...', async () => {
-                    await autoSaveItem();
-                });
-                showToast(`Uploaded ${file.name}`);
+
+                const saved = await withLoading('Saving attachment list...', async () => autoSaveItem(true));
+                if (!saved) throw new Error('The attachment list could not be saved. Please keep this window open and try again.');
+                attachmentsSaved = true;
+
+                if (historyBefore && historyItemId !== null) {
+                    const savedItem = appData.items.find(item => item.id === historyItemId);
+                    if (savedItem) {
+                        await recordItemHistory(historyItemId, 'attachment_added', 'upload', historyBefore, historySnapshot(savedItem), getAttachmentUploadHistoryDetails(successfulUploads));
+                    }
+                }
+
+                if (failedUploads.length) {
+                    const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
+                    toastWarning(`Uploaded ${successfulUploads.length} of ${files.length} files. Failed: ${failedNames || failedUploads.length + ' file(s)'}.`);
+                } else if (successfulUploads.length === 1) {
+                    toastSuccess(`Uploaded ${successfulUploads[0].file.name}`);
+                } else {
+                    toastSuccess(`Uploaded ${successfulUploads.length} files.`);
+                }
             } catch (err) {
-                toastError('Upload failed: ' + err.message);
+                if (uploadResults.some(result => result && result.fileId) && !attachmentsSaved) {
+                    toastError('Files uploaded to Drive, but the attachment list could not be saved: ' + err.message);
+                } else {
+                    toastError('Upload failed: ' + err.message);
+                }
+            } finally {
+                fileInput.value = '';
             }
-            fileInput.value = '';
         }
 
         async function createEmptyTextFile() {
@@ -4942,8 +5024,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         // ---------- AUTO-SAVE ITEM ----------
-        async function autoSaveItem() {
-            if (!(await ensureLatestCloudDataBeforeWrite('saving item changes'))) return false;
+        async function autoSaveItem(skipFreshnessCheck = false) {
+            if (!skipFreshnessCheck && !(await ensureLatestCloudDataBeforeWrite('saving item changes'))) return false;
             // If we're editing an existing item, update it
             if (editingItemId !== null) {
                 const idx = appData.items.findIndex(i => i.id === editingItemId);
@@ -7259,7 +7341,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 </button>
                                 <button onclick="uploadAttachmentForItem('${item.id}')"
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                                         title="Upload file">
+                                         title="Upload one or more files">
                                     <i class="fas fa-paperclip text-base"></i>
                                 </button>
                                 <button onclick="openEditModal('${item.id}')" 
@@ -7345,37 +7427,74 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         async function uploadAttachmentForItem(itemId) {
             const input = document.createElement('input');
             input.type = 'file';
-            input.style.display = 'none';
+            input.multiple = true;
+            input.setAttribute('aria-label', 'Select one or more attachment files');
+            input.style.position = 'fixed';
+            input.style.left = '-10000px';
+            input.style.width = '1px';
+            input.style.height = '1px';
             document.body.appendChild(input);
             input.onchange = async (event) => {
-                const file = event.target.files && event.target.files[0];
-                if (!file) { input.remove(); return; }
-                if (file.size > 5 * 1024 * 1024 && !confirm(`File is ${(file.size / (1024*1024)).toFixed(1)} MB, which exceeds the recommended 5 MB limit. Continue?`)) {
-                    input.remove(); return;
-                }
+                const files = Array.from(event.target.files || []);
+                if (!files.length) { input.remove(); return; }
+                let uploadResults = [];
+                let itemDataSaved = false;
                 try {
-                    if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${file.name}`))) return;
+                    if (!confirmLargeAttachmentFiles(files)) return;
+                    if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${files.length} attachment${files.length === 1 ? '' : 's'}`))) return;
                     const item = appData.items.find(i => i.id === itemId);
                     if (!item) { toastError('That item was changed or removed on another device. Please refresh the list.'); return; }
                     const historyBefore = historySnapshot(item);
-                    let fileId;
-                    await withLoading(`Uploading ${file.name}...`, async () => { fileId = await uploadFileToAppData(file, file.name); });
-                    item.attachments = item.attachments || [];
-                    item.attachments.push({ driveFileId: fileId, name: file.name, mimeType: file.type || 'application/octet-stream', addedDate: getTodayDateString() });
+
+                    await withLoading(`Uploading ${files.length} file${files.length === 1 ? '' : 's'}...`, async () => {
+                        uploadResults = await uploadAttachmentFiles(files, (completed, total) => {
+                            showLoading(`Uploading files (${completed}/${total})...`);
+                        });
+                    });
+
+                    const successfulUploads = uploadResults.filter(result => result && result.fileId);
+                    const failedUploads = uploadResults.filter(result => !result || !result.fileId);
+                    if (!successfulUploads.length) {
+                        const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
+                        toastError(`No files were uploaded successfully.${failedNames ? ` Failed: ${failedNames}.` : ''}`);
+                        return;
+                    }
+
+                    item.attachments = Array.isArray(item.attachments) ? item.attachments : [];
+                    const addedDate = getTodayDateString();
+                    successfulUploads.forEach(result => {
+                        item.attachments.push({
+                            driveFileId: result.fileId,
+                            name: result.file.name,
+                            mimeType: result.file.type || 'application/octet-stream',
+                            addedDate
+                        });
+                    });
                     if (isTestMode) {
                         localStorage.setItem('expire_testData', JSON.stringify(appData));
                     } else {
-                        await withLoading('Saving attachment...', async () => {
+                        await withLoading('Saving attachment list...', async () => {
                             await syncToCloud();
                         });
                     }
-                    await withLoading('Saving attachment history...', async () => {
-                        await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), { fileName: file.name });
-                    });
+                    itemDataSaved = true;
+
+                    await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), getAttachmentUploadHistoryDetails(successfulUploads));
                     renderAll();
-                    toastSuccess(`Uploaded ${file.name}`);
+                    if (failedUploads.length) {
+                        const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
+                        toastWarning(`Uploaded ${successfulUploads.length} of ${files.length} files. Failed: ${failedNames || failedUploads.length + ' file(s)'}.`);
+                    } else if (successfulUploads.length === 1) {
+                        toastSuccess(`Uploaded ${successfulUploads[0].file.name}`);
+                    } else {
+                        toastSuccess(`Uploaded ${successfulUploads.length} files.`);
+                    }
                 } catch (err) {
-                    toastError('Upload failed: ' + err.message);
+                    if (uploadResults.some(result => result && result.fileId) && !itemDataSaved) {
+                        toastError('Files uploaded to Drive, but the attachment list could not be saved: ' + err.message);
+                    } else {
+                        toastError('Upload failed: ' + err.message);
+                    }
                 } finally { input.remove(); }
             };
             input.click();
