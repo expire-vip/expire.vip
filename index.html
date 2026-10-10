@@ -1567,13 +1567,17 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <label class="cursor-pointer bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-900/40 dark:hover:bg-indigo-800/60 text-indigo-700 dark:text-indigo-300 px-4 py-2 rounded-xl text-sm font-medium transition border border-indigo-200 dark:border-indigo-700">
                             <i class="fas fa-upload mr-1"></i> Upload Files
-                            <input type="file" id="attachmentFileInput" class="hidden" multiple onchange="handleAttachmentUpload(event)" aria-label="Upload one or more attachment files">
+                            <input type="file" id="attachmentFileInput" class="hidden" multiple onchange="handleAttachmentUpload(event)" aria-label="Upload one or more existing attachment files">
+                        </label>
+                        <label class="cursor-pointer bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:hover:bg-emerald-800/60 text-emerald-700 dark:text-emerald-300 px-4 py-2 rounded-xl text-sm font-medium transition border border-emerald-200 dark:border-emerald-700">
+                            <i class="fas fa-camera mr-1"></i> Take Photo
+                            <input type="file" id="attachmentCameraInput" class="hidden" accept="image/*" capture="environment" onchange="handleAttachmentUpload(event, true)" aria-label="Take a new photo to attach">
                         </label>
                         <button type="button" onclick="createEmptyTextFile()" class="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-xl text-sm font-medium transition border border-gray-200 dark:border-gray-600">
                             <i class="fas fa-file-alt mr-1"></i> New Text File
                         </button>
                     </div>
-                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Select multiple photos or files at once. Files larger than 5 MB will trigger a warning.</p>
+                    <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">Use Upload Files for existing photos/files, or Take Photo to capture a new image and inspect it with zoom before uploading. Multiple files can be selected at once; files larger than 5 MB trigger a warning.</p>
                 </div>
             </div>
 
@@ -4975,7 +4979,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // ---------- LOCAL PHOTO REVIEW (before upload) ----------
         let pendingPhotoReviewResolve = null;
         let photoReviewCurrentInput = null;
-        let photoReviewPickerOpenedByRetake = false;
+        let photoReviewPickerOpenedByRetakeInput = null;
         let photoReviewObjectUrl = null;
         let photoReviewScale = 1;
         let photoReviewTranslateX = 0;
@@ -5032,7 +5036,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!modal || !image) return Promise.resolve('cancel');
             if (pendingPhotoReviewResolve) finishPhotoReview('cancel');
             photoReviewCurrentInput = fileInput || null;
-            photoReviewPickerOpenedByRetake = false;
+            photoReviewPickerOpenedByRetakeInput = null;
 
             photoReviewScale = 1;
             photoReviewTranslateX = 0;
@@ -5093,11 +5097,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!input) return;
             try {
                 input.value = '';
-                photoReviewPickerOpenedByRetake = true;
+                photoReviewPickerOpenedByRetakeInput = input;
                 input.click();
             } catch (error) {
-                photoReviewPickerOpenedByRetake = false;
-                toastError('Could not reopen the camera picker. Tap Upload Files to try again.');
+                photoReviewPickerOpenedByRetakeInput = null;
+                toastError('Could not reopen the camera picker. Tap Take Photo to try again.');
             }
         }
 
@@ -5192,7 +5196,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }, true);
         })();
 
-        async function handleAttachmentUpload(event) {
+        async function handleAttachmentUpload(event, reviewCapturedPhoto = false) {
             const fileInput = event.target;
             const files = Array.from(fileInput.files || []);
             if (!files.length) return;
@@ -5201,9 +5205,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             let attachmentsSaved = false;
             let reopenPickerForRetake = false;
             try {
-                // A single image commonly comes from the phone camera. Let the user inspect
-                // it before uploading; multi-file selections retain the fast bulk-upload flow.
-                if (files.length === 1 && isReviewableImageFile(files[0])) {
+                // Only the dedicated Take Photo control opens the review step. A regular file
+                // picker can return either a library photo or a camera photo on iOS, and the
+                // browser does not reliably expose which source the user chose.
+                if (reviewCapturedPhoto && files.length === 1) {
                     const photoDecision = await showPhotoReview(files[0], fileInput);
                     if (photoDecision === 'retake') {
                         reopenPickerForRetake = true;
@@ -5276,16 +5281,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     toastError('Upload failed: ' + err.message);
                 }
             } finally {
-                if (reopenPickerForRetake && photoReviewPickerOpenedByRetake) {
-                    // RetakePhotoFromReview already cleared the input and opened it directly
-                    // inside the user tap; do not reset it while the native chooser is open.
-                    photoReviewPickerOpenedByRetake = false;
+                if (reopenPickerForRetake && photoReviewPickerOpenedByRetakeInput === fileInput) {
+                    // Retake already cleared the input and opened it directly from the tap.
+                    // Leave its value/node alone while the native camera is open.
+                    photoReviewPickerOpenedByRetakeInput = null;
                 } else {
                     fileInput.value = '';
                     // Fallback in case the browser rejected a synchronous programmatic click.
                     if (reopenPickerForRetake) {
                         setTimeout(() => {
-                            try { fileInput.click(); } catch (error) { toastError('Could not reopen the camera picker. Tap Upload Files to try again.'); }
+                            try { fileInput.click(); } catch (error) { toastError('Could not reopen the camera picker. Tap Take Photo to try again.'); }
                         }, 250);
                     }
                 }
@@ -7766,8 +7771,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 </button>
                                 <button onclick="uploadAttachmentForItem('${item.id}')"
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-                                         title="Upload one or more files">
+                                         title="Upload existing files or photos">
                                     <i class="fas fa-paperclip text-base"></i>
+                                </button>
+                                <button onclick="uploadAttachmentForItem('${item.id}', 'camera')"
+                                         class="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                                         title="Take a photo and inspect it before uploading" aria-label="Take photo">
+                                    <i class="fas fa-camera text-base"></i>
                                 </button>
                                 <button onclick="openEditModal('${item.id}')" 
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
@@ -7849,22 +7859,40 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             count.textContent = `${textarea.value.length}/4000`;
         }
 
-        async function uploadAttachmentForItem(itemId) {
+        async function uploadAttachmentForItem(itemId, uploadMode = 'library') {
+            const isCameraCapture = uploadMode === 'camera';
             const input = document.createElement('input');
             input.type = 'file';
-            input.multiple = true;
+            input.multiple = !isCameraCapture;
+            if (isCameraCapture) {
+                input.accept = 'image/*';
+                input.setAttribute('capture', 'environment');
+            }
             input.setAttribute('aria-label', 'Select one or more attachment files');
             input.style.position = 'fixed';
             input.style.left = '-10000px';
             input.style.width = '1px';
             input.style.height = '1px';
             document.body.appendChild(input);
+            input.addEventListener('cancel', () => {
+                if (photoReviewPickerOpenedByRetakeInput === input) photoReviewPickerOpenedByRetakeInput = null;
+                input.remove();
+            });
             input.onchange = async (event) => {
                 const files = Array.from(event.target.files || []);
                 if (!files.length) { input.remove(); return; }
                 let uploadResults = [];
                 let itemDataSaved = false;
+                let reopenPickerForRetake = false;
                 try {
+                    if (isCameraCapture && files.length === 1) {
+                        const photoDecision = await showPhotoReview(files[0], input);
+                        if (photoDecision === 'retake') {
+                            reopenPickerForRetake = true;
+                            return;
+                        }
+                        if (photoDecision !== 'use') return;
+                    }
                     if (!confirmLargeAttachmentFiles(files)) return;
                     if (!(await ensureLatestCloudDataBeforeWrite(`uploading ${files.length} attachment${files.length === 1 ? '' : 's'}`))) return;
                     const item = appData.items.find(i => i.id === itemId);
@@ -7920,7 +7948,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     } else {
                         toastError('Upload failed: ' + err.message);
                     }
-                } finally { input.remove(); }
+                } finally {
+                    if (reopenPickerForRetake && photoReviewPickerOpenedByRetakeInput === input) {
+                        // Keep the dynamically created input alive while the retake camera is open.
+                        photoReviewPickerOpenedByRetakeInput = null;
+                    } else {
+                        input.remove();
+                    }
+                }
             };
             input.click();
         }
