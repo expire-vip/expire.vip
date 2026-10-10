@@ -992,10 +992,14 @@
         .item-more-actions .more-action-btn:hover { background: #f3f4f6; }
         .dark .item-more-actions .more-action-btn { color: #e5e7eb; }
         .dark .item-more-actions .more-action-btn:hover { background: #374151; }
+        .item-more-actions .more-action-btn.action-duplicate { color: #047857; }
+        .item-more-actions .more-action-btn.action-renew { color: #1d4ed8; }
         .item-more-actions .more-action-btn.action-pin { color: #b45309; }
         .item-more-actions .more-action-btn.action-done { color: #047857; }
         .item-more-actions .more-action-btn.action-archive { color: #7e22ce; }
         .item-more-actions .more-action-btn.action-delete { color: #dc2626; }
+        .dark .item-more-actions .more-action-btn.action-duplicate { color: #6ee7b7; }
+        .dark .item-more-actions .more-action-btn.action-renew { color: #93c5fd; }
         .dark .item-more-actions .more-action-btn.action-pin { color: #fbbf24; }
         .dark .item-more-actions .more-action-btn.action-done { color: #6ee7b7; }
         .dark .item-more-actions .more-action-btn.action-archive { color: #d8b4fe; }
@@ -5059,6 +5063,30 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return confirm(`${largeFiles.length} selected file${largeFiles.length === 1 ? '' : 's'} exceed the recommended 5 MB limit:\n\n${fileList}\n\nContinue uploading?`);
         }
 
+        // Camera pickers on some phones return generic names such as "image.jpg".
+        // Add a local timestamp only to these generic names, and only on the dedicated camera flow.
+        // Meaningful camera/library names such as IMG_1234.jpg remain unchanged.
+        function addTimestampToGenericCameraFilename(file) {
+            if (!file || typeof File === 'undefined' || !file.name) return file;
+            const match = /^(image|photo|picture|capture)(?:[\s_-]*(?:\(\d+\)|\d+))?(\.(?:jpe?g|png|heic|heif|webp|avif|tiff?|bmp))$/i.exec(String(file.name));
+            if (!match) return file;
+
+            const now = new Date();
+            const pad = value => String(value).padStart(2, '0');
+            const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+            const fileName = `${match[1].toLowerCase()}_${timestamp}${match[2]}`;
+            try {
+                // Re-wrapping the File changes its name without changing the image bytes or MIME type.
+                return new File([file], fileName, {
+                    type: file.type || 'application/octet-stream',
+                    lastModified: file.lastModified || now.getTime()
+                });
+            } catch (error) {
+                // If a browser does not allow File reconstruction, upload the original safely.
+                return file;
+            }
+        }
+
         // Upload several files in parallel but cap concurrency to avoid overwhelming mobile devices.
         // Results stay in selection order so any failed upload can be reported clearly.
         async function uploadAttachmentFiles(files, onProgress = null) {
@@ -5314,6 +5342,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const fileInput = event.target;
             const files = Array.from(fileInput.files || []);
             if (!files.length) return;
+            if (reviewCapturedPhoto && files.length === 1) {
+                files[0] = addTimestampToGenericCameraFilename(files[0]);
+            }
 
             let uploadResults = [];
             let attachmentsSaved = false;
@@ -7899,16 +7930,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                     <i class="fas fa-clock-rotate-left text-base"></i>
                                     ${getItemHistoryCount(item.id) > 0 ? `<span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[8px] leading-[14px] text-center font-bold">${Math.min(getItemHistoryCount(item.id), 99)}</span>` : ''}
                                 </button>
-                                <button type="button" onclick="openDuplicateModal('${item.id}')" 
-                                         class="text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                         title="Duplicate" aria-label="Duplicate item">
-                                    <i class="fas fa-copy text-base"></i>
-                                </button>
-                                <button type="button" onclick="openRenewModal('${item.id}')" 
-                                         class="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition" 
-                                         title="Renew" aria-label="Renew item">
-                                    <i class="fas fa-rotate-right text-base"></i>
-                                </button>
                                 <details class="item-more-actions" aria-label="More item actions">
                                     <summary title="More actions" aria-label="More actions">
                                         <i class="fas fa-ellipsis" aria-hidden="true"></i>
@@ -7916,6 +7937,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                         <i class="fas fa-chevron-down text-[10px]" aria-hidden="true"></i>
                                     </summary>
                                     <div class="more-actions-dropdown" aria-label="More item actions">
+                                        <button type="button" class="more-action-btn action-duplicate" onclick="openDuplicateModal('${item.id}'); this.closest('details').open = false;">
+                                            <i class="fas fa-copy" aria-hidden="true"></i>
+                                            <span>Duplicate item</span>
+                                        </button>
+                                        <button type="button" class="more-action-btn action-renew" onclick="openRenewModal('${item.id}'); this.closest('details').open = false;">
+                                            <i class="fas fa-rotate-right" aria-hidden="true"></i>
+                                            <span>Renew item</span>
+                                        </button>
+                                        <div class="more-actions-divider" role="separator"></div>
                                         <button type="button" class="more-action-btn action-pin" onclick="togglePinItem('${item.id}'); this.closest('details').open = false;">
                                             <i class="fas fa-thumbtack" aria-hidden="true"></i>
                                             <span>${item.pinned ? 'Unpin item' : 'Pin to top'}</span>
@@ -8001,6 +8031,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             input.onchange = async (event) => {
                 const files = Array.from(event.target.files || []);
                 if (!files.length) { input.remove(); return; }
+                if (isCameraCapture && files.length === 1) {
+                    files[0] = addTimestampToGenericCameraFilename(files[0]);
+                }
                 let uploadResults = [];
                 let itemDataSaved = false;
                 let reopenPickerForRetake = false;
