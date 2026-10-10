@@ -3774,7 +3774,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function getCalendarEventTitle(item) {
-            return item.done ? `✅ DONE: ${item.name}` : `🔴 EXPIRING: ${item.name}`;
+            // Keep the item name near the beginning so compact calendar widgets show it first.
+            // This only affects events created or updated after this code is deployed;
+            // existing calendar events are not bulk-modified.
+            return item.done ? `✅ ${item.name} [DONE]` : `🔴 ${item.name} [EXPIRING]`;
         }
 
         function buildCalendarEventDescription(notes, tags) {
