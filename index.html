@@ -347,6 +347,13 @@
             color: #6b7280;
         }
         .dark #photoReviewModal .photo-review-filename { color: #9ca3af; }
+        #photoReviewModal .photo-review-dimensions {
+            margin-top: .15rem;
+            font-size: .7rem;
+            color: #6b7280;
+            font-variant-numeric: tabular-nums;
+        }
+        .dark #photoReviewModal .photo-review-dimensions { color: #9ca3af; }
         #photoReviewModal .photo-review-close {
             border: 0;
             border-radius: .65rem;
@@ -401,7 +408,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: .65rem;
+            flex-wrap: wrap;
+            gap: .55rem .65rem;
             padding: .65rem 1rem;
             flex-shrink: 0;
             background: #f9fafb;
@@ -1967,6 +1975,7 @@
                 <div class="min-w-0">
                     <h2 id="photoReviewTitle" class="text-base font-semibold">Review photo</h2>
                     <div id="photoReviewFileName" class="photo-review-filename"></div>
+                    <div id="photoReviewImageDimensions" class="photo-review-dimensions">Loading image dimensions…</div>
                 </div>
                 <button type="button" class="photo-review-close" onclick="cancelPhotoReview()" aria-label="Cancel photo review" title="Cancel">×</button>
             </div>
@@ -1975,9 +1984,10 @@
                 <div id="photoReviewLoadError" class="photo-review-load-error" style="display:none;">This image cannot be previewed in the browser. You can still use the photo, or choose another one.</div>
             </div>
             <div class="photo-review-zoom-row">
-                <button type="button" onclick="adjustPhotoReviewZoom(-0.5)" aria-label="Zoom out" title="Zoom out">−</button>
+                <button type="button" onclick="adjustPhotoReviewZoom(-1)" aria-label="Zoom out" title="Zoom out">−</button>
                 <button type="button" onclick="resetPhotoReviewZoom()" title="Reset zoom">Reset</button>
-                <button type="button" onclick="adjustPhotoReviewZoom(0.5)" aria-label="Zoom in" title="Zoom in">+</button>
+                <button type="button" onclick="adjustPhotoReviewZoom(1)" aria-label="Zoom in" title="Zoom in">+</button>
+                <span id="photoReviewZoomLabel" class="photo-review-zoom-hint">Zoom 1.0×</span>
                 <span class="photo-review-zoom-hint">Pinch to zoom · Drag to inspect text</span>
             </div>
             <div class="photo-review-footer">
@@ -5124,6 +5134,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         let photoReviewPickerOpenedByRetakeInput = null;
         let photoReviewObjectUrl = null;
         let photoReviewScale = 1;
+        // The preview uses the original File object, but fitting it to the screen plus a 6x
+        // ceiling can hide detail on high-resolution (especially 48 MP) phone cameras.
+        // This ceiling is raised based on the image's natural pixels and the device pixel ratio.
+        let photoReviewMaxScale = 6;
         let photoReviewTranslateX = 0;
         let photoReviewTranslateY = 0;
         let photoReviewPointers = new Map();
@@ -5137,17 +5151,41 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return mime.startsWith('image/') || /\.(?:jpe?g|png|gif|webp|bmp|tiff?|heic|heif|avif)$/i.test(name);
         }
 
+        function updatePhotoReviewZoomLabel() {
+            const label = document.getElementById('photoReviewZoomLabel');
+            if (label) label.textContent = `Zoom ${photoReviewScale.toFixed(1)}×`;
+        }
+
+        function calculatePhotoReviewMaxScale() {
+            const image = document.getElementById('photoReviewImage');
+            if (!image || !image.naturalWidth || !image.naturalHeight) {
+                photoReviewMaxScale = 6;
+                return;
+            }
+            const displayedWidth = Math.max(1, image.clientWidth);
+            const displayedHeight = Math.max(1, image.clientHeight);
+            const intrinsicToDisplayed = Math.max(
+                image.naturalWidth / displayedWidth,
+                image.naturalHeight / displayedHeight
+            );
+            const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1);
+            // Allow close to twice native-pixel inspection on screen, with a safe upper cap.
+            const detailScale = Math.ceil((intrinsicToDisplayed / devicePixelRatio) * 2);
+            photoReviewMaxScale = Math.max(6, Math.min(24, detailScale));
+        }
+
         function applyPhotoReviewTransform() {
             const stage = document.getElementById('photoReviewStage');
             const image = document.getElementById('photoReviewImage');
             if (!stage || !image) return;
-            const scale = Math.max(1, Math.min(6, photoReviewScale));
+            const scale = Math.max(1, Math.min(photoReviewMaxScale, photoReviewScale));
             photoReviewScale = scale;
             const maxX = Math.max(0, (image.clientWidth * scale - stage.clientWidth) / 2);
             const maxY = Math.max(0, (image.clientHeight * scale - stage.clientHeight) / 2);
             photoReviewTranslateX = Math.max(-maxX, Math.min(maxX, photoReviewTranslateX));
             photoReviewTranslateY = Math.max(-maxY, Math.min(maxY, photoReviewTranslateY));
             image.style.transform = `translate3d(${photoReviewTranslateX}px, ${photoReviewTranslateY}px, 0) scale(${photoReviewScale})`;
+            updatePhotoReviewZoomLabel();
         }
 
         function resetPhotoReviewZoom() {
@@ -5158,7 +5196,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function adjustPhotoReviewZoom(delta) {
-            photoReviewScale = Math.max(1, Math.min(6, photoReviewScale + delta));
+            photoReviewScale = Math.max(1, Math.min(photoReviewMaxScale, photoReviewScale + delta));
             if (photoReviewScale === 1) {
                 photoReviewTranslateX = 0;
                 photoReviewTranslateY = 0;
@@ -5174,6 +5212,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const modal = document.getElementById('photoReviewModal');
             const image = document.getElementById('photoReviewImage');
             const filename = document.getElementById('photoReviewFileName');
+            const dimensions = document.getElementById('photoReviewImageDimensions');
             const loadError = document.getElementById('photoReviewLoadError');
             if (!modal || !image) return Promise.resolve('cancel');
             if (pendingPhotoReviewResolve) finishPhotoReview('cancel');
@@ -5181,6 +5220,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             photoReviewPickerOpenedByRetakeInput = null;
 
             photoReviewScale = 1;
+            photoReviewMaxScale = 6;
             photoReviewTranslateX = 0;
             photoReviewTranslateY = 0;
             photoReviewPointers = new Map();
@@ -5189,13 +5229,19 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (photoReviewObjectUrl) URL.revokeObjectURL(photoReviewObjectUrl);
             photoReviewObjectUrl = URL.createObjectURL(file);
             filename.textContent = file.name || 'Selected photo';
+            if (dimensions) dimensions.textContent = 'Loading image dimensions…';
             loadError.style.display = 'none';
             image.style.transform = 'translate3d(0, 0, 0) scale(1)';
             image.onload = () => {
                 loadError.style.display = 'none';
+                if (dimensions) dimensions.textContent = `${image.naturalWidth.toLocaleString()} × ${image.naturalHeight.toLocaleString()} pixels`;
+                calculatePhotoReviewMaxScale();
                 resetPhotoReviewZoom();
             };
-            image.onerror = () => { loadError.style.display = 'block'; };
+            image.onerror = () => {
+                loadError.style.display = 'block';
+                if (dimensions) dimensions.textContent = 'Image dimensions unavailable';
+            };
             image.src = photoReviewObjectUrl;
             modal.classList.add('show');
             modal.setAttribute('aria-hidden', 'false');
@@ -5287,7 +5333,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (photoReviewPointers.size >= 2 && photoReviewPinchStart) {
                     const points = Array.from(photoReviewPointers.values()).slice(0, 2);
                     const distance = Math.max(1, getPhotoReviewPointerDistance(points[0], points[1]));
-                    photoReviewScale = Math.max(1, Math.min(6, photoReviewPinchStart.scale * distance / photoReviewPinchStart.distance));
+                    photoReviewScale = Math.max(1, Math.min(photoReviewMaxScale, photoReviewPinchStart.scale * distance / photoReviewPinchStart.distance));
                     photoReviewTranslateX = photoReviewPinchStart.x;
                     photoReviewTranslateY = photoReviewPinchStart.y;
                     if (photoReviewScale === 1) {
