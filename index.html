@@ -1438,10 +1438,15 @@
                     </button>
                 </div>
 
-                <!-- Add Button -->
-                <button id="addItemBtn" class="w-full mb-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition flex items-center justify-center gap-2">
-                    <i class="fas fa-plus"></i> Add New Item
-                </button>
+                <!-- Primary create actions -->
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button id="addItemBtn" type="button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-2 rounded-xl shadow-md transition flex items-center justify-center gap-2 text-sm sm:text-base">
+                        <i class="fas fa-plus"></i> <span>Add New Item</span>
+                    </button>
+                    <button id="duplicateItemBtn" type="button" class="w-full bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 text-indigo-700 dark:text-indigo-300 font-semibold py-2.5 px-2 rounded-xl shadow-sm border border-indigo-200 dark:border-indigo-700 transition flex items-center justify-center gap-2 text-sm sm:text-base">
+                        <i class="fas fa-copy"></i> <span>Duplicate Item</span>
+                    </button>
+                </div>
 
                 <!-- Collapsible Filters -->
                 <section id="filterPanel" class="filter-panel collapsed mb-4" aria-label="Search filters and view options">
@@ -1708,6 +1713,45 @@
             <div class="p-4 sm:p-5 flex justify-end gap-3 border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/80 dark:bg-gray-800/80 item-modal-footer">
                 <button onclick="closeItemModal()" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Cancel</button>
                 <button onclick="saveItem()" class="px-5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-medium" id="saveItemButton">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick duplicate source picker. Recent chains are computed from appData; no extra history is stored. -->
+    <div id="duplicatePickerModal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden backdrop-blur-sm p-3 sm:p-4 overflow-hidden overscroll-contain" role="dialog" aria-modal="true" aria-labelledby="duplicatePickerTitle" style="touch-action:none;">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col min-h-0 overflow-hidden">
+            <div class="p-5 sm:p-6 flex items-center justify-between border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0 gap-3">
+                <div class="min-w-0">
+                    <h3 id="duplicatePickerTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">Duplicate an item</h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Search all items or reuse one of your most recently duplicated chains.</p>
+                </div>
+                <button type="button" id="closeDuplicatePickerBtn" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition flex-shrink-0" title="Close" aria-label="Close duplicate item picker">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-5 sm:p-6 space-y-4 flex-1 modal-scroll-content">
+                <div>
+                    <label for="duplicatePickerSearch" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Find an item</label>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
+                        <input type="search" id="duplicatePickerSearch" autocomplete="off" placeholder="Search by name, notes, category, tag…" class="w-full h-11 pl-10 pr-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center justify-between gap-3 mb-2">
+                        <h4 id="duplicatePickerListTitle" class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recently duplicated chains</h4>
+                        <span id="duplicatePickerResultCount" class="text-xs text-gray-400 dark:text-gray-500"></span>
+                    </div>
+                    <p id="duplicatePickerListHint" class="text-xs text-gray-500 dark:text-gray-400 mb-3">Each shortcut uses the latest item in that chain as the source.</p>
+                    <div id="duplicatePickerList" class="space-y-2"></div>
+                    <div id="duplicatePickerEmpty" class="hidden rounded-xl border border-dashed border-gray-300 dark:border-gray-600 px-4 py-6 text-center">
+                        <i class="fas fa-search text-gray-300 dark:text-gray-600 text-2xl mb-2"></i>
+                        <p id="duplicatePickerEmptyText" class="text-sm text-gray-500 dark:text-gray-400">No duplicated chains yet. Search above to find an item.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 sm:p-5 flex justify-end border-t border-gray-100 dark:border-gray-700/60 bg-gray-50/95 dark:bg-gray-800/95 flex-shrink-0 modal-safe-bottom">
+                <button type="button" id="cancelDuplicatePickerBtn" class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition font-medium">Close</button>
             </div>
         </div>
     </div>
@@ -2139,6 +2183,7 @@
         const reminderBanner = document.getElementById('reminderBanner');
         const testBanner = document.getElementById('testBanner');
         const addItemBtn = document.getElementById('addItemBtn');
+        const duplicateItemBtn = document.getElementById('duplicateItemBtn');
         const settingsBtn = document.getElementById('settingsBtn');
         const showArchivedToggle = document.getElementById('showArchivedToggle');
         const archivedToggleLabel = document.getElementById('archivedToggleLabel');
@@ -2167,6 +2212,14 @@
         const accountEmailWrap = document.getElementById('accountEmailWrap');
         const accountEmailDisplay = document.getElementById('accountEmailDisplay');
         const accountEmailToggle = document.getElementById('accountEmailToggle');
+        const duplicatePickerModal = document.getElementById('duplicatePickerModal');
+        const duplicatePickerSearchEl = document.getElementById('duplicatePickerSearch');
+        const duplicatePickerListEl = document.getElementById('duplicatePickerList');
+        const duplicatePickerListTitleEl = document.getElementById('duplicatePickerListTitle');
+        const duplicatePickerListHintEl = document.getElementById('duplicatePickerListHint');
+        const duplicatePickerResultCountEl = document.getElementById('duplicatePickerResultCount');
+        const duplicatePickerEmptyEl = document.getElementById('duplicatePickerEmpty');
+        const duplicatePickerEmptyTextEl = document.getElementById('duplicatePickerEmptyText');
         const duplicateModal = document.getElementById('duplicateModal');
         const duplicateModalTitleEl = document.getElementById('duplicateModalTitle');
         const duplicateModalSubtitleEl = document.getElementById('duplicateModalSubtitle');
@@ -6398,6 +6451,138 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             setTimeout(() => duplicateItemNameEl.focus(), 50);
         }
 
+        function getItemCreationTimestamp(item) {
+            const rawId = String(item?.id ?? '');
+            // Item IDs generated by the app are epoch-millisecond timestamps.
+            // Return null for older/custom IDs so they remain sortable by the existing fallback.
+            if (!/^\d{12,}$/.test(rawId)) return null;
+            const timestamp = Number(rawId);
+            if (!Number.isFinite(timestamp) || timestamp < Date.UTC(2000, 0, 1) || timestamp > Date.now() + 86400000) return null;
+            return timestamp;
+        }
+
+        function formatItemCreationTime(item) {
+            const timestamp = getItemCreationTimestamp(item);
+            if (timestamp === null) return '';
+            return new Date(timestamp).toLocaleString(undefined, {
+                month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+            });
+        }
+
+        function getRecentlyDuplicatedChains(limit = 4) {
+            const items = Array.isArray(appData.items) ? appData.items : [];
+            const byId = new Map(items.map(item => [item.id, item]));
+            const groups = new Map();
+            items.forEach(item => {
+                const rootId = getLineageRootId(item, byId);
+                if (!groups.has(rootId)) groups.set(rootId, []);
+                groups.get(rootId).push(item);
+            });
+
+            return [...groups.values()]
+                .filter(members => members.length > 1)
+                .map(members => ({ members, latest: getLatestChainItem(members) }))
+                .filter(chain => !!chain.latest)
+                .sort((a, b) => {
+                    const aTimestamp = getItemCreationTimestamp(a.latest);
+                    const bTimestamp = getItemCreationTimestamp(b.latest);
+                    if (aTimestamp !== null && bTimestamp !== null && aTimestamp !== bTimestamp) return bTimestamp - aTimestamp;
+                    return compareItemsByCreationAsc(b.latest, a.latest);
+                })
+                .slice(0, Math.max(0, limit));
+        }
+
+        function duplicatePickerItemButtonHtml(item, subtitle, badge = '') {
+            const itemId = escapeHtml(String(item?.id ?? ''));
+            const name = String(item?.name || '(Unnamed item)');
+            const safeName = escapeHtml(name);
+            const category = escapeHtml(String(item?.category || 'Other'));
+            const safeSubtitle = escapeHtml(String(subtitle || ''));
+            const safeBadge = badge ? `<span class="inline-flex flex-shrink-0 items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60">${escapeHtml(badge)}</span>` : '';
+            return `<button type="button" data-duplicate-source-id="${itemId}" class="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                <span class="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center"><i class="fas fa-copy"></i></span>
+                <span class="flex-1 min-w-0 block">
+                    <span class="flex items-center gap-2 min-w-0">
+                        <span class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">${safeName}</span>
+                        ${safeBadge}
+                    </span>
+                    <span class="block text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${safeSubtitle || category}</span>
+                </span>
+                <i class="fas fa-chevron-right text-xs text-gray-400 dark:text-gray-500 flex-shrink-0"></i>
+            </button>`;
+        }
+
+        function renderDuplicatePicker() {
+            if (!duplicatePickerListEl) return;
+            const query = String(duplicatePickerSearchEl?.value || '').trim();
+            const normalizedQuery = normalizeSearchText(query);
+            const { phrases, words } = parseSearchQuery(query);
+            duplicatePickerListEl.innerHTML = '';
+            duplicatePickerEmptyEl.classList.add('hidden');
+            duplicatePickerResultCountEl.textContent = '';
+
+            let entries = [];
+            if (!normalizedQuery) {
+                duplicatePickerListTitleEl.textContent = 'Recently duplicated chains';
+                duplicatePickerListHintEl.textContent = 'The latest item in each chain is used as the duplication source.';
+                entries = getRecentlyDuplicatedChains(4).map(chain => {
+                    const stamp = formatItemCreationTime(chain.latest);
+                    const lastLine = stamp ? `Latest in ${chain.members.length}-item chain · last added ${stamp}` : `Latest item in ${chain.members.length}-item chain`;
+                    return { item: chain.latest, subtitle: lastLine, badge: 'Recent' };
+                });
+                if (!entries.length) {
+                    duplicatePickerEmptyTextEl.textContent = 'No duplicated chains yet. Search above to find an item to duplicate.';
+                }
+            } else {
+                duplicatePickerListTitleEl.textContent = 'Search results';
+                duplicatePickerListHintEl.textContent = 'Choose any matching item. The existing duplicate dialog will open next.';
+                const matches = (appData.items || []).filter(item => {
+                    const searchable = getSearchableItemText(item);
+                    return phrases.every(phrase => searchable.includes(phrase)) && words.every(word => searchable.includes(word));
+                }).sort((a, b) => compareItemsByCreationAsc(b, a));
+                const displayMatches = matches.slice(0, 50);
+                entries = displayMatches.map(item => {
+                    const details = item.noExpiration || !item.date ? 'No expiration date' : `Expiration ${item.date}${item.time ? ` · ${item.time}` : ''}`;
+                    const subtitle = `${item.category || 'Other'} · ${details}`;
+                    return { item, subtitle, badge: '' };
+                });
+                duplicatePickerResultCountEl.textContent = matches.length > 50 ? 'First 50' : `${matches.length} found`;
+                if (!entries.length) duplicatePickerEmptyTextEl.textContent = 'No items match that search. Try another name, tag, or phrase.';
+            }
+
+            if (entries.length) {
+                duplicatePickerListEl.innerHTML = entries.map(entry => duplicatePickerItemButtonHtml(entry.item, entry.subtitle, entry.badge)).join('');
+            } else {
+                duplicatePickerEmptyEl.classList.remove('hidden');
+            }
+        }
+
+        function openDuplicatePicker() {
+            if (!duplicatePickerModal) return;
+            duplicatePickerSearchEl.value = '';
+            renderDuplicatePicker();
+            duplicatePickerModal.classList.remove('hidden');
+            lockDuplicateModalScroll();
+            setTimeout(() => duplicatePickerSearchEl.focus(), 50);
+        }
+
+        function closeDuplicatePicker() {
+            if (!duplicatePickerModal || duplicatePickerModal.classList.contains('hidden')) return;
+            duplicatePickerModal.classList.add('hidden');
+            unlockDuplicateModalScroll();
+        }
+
+        function selectDuplicatePickerItem(itemId) {
+            const item = (appData.items || []).find(existing => String(existing.id) === String(itemId));
+            if (!item) {
+                showToast('That item is no longer available. Refresh the list and try again.', 'warning');
+                renderDuplicatePicker();
+                return;
+            }
+            closeDuplicatePicker();
+            openDuplicateModal(item.id);
+        }
+
         function openRenewModal(itemId) {
             const item = appData.items.find(i => i.id === itemId);
             if (!item) return;
@@ -8579,6 +8764,29 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         // ---------- OTHER INITIALIZATIONS ----------
         addItemBtn.onclick = openAddModal;
+        if (duplicateItemBtn) duplicateItemBtn.onclick = openDuplicatePicker;
+        if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', renderDuplicatePicker);
+        if (duplicatePickerListEl) duplicatePickerListEl.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-duplicate-source-id]');
+            if (!button) return;
+            selectDuplicatePickerItem(button.getAttribute('data-duplicate-source-id'));
+        });
+        const closeDuplicatePickerBtn = document.getElementById('closeDuplicatePickerBtn');
+        const cancelDuplicatePickerBtn = document.getElementById('cancelDuplicatePickerBtn');
+        if (closeDuplicatePickerBtn) closeDuplicatePickerBtn.onclick = closeDuplicatePicker;
+        if (cancelDuplicatePickerBtn) cancelDuplicatePickerBtn.onclick = closeDuplicatePicker;
+        if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && duplicatePickerSearchEl.value) {
+                event.preventDefault();
+                event.stopPropagation();
+                duplicatePickerSearchEl.value = '';
+                renderDuplicatePicker();
+            }
+        });
+        if (duplicatePickerModal) duplicatePickerModal.addEventListener('click', (event) => {
+            // Use the explicit close controls to avoid accidental dismissal from mobile scroll gestures.
+            if (event.target === duplicatePickerModal) event.preventDefault();
+        });
         settingsBtn.onclick = openSettings;
         if (accountEmailToggle) {
             accountEmailToggle.onclick = () => {
@@ -8705,7 +8913,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (e.key === 'Escape') {
                 tryCloseItemModal();
                 closeSettings();
-                if (!duplicateModal.classList.contains('hidden')) closeDuplicateModal();
+                if (duplicatePickerModal && !duplicatePickerModal.classList.contains('hidden')) closeDuplicatePicker();
+                else if (!duplicateModal.classList.contains('hidden')) closeDuplicateModal();
                 if (linkAttachmentModal && !linkAttachmentModal.classList.contains('hidden')) closeLinkAttachmentModal();
             }
         });
