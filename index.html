@@ -382,14 +382,14 @@
         }
         #photoReviewModal #photoReviewImage {
             display: block;
-            flex: 0 1 auto;
+            flex: 0 0 auto;
             width: auto;
             height: auto;
             max-width: calc(100% - 1rem);
             max-height: calc(100% - 1rem);
             object-fit: contain;
             transform-origin: center center;
-            will-change: transform;
+            will-change: transform, width, height;
             pointer-events: none;
             user-select: none;
             -webkit-user-drag: none;
@@ -1743,7 +1743,8 @@
                         <span id="duplicatePickerResultCount" class="text-xs text-gray-400 dark:text-gray-500"></span>
                     </div>
                     <p id="duplicatePickerListHint" class="text-xs text-gray-500 dark:text-gray-400 mb-3">Each shortcut uses the latest item in that chain as the source.</p>
-                    <div id="duplicatePickerList" class="space-y-2"></div>
+                    <div id="duplicatePickerList" class="space-y-3"></div>
+                    <button type="button" id="duplicatePickerLoadMoreBtn" class="hidden w-full mt-3 px-4 py-2.5 rounded-xl border border-indigo-200 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 bg-indigo-50/70 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 font-semibold text-sm transition">Load 4 more chains</button>
                     <div id="duplicatePickerEmpty" class="hidden rounded-xl border border-dashed border-gray-300 dark:border-gray-600 px-4 py-6 text-center">
                         <i class="fas fa-search text-gray-300 dark:text-gray-600 text-2xl mb-2"></i>
                         <p id="duplicatePickerEmptyText" class="text-sm text-gray-500 dark:text-gray-400">No duplicated chains yet. Search above to find an item.</p>
@@ -2218,6 +2219,8 @@
         const duplicatePickerListTitleEl = document.getElementById('duplicatePickerListTitle');
         const duplicatePickerListHintEl = document.getElementById('duplicatePickerListHint');
         const duplicatePickerResultCountEl = document.getElementById('duplicatePickerResultCount');
+        const duplicatePickerLoadMoreBtn = document.getElementById('duplicatePickerLoadMoreBtn');
+        let duplicatePickerVisibleLimit = 4;
         const duplicatePickerEmptyEl = document.getElementById('duplicatePickerEmpty');
         const duplicatePickerEmptyTextEl = document.getElementById('duplicatePickerEmptyText');
         const duplicateModal = document.getElementById('duplicateModal');
@@ -5187,9 +5190,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         let photoReviewPickerOpenedByRetakeInput = null;
         let photoReviewObjectUrl = null;
         let photoReviewScale = 1;
-        // The preview uses the original File object, but fitting it to the screen plus a 6x
-        // ceiling can hide detail on high-resolution (especially 48 MP) phone cameras.
-        // This ceiling is raised based on the image's natural pixels and the device pixel ratio.
+        // The review always uses the original File object. Keep its fit-to-screen dimensions
+        // separately so zoom can resize the image element itself instead of enlarging a
+        // low-resolution composited layer with transform: scale().
+        let photoReviewBaseWidth = 1;
+        let photoReviewBaseHeight = 1;
         let photoReviewMaxScale = 6;
         let photoReviewTranslateX = 0;
         let photoReviewTranslateY = 0;
@@ -5210,21 +5215,36 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function calculatePhotoReviewMaxScale() {
+            const stage = document.getElementById('photoReviewStage');
             const image = document.getElementById('photoReviewImage');
-            if (!image || !image.naturalWidth || !image.naturalHeight) {
+            if (!stage || !image || !image.naturalWidth || !image.naturalHeight) {
                 photoReviewMaxScale = 6;
                 return;
             }
-            const displayedWidth = Math.max(1, image.clientWidth);
-            const displayedHeight = Math.max(1, image.clientHeight);
-            const intrinsicToDisplayed = Math.max(
-                image.naturalWidth / displayedWidth,
-                image.naturalHeight / displayedHeight
+
+            const availableWidth = Math.max(1, stage.clientWidth - 16);
+            const availableHeight = Math.max(1, stage.clientHeight - 16);
+            const fitRatio = Math.min(
+                availableWidth / image.naturalWidth,
+                availableHeight / image.naturalHeight,
+                1
             );
-            const devicePixelRatio = Math.max(1, window.devicePixelRatio || 1);
-            // Allow close to twice native-pixel inspection on screen, with a safe upper cap.
-            const detailScale = Math.ceil((intrinsicToDisplayed / devicePixelRatio) * 2);
-            photoReviewMaxScale = Math.max(6, Math.min(24, detailScale));
+            photoReviewBaseWidth = Math.max(1, image.naturalWidth * fitRatio);
+            photoReviewBaseHeight = Math.max(1, image.naturalHeight * fitRatio);
+
+            // At this scale, one source-image pixel occupies about one CSS pixel. Avoid
+            // relying on devicePixelRatio here: the goal is to inspect the image's actual
+            // pixel detail, not just the initially downscaled on-screen rendering.
+            const nativePixelScale = Math.max(
+                image.naturalWidth / photoReviewBaseWidth,
+                image.naturalHeight / photoReviewBaseHeight
+            );
+            photoReviewMaxScale = Math.max(6, Math.min(48, Math.ceil(nativePixelScale)));
+            image.style.maxWidth = 'none';
+            image.style.maxHeight = 'none';
+            image.style.flex = '0 0 auto';
+            image.style.width = `${photoReviewBaseWidth}px`;
+            image.style.height = `${photoReviewBaseHeight}px`;
         }
 
         function applyPhotoReviewTransform() {
@@ -5233,11 +5253,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!stage || !image) return;
             const scale = Math.max(1, Math.min(photoReviewMaxScale, photoReviewScale));
             photoReviewScale = scale;
-            const maxX = Math.max(0, (image.clientWidth * scale - stage.clientWidth) / 2);
-            const maxY = Math.max(0, (image.clientHeight * scale - stage.clientHeight) / 2);
+
+            // Resize the actual <img> element as zoom changes. A CSS scale transform alone
+            // can make mobile Safari magnify a downsampled compositing layer and look blurry.
+            const renderedWidth = Math.max(1, photoReviewBaseWidth * scale);
+            const renderedHeight = Math.max(1, photoReviewBaseHeight * scale);
+            image.style.width = `${renderedWidth}px`;
+            image.style.height = `${renderedHeight}px`;
+            const maxX = Math.max(0, (renderedWidth - stage.clientWidth) / 2);
+            const maxY = Math.max(0, (renderedHeight - stage.clientHeight) / 2);
             photoReviewTranslateX = Math.max(-maxX, Math.min(maxX, photoReviewTranslateX));
             photoReviewTranslateY = Math.max(-maxY, Math.min(maxY, photoReviewTranslateY));
-            image.style.transform = `translate3d(${photoReviewTranslateX}px, ${photoReviewTranslateY}px, 0) scale(${photoReviewScale})`;
+            image.style.transform = `translate3d(${photoReviewTranslateX}px, ${photoReviewTranslateY}px, 0)`;
             updatePhotoReviewZoomLabel();
         }
 
@@ -5314,7 +5341,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 image.onerror = null;
                 image.removeAttribute('src');
                 image.style.transform = '';
+                image.style.width = '';
+                image.style.height = '';
+                image.style.maxWidth = '';
+                image.style.maxHeight = '';
+                image.style.flex = '';
             }
+            photoReviewBaseWidth = 1;
+            photoReviewBaseHeight = 1;
             if (photoReviewObjectUrl) {
                 URL.revokeObjectURL(photoReviewObjectUrl);
                 photoReviewObjectUrl = null;
@@ -6469,8 +6503,30 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        function getRecentlyDuplicatedChains(limit = 4) {
-            const items = Array.isArray(appData.items) ? appData.items : [];
+        function duplicatePickerItemButtonHtml(item, subtitle, badge = '') {
+            const itemId = escapeHtml(String(item?.id ?? ''));
+            const name = escapeHtml(String(item?.name || '(Unnamed item)'));
+            const safeSubtitle = escapeHtml(String(subtitle || item?.category || 'Other'));
+            const safeBadge = badge ? `<span class="inline-flex flex-shrink-0 items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60">${escapeHtml(badge)}</span>` : '';
+            return `<div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <div class="flex items-start gap-3 flex-1 min-w-0">
+                    <span class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center"><i class="fas fa-file-lines"></i></span>
+                    <span class="flex-1 min-w-0 block">
+                        <span class="flex items-center gap-2 min-w-0">
+                            <span class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">${name}</span>
+                            ${safeBadge}
+                        </span>
+                        <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">${safeSubtitle}</span>
+                    </span>
+                </div>
+                <div class="flex flex-shrink-0 gap-2 sm:ml-auto">
+                    <button type="button" data-duplicate-source-id="${itemId}" data-picker-action="duplicate" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Duplicate this item"> <i class="fas fa-copy mr-1"></i>Duplicate</button>
+                    <button type="button" data-duplicate-source-id="${itemId}" data-picker-action="renew" class="flex-1 sm:flex-none px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold transition" title="Renew this item"> <i class="fas fa-rotate-right mr-1"></i>Renew</button>
+                </div>
+            </div>`;
+        }
+
+        function getDuplicatePickerChainGroups(items = appData.items || []) {
             const byId = new Map(items.map(item => [item.id, item]));
             const groups = new Map();
             items.forEach(item => {
@@ -6478,38 +6534,50 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 if (!groups.has(rootId)) groups.set(rootId, []);
                 groups.get(rootId).push(item);
             });
-
-            return [...groups.values()]
-                .filter(members => members.length > 1)
-                .map(members => ({ members, latest: getLatestChainItem(members) }))
-                .filter(chain => !!chain.latest)
-                .sort((a, b) => {
-                    const aTimestamp = getItemCreationTimestamp(a.latest);
-                    const bTimestamp = getItemCreationTimestamp(b.latest);
-                    if (aTimestamp !== null && bTimestamp !== null && aTimestamp !== bTimestamp) return bTimestamp - aTimestamp;
-                    return compareItemsByCreationAsc(b.latest, a.latest);
-                })
-                .slice(0, Math.max(0, limit));
+            return [...groups.entries()].map(([rootId, members]) => ({
+                rootId,
+                members: [...members].sort(compareItemsByCreationAsc),
+                latest: getLatestChainItem(members)
+            })).filter(group => !!group.latest);
         }
 
-        function duplicatePickerItemButtonHtml(item, subtitle, badge = '') {
-            const itemId = escapeHtml(String(item?.id ?? ''));
-            const name = String(item?.name || '(Unnamed item)');
-            const safeName = escapeHtml(name);
-            const category = escapeHtml(String(item?.category || 'Other'));
-            const safeSubtitle = escapeHtml(String(subtitle || ''));
-            const safeBadge = badge ? `<span class="inline-flex flex-shrink-0 items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60">${escapeHtml(badge)}</span>` : '';
-            return `<button type="button" data-duplicate-source-id="${itemId}" class="w-full text-left flex items-center gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/30 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
-                <span class="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center"><i class="fas fa-copy"></i></span>
-                <span class="flex-1 min-w-0 block">
-                    <span class="flex items-center gap-2 min-w-0">
-                        <span class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">${safeName}</span>
-                        ${safeBadge}
-                    </span>
-                    <span class="block text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">${safeSubtitle || category}</span>
-                </span>
-                <i class="fas fa-chevron-right text-xs text-gray-400 dark:text-gray-500 flex-shrink-0"></i>
-            </button>`;
+        function getRecentlyDuplicatedChains() {
+            return getDuplicatePickerChainGroups()
+                .filter(chain => chain.members.length > 1)
+                .sort((a, b) => compareItemsByCreationAsc(b.latest, a.latest));
+        }
+
+        function getPickerItemRelativeTime(item) {
+            const timestamp = getItemCreationTimestamp(item);
+            if (timestamp !== null) return formatHistoryRelativeTime(timestamp);
+            return formatItemCreationTime(item);
+        }
+
+        function duplicatePickerChainGroupHtml(group, matchingItems, recentMode = false) {
+            const latest = group.latest;
+            const groupName = escapeHtml(String(latest?.name || group.members?.[0]?.name || '(Unnamed chain)'));
+            const chainCount = group.members?.length || matchingItems.length;
+            const chainSizeLabel = chainCount > 1 ? `${chainCount} items in chain` : 'Single item';
+            const lastExtendedTimestamp = recentMode ? getItemCreationTimestamp(latest) : null;
+            const lastExtendedRelative = lastExtendedTimestamp !== null ? formatHistoryRelativeTime(lastExtendedTimestamp) : (recentMode ? formatItemCreationTime(latest) : '');
+            const headerMeta = recentMode
+                ? `${chainSizeLabel} · Last extended ${lastExtendedRelative || 'time unavailable'}`
+                : chainSizeLabel;
+            const rows = matchingItems.map(item => {
+                const details = item.noExpiration || !item.date ? 'No expiration date' : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
+                const relative = getPickerItemRelativeTime(item);
+                const relativeLabel = relative ? `Added ${relative}` : 'Creation time unavailable';
+                const isLatest = latest && String(item.id) === String(latest.id);
+                const badge = isLatest ? (recentMode ? 'Latest · Recent' : 'Latest') : '';
+                return duplicatePickerItemButtonHtml(item, `${String(item.category || 'Other')} · ${details} · ${relativeLabel}`, badge);
+            }).join('');
+            return `<section class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div class="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center gap-2 min-w-0"><i class="fas fa-link text-xs text-indigo-500 flex-shrink-0"></i><span class="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">${groupName}</span></div>
+                    <span class="text-[10px] text-gray-500 dark:text-gray-400 text-right leading-tight max-w-[58%]">${escapeHtml(headerMeta)}</span>
+                </div>
+                <div class="p-2 space-y-2">${rows}</div>
+            </section>`;
         }
 
         function renderDuplicatePicker() {
@@ -6520,46 +6588,79 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicatePickerListEl.innerHTML = '';
             duplicatePickerEmptyEl.classList.add('hidden');
             duplicatePickerResultCountEl.textContent = '';
+            if (duplicatePickerLoadMoreBtn) duplicatePickerLoadMoreBtn.classList.add('hidden');
 
-            let entries = [];
+            let allGroups = [];
+            let renderedGroups = [];
             if (!normalizedQuery) {
                 duplicatePickerListTitleEl.textContent = 'Recently duplicated chains';
-                duplicatePickerListHintEl.textContent = 'The latest item in each chain is used as the duplication source.';
-                entries = getRecentlyDuplicatedChains(4).map(chain => {
-                    const stamp = formatItemCreationTime(chain.latest);
-                    const lastLine = stamp ? `Latest in ${chain.members.length}-item chain · last added ${stamp}` : `Latest item in ${chain.members.length}-item chain`;
-                    return { item: chain.latest, subtitle: lastLine, badge: 'Recent' };
-                });
-                if (!entries.length) {
-                    duplicatePickerEmptyTextEl.textContent = 'No duplicated chains yet. Search above to find an item to duplicate.';
+                duplicatePickerListHintEl.textContent = 'Chains are ordered by when their latest item was created. Use Duplicate or Renew to choose the next action.';
+                allGroups = getRecentlyDuplicatedChains();
+                renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
+                duplicatePickerResultCountEl.textContent = allGroups.length
+                    ? `Showing ${renderedGroups.length} of ${allGroups.length} chains`
+                    : '';
+                if (!allGroups.length) {
+                    duplicatePickerEmptyTextEl.textContent = 'No duplicated chains yet. Search above to find an item to duplicate or renew.';
                 }
             } else {
-                duplicatePickerListTitleEl.textContent = 'Search results';
-                duplicatePickerListHintEl.textContent = 'Choose any matching item. The existing duplicate dialog will open next.';
-                const matches = (appData.items || []).filter(item => {
+                duplicatePickerListTitleEl.textContent = 'Search results grouped by chain';
+                duplicatePickerListHintEl.textContent = 'Matching items are grouped by their duplicate/renew chain. Choose Duplicate or Renew for the specific item you want to use.';
+                const allItems = appData.items || [];
+                const byId = new Map(allItems.map(item => [item.id, item]));
+                const matches = allItems.filter(item => {
                     const searchable = getSearchableItemText(item);
                     return phrases.every(phrase => searchable.includes(phrase)) && words.every(word => searchable.includes(word));
-                }).sort((a, b) => compareItemsByCreationAsc(b, a));
-                const displayMatches = matches.slice(0, 50);
-                entries = displayMatches.map(item => {
-                    const details = item.noExpiration || !item.date ? 'No expiration date' : `Expiration ${item.date}${item.time ? ` · ${item.time}` : ''}`;
-                    const subtitle = `${item.category || 'Other'} · ${details}`;
-                    return { item, subtitle, badge: '' };
                 });
-                duplicatePickerResultCountEl.textContent = matches.length > 50 ? 'First 50' : `${matches.length} found`;
-                if (!entries.length) duplicatePickerEmptyTextEl.textContent = 'No items match that search. Try another name, tag, or phrase.';
+                const groupsByRoot = new Map();
+                matches.forEach(item => {
+                    const rootId = getLineageRootId(item, byId);
+                    if (!groupsByRoot.has(rootId)) groupsByRoot.set(rootId, []);
+                    groupsByRoot.get(rootId).push(item);
+                });
+                // Build the full lineage grouping once, then attach each matching item list.
+                // This keeps search grouping linear rather than rescanning every item per chain.
+                const completeGroupsByRoot = new Map(getDuplicatePickerChainGroups(allItems).map(group => [group.rootId, group]));
+                allGroups = [...groupsByRoot.entries()].map(([rootId, matchingItems]) => {
+                    const fullGroup = completeGroupsByRoot.get(rootId);
+                    if (!fullGroup) return null;
+                    return { ...fullGroup, matchingItems: matchingItems.sort((a, b) => compareItemsByCreationAsc(b, a)) };
+                }).filter(Boolean).sort((a, b) => compareItemsByCreationAsc(b.latest, a.latest));
+                renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
+                duplicatePickerResultCountEl.textContent = `${matches.length} matching item${matches.length === 1 ? '' : 's'} across ${allGroups.length} chain${allGroups.length === 1 ? '' : 's'}`;
+                if (!allGroups.length) duplicatePickerEmptyTextEl.textContent = 'No items match that search. Try another name, tag, phrase, or ID.';
             }
 
-            if (entries.length) {
-                duplicatePickerListEl.innerHTML = entries.map(entry => duplicatePickerItemButtonHtml(entry.item, entry.subtitle, entry.badge)).join('');
+            if (renderedGroups.length) {
+                duplicatePickerListEl.innerHTML = renderedGroups.map(group => {
+                    const itemsToShow = normalizedQuery ? group.matchingItems : [group.latest];
+                    return duplicatePickerChainGroupHtml(group, itemsToShow, !normalizedQuery);
+                }).join('');
             } else {
                 duplicatePickerEmptyEl.classList.remove('hidden');
             }
+
+            if (duplicatePickerLoadMoreBtn && allGroups.length > renderedGroups.length) {
+                duplicatePickerLoadMoreBtn.classList.remove('hidden');
+                const remaining = allGroups.length - renderedGroups.length;
+                duplicatePickerLoadMoreBtn.textContent = `Load 4 more chains (${remaining} remaining)`;
+            }
+        }
+
+        function handleDuplicatePickerSearchInput() {
+            duplicatePickerVisibleLimit = 4;
+            renderDuplicatePicker();
+        }
+
+        function loadMoreDuplicatePickerItems() {
+            duplicatePickerVisibleLimit += 4;
+            renderDuplicatePicker();
         }
 
         function openDuplicatePicker() {
             if (!duplicatePickerModal) return;
             duplicatePickerSearchEl.value = '';
+            duplicatePickerVisibleLimit = 4;
             renderDuplicatePicker();
             duplicatePickerModal.classList.remove('hidden');
             lockDuplicateModalScroll();
@@ -6572,7 +6673,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             unlockDuplicateModalScroll();
         }
 
-        function selectDuplicatePickerItem(itemId) {
+        function selectDuplicatePickerItem(itemId, action = 'duplicate') {
             const item = (appData.items || []).find(existing => String(existing.id) === String(itemId));
             if (!item) {
                 showToast('That item is no longer available. Refresh the list and try again.', 'warning');
@@ -6580,7 +6681,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
             closeDuplicatePicker();
-            openDuplicateModal(item.id);
+            if (action === 'renew') openRenewModal(item.id);
+            else openDuplicateModal(item.id);
         }
 
         function openRenewModal(itemId) {
@@ -6776,6 +6878,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                     closeDuplicateModal();
                 });
+                if (newItem?.id) searchForItemId(newItem.id);
                 toastSuccess(isRenew
                     ? (resolvedParentAction === 'done' ? 'Renewed item created; previous item marked done.' : 'Renewed item created.')
                     : (resolvedParentAction === 'done' ? 'Duplicate created; previous item marked done.' : 'Duplicate created.'));
@@ -8765,11 +8868,14 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // ---------- OTHER INITIALIZATIONS ----------
         addItemBtn.onclick = openAddModal;
         if (duplicateItemBtn) duplicateItemBtn.onclick = openDuplicatePicker;
-        if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', renderDuplicatePicker);
+        if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', handleDuplicatePickerSearchInput);
+        if (duplicatePickerLoadMoreBtn) duplicatePickerLoadMoreBtn.addEventListener('click', loadMoreDuplicatePickerItems);
         if (duplicatePickerListEl) duplicatePickerListEl.addEventListener('click', (event) => {
             const button = event.target.closest('[data-duplicate-source-id]');
             if (!button) return;
-            selectDuplicatePickerItem(button.getAttribute('data-duplicate-source-id'));
+            event.preventDefault();
+            const action = button.getAttribute('data-picker-action') || 'duplicate';
+            selectDuplicatePickerItem(button.getAttribute('data-duplicate-source-id'), action);
         });
         const closeDuplicatePickerBtn = document.getElementById('closeDuplicatePickerBtn');
         const cancelDuplicatePickerBtn = document.getElementById('cancelDuplicatePickerBtn');
@@ -8780,7 +8886,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 event.preventDefault();
                 event.stopPropagation();
                 duplicatePickerSearchEl.value = '';
-                renderDuplicatePicker();
+                handleDuplicatePickerSearchInput();
             }
         });
         if (duplicatePickerModal) duplicatePickerModal.addEventListener('click', (event) => {
