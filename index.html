@@ -2221,6 +2221,10 @@
         const duplicatePickerResultCountEl = document.getElementById('duplicatePickerResultCount');
         const duplicatePickerLoadMoreBtn = document.getElementById('duplicatePickerLoadMoreBtn');
         let duplicatePickerVisibleLimit = 4;
+        // In the recent view, chains start collapsed; in search results, chains start expanded.
+        // These are temporary UI states only and are never written to cloud data.
+        const duplicatePickerExpandedRecentChains = new Set();
+        const duplicatePickerCollapsedSearchChains = new Set();
         const duplicatePickerEmptyEl = document.getElementById('duplicatePickerEmpty');
         const duplicatePickerEmptyTextEl = document.getElementById('duplicatePickerEmptyText');
         const duplicateModal = document.getElementById('duplicateModal');
@@ -6526,10 +6530,16 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return '';
         }
 
-        function duplicatePickerItemButtonHtml(item, subtitle) {
+        function duplicatePickerItemButtonHtml(item, subtitle, action = null) {
             const itemId = escapeHtml(String(item?.id ?? ''));
             const name = escapeHtml(String(item?.name || '(Unnamed item)'));
             const safeSubtitle = escapeHtml(String(subtitle || item?.category || 'Other'));
+            let actionButton = '';
+            if (action === 'renew') {
+                actionButton = `<button type="button" data-duplicate-source-id="${itemId}" data-picker-action="renew" class="flex-shrink-0 px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold transition" title="Renew this chain from its latest item" aria-label="Renew ${name}"><i class="fas fa-rotate-right mr-1"></i>Renew</button>`;
+            } else if (action === 'duplicate') {
+                actionButton = `<button type="button" data-duplicate-source-id="${itemId}" data-picker-action="duplicate" class="flex-shrink-0 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Duplicate this chain from its latest item" aria-label="Duplicate ${name}"><i class="fas fa-copy mr-1"></i>Duplicate</button>`;
+            }
             return `<div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                 <div class="flex items-start gap-2 flex-1 min-w-0">
                     <span class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center mt-0.5"><i class="fas fa-file-lines"></i></span>
@@ -6538,10 +6548,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         <span class="block text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-normal break-words" style="overflow-wrap:anywhere">${safeSubtitle}</span>
                     </button>
                 </div>
-                <div class="flex flex-shrink-0 gap-2 sm:ml-auto">
-                    <button type="button" data-duplicate-source-id="${itemId}" data-picker-action="duplicate" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Duplicate this item"> <i class="fas fa-copy mr-1"></i>Duplicate</button>
-                    <button type="button" data-duplicate-source-id="${itemId}" data-picker-action="renew" class="flex-1 sm:flex-none px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold transition" title="Renew this item"> <i class="fas fa-rotate-right mr-1"></i>Renew</button>
-                </div>
+                ${actionButton ? `<div class="flex flex-shrink-0 sm:ml-auto">${actionButton}</div>` : ''}
             </div>`;
         }
 
@@ -6572,30 +6579,51 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             return formatItemCreationTime(item);
         }
 
-        function duplicatePickerChainGroupHtml(group, matchingItems, recentMode = false) {
+        function duplicatePickerChainGroupHtml(group, recentMode = false) {
             const latest = group.latest;
-            const chainCount = group.members?.length || matchingItems.length;
-            const chainSizeLabel = chainCount === 1 ? '1 item' : `${chainCount} items`;
-            const lastExtendedRelative = getPickerItemRelativeTime(latest);
+            const members = [...(group.members || [])].sort((a, b) => compareItemsByCreationAsc(b, a));
+            const chainCount = members.length;
+            const chainSizeLabel = chainCount === 1 ? '1 item in chain' : `${chainCount} items in chain`;
+            const rootKey = String(group.rootId ?? latest?.id ?? '');
+            const isExpanded = recentMode
+                ? duplicatePickerExpandedRecentChains.has(rootKey)
+                : !duplicatePickerCollapsedSearchChains.has(rootKey);
+            const latestRelative = getPickerItemRelativeTime(latest);
+            // Keep computing the latest item's previous action as before, but use it only
+            // to choose the single available action button rather than showing a text badge.
             const lastAction = getPickerCreationAction(latest);
-            const actionBadge = lastAction
-                ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${lastAction === 'Renewed' ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'}">${escapeHtml(lastAction)}</span>`
-                : '';
-            const headerTime = lastExtendedRelative ? `Last extended ${escapeHtml(lastExtendedRelative)}` : 'Last extension time unavailable';
-            const rows = matchingItems.map(item => {
+            const latestActionType = lastAction === 'Renewed' ? 'renew' : 'duplicate';
+            const visibleItems = isExpanded ? members : (latest ? [latest] : []);
+            const rows = visibleItems.map(item => {
                 const details = item.noExpiration || !item.date
                     ? 'No expiration date'
                     : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
-                const subtitle = `${String(item.category || 'Other')} · ${details}`;
-                return duplicatePickerItemButtonHtml(item, subtitle);
+                const itemAge = getPickerItemRelativeTime(item);
+                const subtitleParts = [String(item.category || 'Other'), details];
+                // In collapsed mode the same time is already shown in the chain header.
+                // Put per-item ages on rows only while the full chain is expanded.
+                if (isExpanded && itemAge) subtitleParts.push(`Added ${itemAge}`);
+                const subtitle = subtitleParts.join(' · ');
+                const isLatest = String(item?.id ?? '') === String(latest?.id ?? '');
+                return duplicatePickerItemButtonHtml(item, subtitle, isLatest ? latestActionType : null);
             }).join('');
+            // When expanded, show the relative age per item and omit the duplicated header time.
+            // When collapsed, the header carries the latest item's relative age instead.
+            const headerTime = !isExpanded
+                ? (latestRelative ? `Last extended ${escapeHtml(latestRelative)}` : 'Last extension time unavailable')
+                : '';
+            const toggleLabel = isExpanded ? 'Show latest only' : `Show all ${chainCount} items`;
+            const toggleIcon = isExpanded ? 'fa-chevron-up' : 'fa-chevron-down';
+            const mode = recentMode ? 'recent' : 'search';
             return `<section class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-3 py-2 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 mr-1.5"></i>${escapeHtml(chainSizeLabel)} in chain</span>
-                        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
-                            <span class="text-[11px] text-gray-500 dark:text-gray-400">${headerTime}</span>
-                            ${actionBadge}
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 mr-1.5"></i>${escapeHtml(chainSizeLabel)}</span>
+                        <div class="flex flex-wrap items-center justify-between sm:justify-end gap-2 min-w-0">
+                            ${headerTime ? `<span class="text-[11px] text-gray-500 dark:text-gray-400">${headerTime}</span>` : ''}
+                            <button type="button" data-picker-toggle-chain="${escapeHtml(rootKey)}" data-picker-toggle-mode="${mode}" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition whitespace-nowrap" aria-expanded="${isExpanded ? 'true' : 'false'}">
+                                <i class="fas ${toggleIcon}"></i>${toggleLabel}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -6617,7 +6645,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             let renderedGroups = [];
             if (!normalizedQuery) {
                 duplicatePickerListTitleEl.textContent = 'Recently duplicated chains';
-                duplicatePickerListHintEl.textContent = 'Latest chain activity is shown once per group. Tap an item name to view it, or choose Duplicate or Renew.';
+                duplicatePickerListHintEl.textContent = 'Chains start with their latest item. Expand a chain to see older items; the latest item gets one suggested action.';
                 allGroups = getRecentlyDuplicatedChains();
                 renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
                 duplicatePickerResultCountEl.textContent = allGroups.length
@@ -6628,7 +6656,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
             } else {
                 duplicatePickerListTitleEl.textContent = 'Search results grouped by chain';
-                duplicatePickerListHintEl.textContent = 'Matches are grouped by chain. The time and action describe the latest item; tap an item name to view it.';
+                duplicatePickerListHintEl.textContent = 'Chains containing matching items are shown with their full history. Expand or collapse each chain; only the latest item has an action button.';
                 const allItems = appData.items || [];
                 const byId = new Map(allItems.map(item => [item.id, item]));
                 const matches = allItems.filter(item => {
@@ -6647,7 +6675,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 allGroups = [...groupsByRoot.entries()].map(([rootId, matchingItems]) => {
                     const fullGroup = completeGroupsByRoot.get(rootId);
                     if (!fullGroup) return null;
-                    return { ...fullGroup, matchingItems: matchingItems.sort((a, b) => compareItemsByCreationAsc(b, a)) };
+                    // Search selects relevant chains, then shows the full chain so the user can
+                    // choose the newest item for the next duplicate/renew action.
+                    return { ...fullGroup, matchingItems: matchingItems };
                 }).filter(Boolean).sort((a, b) => compareItemsByCreationAsc(b.latest, a.latest));
                 renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
                 duplicatePickerResultCountEl.textContent = `${matches.length} matching item${matches.length === 1 ? '' : 's'} across ${allGroups.length} chain${allGroups.length === 1 ? '' : 's'}`;
@@ -6655,10 +6685,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             if (renderedGroups.length) {
-                duplicatePickerListEl.innerHTML = renderedGroups.map(group => {
-                    const itemsToShow = normalizedQuery ? group.matchingItems : [group.latest];
-                    return duplicatePickerChainGroupHtml(group, itemsToShow, !normalizedQuery);
-                }).join('');
+                duplicatePickerListEl.innerHTML = renderedGroups.map(group =>
+                    duplicatePickerChainGroupHtml(group, !normalizedQuery)
+                ).join('');
             } else {
                 duplicatePickerEmptyEl.classList.remove('hidden');
             }
@@ -6672,6 +6701,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function handleDuplicatePickerSearchInput() {
             duplicatePickerVisibleLimit = 4;
+            duplicatePickerCollapsedSearchChains.clear();
             renderDuplicatePicker();
         }
 
@@ -6684,6 +6714,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!duplicatePickerModal) return;
             duplicatePickerSearchEl.value = '';
             duplicatePickerVisibleLimit = 4;
+            duplicatePickerExpandedRecentChains.clear();
+            duplicatePickerCollapsedSearchChains.clear();
             renderDuplicatePicker();
             duplicatePickerModal.classList.remove('hidden');
             lockDuplicateModalScroll();
@@ -8913,6 +8945,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', handleDuplicatePickerSearchInput);
         if (duplicatePickerLoadMoreBtn) duplicatePickerLoadMoreBtn.addEventListener('click', loadMoreDuplicatePickerItems);
         if (duplicatePickerListEl) duplicatePickerListEl.addEventListener('click', (event) => {
+            const toggleButton = event.target.closest('[data-picker-toggle-chain]');
+            if (toggleButton) {
+                event.preventDefault();
+                const rootKey = toggleButton.getAttribute('data-picker-toggle-chain') || '';
+                const mode = toggleButton.getAttribute('data-picker-toggle-mode') || 'recent';
+                if (mode === 'recent') {
+                    if (duplicatePickerExpandedRecentChains.has(rootKey)) duplicatePickerExpandedRecentChains.delete(rootKey);
+                    else duplicatePickerExpandedRecentChains.add(rootKey);
+                } else {
+                    if (duplicatePickerCollapsedSearchChains.has(rootKey)) duplicatePickerCollapsedSearchChains.delete(rootKey);
+                    else duplicatePickerCollapsedSearchChains.add(rootKey);
+                }
+                renderDuplicatePicker();
+                return;
+            }
             const viewButton = event.target.closest('[data-picker-view-id]');
             if (viewButton) {
                 event.preventDefault();
