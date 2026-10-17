@@ -6503,21 +6503,40 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        function duplicatePickerItemButtonHtml(item, subtitle, badge = '') {
+        function getPickerCreationAction(item) {
+            if (!item) return '';
+            const itemId = String(item.id ?? '');
+            const relevantEntries = (historyEntries || []).filter(entry => {
+                if (String(entry.itemId ?? '') !== itemId) return false;
+                const action = String(entry.action || '').toLowerCase();
+                const source = String(entry.source || '').toLowerCase();
+                return ['duplicated', 'renewed'].includes(action) || ['duplicate', 'renew'].includes(source);
+            }).sort((a, b) => Date.parse(a.timestamp || 0) - Date.parse(b.timestamp || 0));
+            const entry = relevantEntries[relevantEntries.length - 1];
+            if (entry) {
+                const action = String(entry.action || '').toLowerCase();
+                const source = String(entry.source || '').toLowerCase();
+                if (source === 'renew' || action === 'renewed') return 'Renewed';
+                if (source === 'duplicate' || action === 'duplicated') return 'Duplicated';
+            }
+
+            // Compatibility fallback for older items if the history file is missing an entry.
+            if (/^\s*Renewed from\s+\"/i.test(String(item.notes || ''))) return 'Renewed';
+            if (item.original_event_id) return 'Duplicated';
+            return '';
+        }
+
+        function duplicatePickerItemButtonHtml(item, subtitle) {
             const itemId = escapeHtml(String(item?.id ?? ''));
             const name = escapeHtml(String(item?.name || '(Unnamed item)'));
             const safeSubtitle = escapeHtml(String(subtitle || item?.category || 'Other'));
-            const safeBadge = badge ? `<span class="inline-flex flex-shrink-0 items-center px-2 py-1 rounded-full text-[10px] font-semibold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60">${escapeHtml(badge)}</span>` : '';
             return `<div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                <div class="flex items-start gap-3 flex-1 min-w-0">
-                    <span class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center"><i class="fas fa-file-lines"></i></span>
-                    <span class="flex-1 min-w-0 block">
-                        <span class="flex items-center gap-2 min-w-0">
-                            <span class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">${name}</span>
-                            ${safeBadge}
-                        </span>
-                        <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">${safeSubtitle}</span>
-                    </span>
+                <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <span class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center mt-0.5"><i class="fas fa-file-lines"></i></span>
+                    <button type="button" data-picker-view-id="${itemId}" aria-label="View ${name} in the item list" title="Tap to view this item in the main list" class="flex-1 min-w-0 text-left rounded-lg px-1 py-0.5 -my-0.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <span class="block font-semibold text-sm leading-snug text-gray-900 dark:text-gray-100 whitespace-normal break-words" style="overflow-wrap:anywhere">${name}</span>
+                        <span class="block text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-normal break-words" style="overflow-wrap:anywhere">${safeSubtitle}</span>
+                    </button>
                 </div>
                 <div class="flex flex-shrink-0 gap-2 sm:ml-auto">
                     <button type="button" data-duplicate-source-id="${itemId}" data-picker-action="duplicate" class="flex-1 sm:flex-none px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Duplicate this item"> <i class="fas fa-copy mr-1"></i>Duplicate</button>
@@ -6555,26 +6574,30 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function duplicatePickerChainGroupHtml(group, matchingItems, recentMode = false) {
             const latest = group.latest;
-            const groupName = escapeHtml(String(latest?.name || group.members?.[0]?.name || '(Unnamed chain)'));
             const chainCount = group.members?.length || matchingItems.length;
-            const chainSizeLabel = chainCount > 1 ? `${chainCount} items in chain` : 'Single item';
-            const lastExtendedTimestamp = recentMode ? getItemCreationTimestamp(latest) : null;
-            const lastExtendedRelative = lastExtendedTimestamp !== null ? formatHistoryRelativeTime(lastExtendedTimestamp) : (recentMode ? formatItemCreationTime(latest) : '');
-            const headerMeta = recentMode
-                ? `${chainSizeLabel} · Last extended ${lastExtendedRelative || 'time unavailable'}`
-                : chainSizeLabel;
+            const chainSizeLabel = chainCount === 1 ? '1 item' : `${chainCount} items`;
+            const lastExtendedRelative = getPickerItemRelativeTime(latest);
+            const lastAction = getPickerCreationAction(latest);
+            const actionBadge = lastAction
+                ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border ${lastAction === 'Renewed' ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300'}">${escapeHtml(lastAction)}</span>`
+                : '';
+            const headerTime = lastExtendedRelative ? `Last extended ${escapeHtml(lastExtendedRelative)}` : 'Last extension time unavailable';
             const rows = matchingItems.map(item => {
-                const details = item.noExpiration || !item.date ? 'No expiration date' : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
-                const relative = getPickerItemRelativeTime(item);
-                const relativeLabel = relative ? `Added ${relative}` : 'Creation time unavailable';
-                const isLatest = latest && String(item.id) === String(latest.id);
-                const badge = isLatest ? (recentMode ? 'Latest · Recent' : 'Latest') : '';
-                return duplicatePickerItemButtonHtml(item, `${String(item.category || 'Other')} · ${details} · ${relativeLabel}`, badge);
+                const details = item.noExpiration || !item.date
+                    ? 'No expiration date'
+                    : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
+                const subtitle = `${String(item.category || 'Other')} · ${details}`;
+                return duplicatePickerItemButtonHtml(item, subtitle);
             }).join('');
             return `<section class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div class="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
-                    <div class="flex items-center gap-2 min-w-0"><i class="fas fa-link text-xs text-indigo-500 flex-shrink-0"></i><span class="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">${groupName}</span></div>
-                    <span class="text-[10px] text-gray-500 dark:text-gray-400 text-right leading-tight max-w-[58%]">${escapeHtml(headerMeta)}</span>
+                <div class="px-3 py-2 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 mr-1.5"></i>${escapeHtml(chainSizeLabel)} in chain</span>
+                        <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                            <span class="text-[11px] text-gray-500 dark:text-gray-400">${headerTime}</span>
+                            ${actionBadge}
+                        </div>
+                    </div>
                 </div>
                 <div class="p-2 space-y-2">${rows}</div>
             </section>`;
@@ -6594,7 +6617,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             let renderedGroups = [];
             if (!normalizedQuery) {
                 duplicatePickerListTitleEl.textContent = 'Recently duplicated chains';
-                duplicatePickerListHintEl.textContent = 'Chains are ordered by when their latest item was created. Use Duplicate or Renew to choose the next action.';
+                duplicatePickerListHintEl.textContent = 'Latest chain activity is shown once per group. Tap an item name to view it, or choose Duplicate or Renew.';
                 allGroups = getRecentlyDuplicatedChains();
                 renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
                 duplicatePickerResultCountEl.textContent = allGroups.length
@@ -6605,7 +6628,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
             } else {
                 duplicatePickerListTitleEl.textContent = 'Search results grouped by chain';
-                duplicatePickerListHintEl.textContent = 'Matching items are grouped by their duplicate/renew chain. Choose Duplicate or Renew for the specific item you want to use.';
+                duplicatePickerListHintEl.textContent = 'Matches are grouped by chain. The time and action describe the latest item; tap an item name to view it.';
                 const allItems = appData.items || [];
                 const byId = new Map(allItems.map(item => [item.id, item]));
                 const matches = allItems.filter(item => {
@@ -6671,6 +6694,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!duplicatePickerModal || duplicatePickerModal.classList.contains('hidden')) return;
             duplicatePickerModal.classList.add('hidden');
             unlockDuplicateModalScroll();
+        }
+
+        function openDuplicatePickerItemInList(itemId) {
+            const item = (appData.items || []).find(existing => String(existing.id) === String(itemId));
+            if (!item) {
+                showToast('That item is no longer available. Refresh the list and try again.', 'warning');
+                renderDuplicatePicker();
+                return;
+            }
+            closeDuplicatePicker();
+            searchForItemId(item.id, false);
+            setTimeout(() => {
+                const card = document.getElementById(`item-card-${item.id}`);
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 80);
         }
 
         function selectDuplicatePickerItem(itemId, action = 'duplicate') {
@@ -7597,7 +7635,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             input.value = localStorage.getItem('expire_searchQuery') || '';
         }
 
-        function searchForItemId(itemId) {
+        function searchForItemId(itemId, focusSearch = true) {
             const input = document.getElementById('searchInput');
             if (!input || itemId === undefined || itemId === null) return;
             // Use the compact display/search form in the search box, while
@@ -7606,8 +7644,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             persistSearchQuery(input.value);
             updateSearchUI();
             renderAll();
-            input.focus();
-            input.select();
+            if (focusSearch) {
+                input.focus();
+                input.select();
+            } else {
+                input.blur();
+            }
         }
 
         function clearSearch() {
@@ -8871,11 +8913,17 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', handleDuplicatePickerSearchInput);
         if (duplicatePickerLoadMoreBtn) duplicatePickerLoadMoreBtn.addEventListener('click', loadMoreDuplicatePickerItems);
         if (duplicatePickerListEl) duplicatePickerListEl.addEventListener('click', (event) => {
-            const button = event.target.closest('[data-duplicate-source-id]');
-            if (!button) return;
+            const viewButton = event.target.closest('[data-picker-view-id]');
+            if (viewButton) {
+                event.preventDefault();
+                openDuplicatePickerItemInList(viewButton.getAttribute('data-picker-view-id'));
+                return;
+            }
+            const actionButton = event.target.closest('[data-duplicate-source-id]');
+            if (!actionButton) return;
             event.preventDefault();
-            const action = button.getAttribute('data-picker-action') || 'duplicate';
-            selectDuplicatePickerItem(button.getAttribute('data-duplicate-source-id'), action);
+            const action = actionButton.getAttribute('data-picker-action') || 'duplicate';
+            selectDuplicatePickerItem(actionButton.getAttribute('data-duplicate-source-id'), action);
         });
         const closeDuplicatePickerBtn = document.getElementById('closeDuplicatePickerBtn');
         const cancelDuplicatePickerBtn = document.getElementById('cancelDuplicatePickerBtn');
