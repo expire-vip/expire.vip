@@ -1737,6 +1737,16 @@
                         <input type="search" id="duplicatePickerSearch" autocomplete="off" placeholder="Search by name, notes, category, tag…" class="w-full h-11 pl-10 pr-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
                     </div>
                 </div>
+                <div id="duplicatePickerSearchModeControl" class="hidden rounded-xl border border-gray-200 dark:border-gray-700 p-2.5 space-y-2">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-xs font-semibold text-gray-600 dark:text-gray-300">Search view</span>
+                        <div class="inline-flex rounded-lg bg-gray-100 dark:bg-gray-700 p-1 gap-1" role="group" aria-label="Search result display mode">
+                            <button type="button" id="duplicatePickerFullChainModeBtn" aria-pressed="true" class="px-3 py-1.5 rounded-md text-xs font-semibold transition">Full chain</button>
+                            <button type="button" id="duplicatePickerMatchesOnlyModeBtn" aria-pressed="false" class="px-3 py-1.5 rounded-md text-xs font-semibold transition">Matches only</button>
+                        </div>
+                    </div>
+                    <p id="duplicatePickerSearchModeHint" class="text-xs text-gray-500 dark:text-gray-400">Matching items are highlighted. Only the newest item has an action button.</p>
+                </div>
                 <div>
                     <div class="flex items-center justify-between gap-3 mb-2">
                         <h4 id="duplicatePickerListTitle" class="text-sm font-semibold text-gray-900 dark:text-gray-100">Recently duplicated chains</h4>
@@ -2220,6 +2230,11 @@
         const duplicatePickerListHintEl = document.getElementById('duplicatePickerListHint');
         const duplicatePickerResultCountEl = document.getElementById('duplicatePickerResultCount');
         const duplicatePickerLoadMoreBtn = document.getElementById('duplicatePickerLoadMoreBtn');
+        const duplicatePickerSearchModeControl = document.getElementById('duplicatePickerSearchModeControl');
+        const duplicatePickerFullChainModeBtn = document.getElementById('duplicatePickerFullChainModeBtn');
+        const duplicatePickerMatchesOnlyModeBtn = document.getElementById('duplicatePickerMatchesOnlyModeBtn');
+        const duplicatePickerSearchModeHintEl = document.getElementById('duplicatePickerSearchModeHint');
+        let duplicatePickerSearchView = 'full';
         let duplicatePickerVisibleLimit = 4;
         // In the recent view, chains start collapsed; in search results, chains start expanded.
         // These are temporary UI states only and are never written to cloud data.
@@ -6573,15 +6588,76 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 .sort((a, b) => compareItemsByCreationAsc(b.latest, a.latest));
         }
 
+        function formatPickerRelativeAge(timestamp, now = new Date()) {
+            const date = new Date(timestamp);
+            if (Number.isNaN(date.getTime())) return '';
+            let remainingSeconds = Math.floor(Math.abs(now.getTime() - date.getTime()) / 1000);
+            const isFuture = date.getTime() > now.getTime();
+            if (remainingSeconds < 60) {
+                if (isFuture) return 'in a few seconds';
+                return remainingSeconds <= 5 ? 'just now' : `${remainingSeconds} seconds ago`;
+            }
+
+            const units = [
+                { key: 'year', seconds: 31536000 },
+                { key: 'month', seconds: 2592000 },
+                { key: 'week', seconds: 604800 },
+                { key: 'day', seconds: 86400 },
+                { key: 'hour', seconds: 3600 },
+                { key: 'minute', seconds: 60 }
+            ];
+            let primaryUnit = units.find(unit => remainingSeconds >= unit.seconds);
+            if (!primaryUnit) primaryUnit = units[units.length - 1];
+            const primaryCount = Math.floor(remainingSeconds / primaryUnit.seconds);
+            let remainder = remainingSeconds - primaryCount * primaryUnit.seconds;
+            const pairedNextUnit = { year: units[1], month: units[3], week: units[3], day: units[4], hour: units[5] }[primaryUnit.key];
+            const parts = [`${primaryCount} ${primaryUnit.key}${primaryCount === 1 ? '' : 's'}`];
+            if (pairedNextUnit) {
+                const nextCount = Math.floor(remainder / pairedNextUnit.seconds);
+                if (nextCount > 0) parts.push(`${nextCount} ${pairedNextUnit.key}${nextCount === 1 ? '' : 's'}`);
+            }
+            return isFuture ? `in ${parts.join(' ')}` : `${parts.join(' ')} ago`;
+        }
+
         function getPickerItemRelativeTime(item) {
             const timestamp = getItemCreationTimestamp(item);
-            if (timestamp !== null) return formatHistoryRelativeTime(timestamp);
+            if (timestamp !== null) return formatPickerRelativeAge(timestamp);
             return formatItemCreationTime(item);
+        }
+
+        function duplicatePickerItemButtonHtml(item, subtitle, action = null, isMatch = false, showMatchBadge = false) {
+            const itemId = escapeHtml(String(item?.id ?? ''));
+            const name = escapeHtml(String(item?.name || '(Unnamed item)'));
+            const safeSubtitle = escapeHtml(String(subtitle || item?.category || 'Other'));
+            let actionButton = '';
+            if (action === 'renew') {
+                actionButton = `<button type="button" data-duplicate-source-id="${itemId}" data-picker-action="renew" class="flex-shrink-0 px-3 py-2 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold transition" title="Renew this chain from its latest item" aria-label="Renew ${name}"><i class="fas fa-rotate-right mr-1"></i>Renew</button>`;
+            } else if (action === 'duplicate') {
+                actionButton = `<button type="button" data-duplicate-source-id="${itemId}" data-picker-action="duplicate" class="flex-shrink-0 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition" title="Duplicate this chain from its latest item" aria-label="Duplicate ${name}"><i class="fas fa-copy mr-1"></i>Duplicate</button>`;
+            }
+            const rowClasses = isMatch
+                ? 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-indigo-400 dark:border-indigo-600 bg-indigo-50/70 dark:bg-indigo-900/20 ring-1 ring-indigo-200/70 dark:ring-indigo-800/70'
+                : 'flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800';
+            const titleMarkup = showMatchBadge
+                ? `<span class="flex flex-wrap items-center gap-x-2 gap-y-1"><span class="block font-semibold text-sm leading-snug text-gray-900 dark:text-gray-100 whitespace-normal break-words" style="overflow-wrap:anywhere">${name}</span><span class="inline-flex flex-shrink-0 items-center rounded-full px-1.5 py-0.5 text-[9px] uppercase tracking-wide font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200">Match</span></span>`
+                : `<span class="block font-semibold text-sm leading-snug text-gray-900 dark:text-gray-100 whitespace-normal break-words" style="overflow-wrap:anywhere">${name}</span>`;
+            return `<div class="${rowClasses}" ${isMatch ? 'title="This item matches your search"' : ''}>
+                <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <span class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center mt-0.5"><i class="fas fa-file-lines"></i></span>
+                    <button type="button" data-picker-view-id="${itemId}" aria-label="View ${name} in the item list" title="Tap to view this item in the main list" class="flex-1 min-w-0 text-left rounded-lg px-1 py-0.5 -my-0.5 hover:bg-gray-50 dark:hover:bg-gray-700/60 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        ${titleMarkup}
+                        <span class="block text-xs text-gray-500 dark:text-gray-400 mt-1 whitespace-normal break-words" style="overflow-wrap:anywhere">${safeSubtitle}</span>
+                    </button>
+                </div>
+                ${actionButton ? `<div class="flex flex-shrink-0 sm:ml-auto">${actionButton}</div>` : ''}
+            </div>`;
         }
 
         function duplicatePickerChainGroupHtml(group, recentMode = false) {
             const latest = group.latest;
             const members = [...(group.members || [])].sort((a, b) => compareItemsByCreationAsc(b, a));
+            const matchingItems = Array.isArray(group.matchingItems) ? group.matchingItems : [];
+            const matchingIds = new Set(matchingItems.map(item => String(item?.id ?? '')));
             const chainCount = members.length;
             const chainSizeLabel = chainCount === 1 ? '1 item' : `${chainCount} items`;
             const rootKey = String(group.rootId ?? latest?.id ?? '');
@@ -6592,29 +6668,41 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             // to choose the single available action button rather than showing a text badge.
             const lastAction = getPickerCreationAction(latest);
             const latestActionType = lastAction === 'Renewed' ? 'renew' : 'duplicate';
-            const visibleItems = isExpanded ? members : (latest ? [latest] : []);
+            const matchingOnly = !recentMode && duplicatePickerSearchView === 'matches';
+            const availableItems = matchingOnly
+                ? members.filter(item => matchingIds.has(String(item?.id ?? '')))
+                : members;
+            const canToggle = matchingOnly ? availableItems.length > 1 : chainCount > 1;
+            const collapsedItem = availableItems[0] || null;
+            const visibleItems = isExpanded ? availableItems : (collapsedItem ? [collapsedItem] : []);
             const rows = visibleItems.map(item => {
                 const details = item.noExpiration || !item.date
                     ? 'No expiration date'
                     : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
                 const itemAge = getPickerItemRelativeTime(item);
                 const subtitleParts = [String(item.category || 'Other'), details];
-                // Always keep the relative age with the visible item itself, including
-                // when the chain is collapsed, and never repeat it in the chain header.
                 if (itemAge) subtitleParts.push(`Added ${itemAge}`);
                 const subtitle = subtitleParts.join(' · ');
                 const isLatest = String(item?.id ?? '') === String(latest?.id ?? '');
-                return duplicatePickerItemButtonHtml(item, subtitle, isLatest ? latestActionType : null);
+                const isMatch = !recentMode && matchingIds.has(String(item?.id ?? ''));
+                const showMatchBadge = isMatch && !matchingOnly;
+                return duplicatePickerItemButtonHtml(item, subtitle, isLatest ? latestActionType : null, isMatch, showMatchBadge);
             }).join('');
-            const toggleLabel = isExpanded ? 'Show latest' : 'Show all';
+            let toggleLabel = isExpanded ? 'Show latest' : 'Show all';
+            if (!recentMode && matchingOnly) toggleLabel = isExpanded ? 'Show fewer' : 'Show matches';
             const toggleIcon = isExpanded ? 'fa-chevron-up' : 'fa-chevron-down';
             const mode = recentMode ? 'recent' : 'search';
-            const chainHeader = chainCount > 1
+            let headerText = chainSizeLabel;
+            if (!recentMode && matchingItems.length) {
+                const matchLabel = `${matchingItems.length} match${matchingItems.length === 1 ? '' : 'es'}`;
+                headerText = matchingOnly ? `${matchLabel} · ${chainSizeLabel}` : `${chainSizeLabel} · ${matchLabel}`;
+            }
+            const chainHeader = canToggle
                 ? `<button type="button" data-picker-toggle-chain="${escapeHtml(rootKey)}" data-picker-toggle-mode="${mode}" class="w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left hover:bg-gray-100 dark:hover:bg-gray-700/70 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" aria-expanded="${isExpanded ? 'true' : 'false'}">
-                    <span class="inline-flex items-center gap-2 min-w-0 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 flex-shrink-0"></i><span>${escapeHtml(chainSizeLabel)}</span></span>
+                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 flex-shrink-0"></i><span>${escapeHtml(headerText)}</span></span>
                     <span class="inline-flex items-center gap-1.5 flex-shrink-0 text-[11px] font-semibold text-gray-600 dark:text-gray-300"><span>${toggleLabel}</span><i class="fas ${toggleIcon}"></i></span>
                 </button>`
-                : `<div class="flex items-center gap-2 px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500"></i><span>${escapeHtml(chainSizeLabel)}</span></div>`;
+                : `<div class="flex items-center gap-2 px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500"></i><span>${escapeHtml(headerText)}</span></div>`;
             return `<section class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                 <div class="px-2 py-1 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
                     ${chainHeader}
@@ -6623,11 +6711,31 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             </section>`;
         }
 
+        function updateDuplicatePickerSearchModeControls() {
+            const hasQuery = !!String(duplicatePickerSearchEl?.value || '').trim();
+            if (duplicatePickerSearchModeControl) duplicatePickerSearchModeControl.classList.toggle('hidden', !hasQuery);
+            const fullSelected = duplicatePickerSearchView === 'full';
+            const activeClasses = ['bg-white', 'dark:bg-gray-600', 'text-indigo-700', 'dark:text-indigo-200', 'shadow-sm'];
+            const inactiveClasses = ['text-gray-600', 'dark:text-gray-300', 'hover:bg-white/70', 'dark:hover:bg-gray-600/70'];
+            [[duplicatePickerFullChainModeBtn, fullSelected], [duplicatePickerMatchesOnlyModeBtn, !fullSelected]].forEach(([button, selected]) => {
+                if (!button) return;
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                button.classList.remove(...activeClasses, ...inactiveClasses);
+                button.classList.add(...(selected ? activeClasses : inactiveClasses));
+            });
+            if (duplicatePickerSearchModeHintEl) {
+                duplicatePickerSearchModeHintEl.textContent = fullSelected
+                    ? 'Matching items are highlighted. Only the newest item in each chain has an action button.'
+                    : 'Only matching items are shown. Switch to Full chain to see the newest item and its action if it does not match.';
+            }
+        }
+
         function renderDuplicatePicker() {
             if (!duplicatePickerListEl) return;
             const query = String(duplicatePickerSearchEl?.value || '').trim();
             const normalizedQuery = normalizeSearchText(query);
             const { phrases, words } = parseSearchQuery(query);
+            updateDuplicatePickerSearchModeControls();
             duplicatePickerListEl.innerHTML = '';
             duplicatePickerEmptyEl.classList.add('hidden');
             duplicatePickerResultCountEl.textContent = '';
@@ -6647,8 +6755,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     duplicatePickerEmptyTextEl.textContent = 'No duplicated chains yet. Search above to find an item to duplicate or renew.';
                 }
             } else {
-                duplicatePickerListTitleEl.textContent = 'Search results grouped by chain';
-                duplicatePickerListHintEl.textContent = 'Chains containing matching items are shown with their full history. Expand or collapse each chain; only the latest item has an action button.';
+                duplicatePickerListTitleEl.textContent = duplicatePickerSearchView === 'matches'
+                    ? 'Matching items grouped by chain'
+                    : 'Search results grouped by chain';
+                duplicatePickerListHintEl.textContent = duplicatePickerSearchView === 'matches'
+                    ? 'Only matching items are listed. Change to Full chain to browse older or newer items and act on the latest item.'
+                    : 'Matching items are highlighted within each chain. Expand or collapse each chain; only the latest item has an action button.';
                 const allItems = appData.items || [];
                 const byId = new Map(allItems.map(item => [item.id, item]));
                 const matches = allItems.filter(item => {
@@ -6667,8 +6779,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 allGroups = [...groupsByRoot.entries()].map(([rootId, matchingItems]) => {
                     const fullGroup = completeGroupsByRoot.get(rootId);
                     if (!fullGroup) return null;
-                    // Search selects relevant chains, then shows the full chain so the user can
-                    // choose the newest item for the next duplicate/renew action.
+                    // Keep the full chain and match list together so the user can switch between
+                    // highlighting matches in context and a compact matches-only view.
                     return { ...fullGroup, matchingItems: matchingItems };
                 }).filter(Boolean).sort((a, b) => compareItemsByCreationAsc(b.latest, a.latest));
                 renderedGroups = allGroups.slice(0, duplicatePickerVisibleLimit);
@@ -6694,6 +6806,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function handleDuplicatePickerSearchInput() {
             duplicatePickerVisibleLimit = 4;
             duplicatePickerCollapsedSearchChains.clear();
+            if (!String(duplicatePickerSearchEl?.value || '').trim()) duplicatePickerSearchView = 'full';
             renderDuplicatePicker();
         }
 
@@ -6706,6 +6819,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!duplicatePickerModal) return;
             duplicatePickerSearchEl.value = '';
             duplicatePickerVisibleLimit = 4;
+            duplicatePickerSearchView = 'full';
             duplicatePickerExpandedRecentChains.clear();
             duplicatePickerCollapsedSearchChains.clear();
             renderDuplicatePicker();
@@ -8936,6 +9050,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         if (duplicateItemBtn) duplicateItemBtn.onclick = openDuplicatePicker;
         if (duplicatePickerSearchEl) duplicatePickerSearchEl.addEventListener('input', handleDuplicatePickerSearchInput);
         if (duplicatePickerLoadMoreBtn) duplicatePickerLoadMoreBtn.addEventListener('click', loadMoreDuplicatePickerItems);
+        if (duplicatePickerFullChainModeBtn) duplicatePickerFullChainModeBtn.addEventListener('click', () => {
+            if (duplicatePickerSearchView === 'full') return;
+            duplicatePickerSearchView = 'full';
+            duplicatePickerCollapsedSearchChains.clear();
+            renderDuplicatePicker();
+        });
+        if (duplicatePickerMatchesOnlyModeBtn) duplicatePickerMatchesOnlyModeBtn.addEventListener('click', () => {
+            if (duplicatePickerSearchView === 'matches') return;
+            duplicatePickerSearchView = 'matches';
+            duplicatePickerCollapsedSearchChains.clear();
+            renderDuplicatePicker();
+        });
         if (duplicatePickerListEl) duplicatePickerListEl.addEventListener('click', (event) => {
             const toggleButton = event.target.closest('[data-picker-toggle-chain]');
             if (toggleButton) {
