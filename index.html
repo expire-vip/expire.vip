@@ -6583,12 +6583,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const latest = group.latest;
             const members = [...(group.members || [])].sort((a, b) => compareItemsByCreationAsc(b, a));
             const chainCount = members.length;
-            const chainSizeLabel = chainCount === 1 ? '1 item in chain' : `${chainCount} items in chain`;
+            const chainSizeLabel = chainCount === 1 ? '1 item' : `${chainCount} items`;
             const rootKey = String(group.rootId ?? latest?.id ?? '');
             const isExpanded = recentMode
                 ? duplicatePickerExpandedRecentChains.has(rootKey)
                 : !duplicatePickerCollapsedSearchChains.has(rootKey);
-            const latestRelative = getPickerItemRelativeTime(latest);
             // Keep computing the latest item's previous action as before, but use it only
             // to choose the single available action button rather than showing a text badge.
             const lastAction = getPickerCreationAction(latest);
@@ -6600,32 +6599,25 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     : `Expires ${item.date}${item.time ? ` · ${item.time}` : ''}`;
                 const itemAge = getPickerItemRelativeTime(item);
                 const subtitleParts = [String(item.category || 'Other'), details];
-                // In collapsed mode the same time is already shown in the chain header.
-                // Put per-item ages on rows only while the full chain is expanded.
-                if (isExpanded && itemAge) subtitleParts.push(`Added ${itemAge}`);
+                // Always keep the relative age with the visible item itself, including
+                // when the chain is collapsed, and never repeat it in the chain header.
+                if (itemAge) subtitleParts.push(`Added ${itemAge}`);
                 const subtitle = subtitleParts.join(' · ');
                 const isLatest = String(item?.id ?? '') === String(latest?.id ?? '');
                 return duplicatePickerItemButtonHtml(item, subtitle, isLatest ? latestActionType : null);
             }).join('');
-            // When expanded, show the relative age per item and omit the duplicated header time.
-            // When collapsed, the header carries the latest item's relative age instead.
-            const headerTime = !isExpanded
-                ? (latestRelative ? `Last extended ${escapeHtml(latestRelative)}` : 'Last extension time unavailable')
-                : '';
-            const toggleLabel = isExpanded ? 'Show latest only' : `Show all ${chainCount} items`;
+            const toggleLabel = isExpanded ? 'Show latest' : 'Show all';
             const toggleIcon = isExpanded ? 'fa-chevron-up' : 'fa-chevron-down';
             const mode = recentMode ? 'recent' : 'search';
+            const chainHeader = chainCount > 1
+                ? `<button type="button" data-picker-toggle-chain="${escapeHtml(rootKey)}" data-picker-toggle-mode="${mode}" class="w-full flex items-center justify-between gap-3 px-2 py-2 rounded-lg text-left hover:bg-gray-100 dark:hover:bg-gray-700/70 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" aria-expanded="${isExpanded ? 'true' : 'false'}">
+                    <span class="inline-flex items-center gap-2 min-w-0 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 flex-shrink-0"></i><span>${escapeHtml(chainSizeLabel)}</span></span>
+                    <span class="inline-flex items-center gap-1.5 flex-shrink-0 text-[11px] font-semibold text-gray-600 dark:text-gray-300"><span>${toggleLabel}</span><i class="fas ${toggleIcon}"></i></span>
+                </button>`
+                : `<div class="flex items-center gap-2 px-2 py-2 text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500"></i><span>${escapeHtml(chainSizeLabel)}</span></div>`;
             return `<section class="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div class="px-3 py-2 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
-                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <span class="text-xs font-semibold text-gray-700 dark:text-gray-200"><i class="fas fa-link text-indigo-500 mr-1.5"></i>${escapeHtml(chainSizeLabel)}</span>
-                        <div class="flex flex-wrap items-center justify-between sm:justify-end gap-2 min-w-0">
-                            ${headerTime ? `<span class="text-[11px] text-gray-500 dark:text-gray-400">${headerTime}</span>` : ''}
-                            <button type="button" data-picker-toggle-chain="${escapeHtml(rootKey)}" data-picker-toggle-mode="${mode}" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-600 text-[11px] font-semibold text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 transition whitespace-nowrap" aria-expanded="${isExpanded ? 'true' : 'false'}">
-                                <i class="fas ${toggleIcon}"></i>${toggleLabel}
-                            </button>
-                        </div>
-                    </div>
+                <div class="px-2 py-1 bg-gray-50 dark:bg-gray-900/60 border-b border-gray-200 dark:border-gray-700">
+                    ${chainHeader}
                 </div>
                 <div class="p-2 space-y-2">${rows}</div>
             </section>`;
