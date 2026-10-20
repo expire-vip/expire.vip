@@ -825,6 +825,87 @@
             opacity: 1;
             transform: translateY(0);
         }
+        .quick-jump-rail {
+            position: fixed;
+            right: max(7px, env(safe-area-inset-right));
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 39;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 7px;
+            max-height: calc(100dvh - 1.5rem);
+            overflow-y: auto;
+            overflow-x: visible;
+            padding: 4px 4px 8px;
+            scrollbar-width: none;
+        }
+        .quick-jump-rail::-webkit-scrollbar { display: none; }
+        .quick-jump-rail.hidden { display: none !important; }
+        .quick-jump-button {
+            position: relative;
+            width: 42px;
+            height: 42px;
+            min-width: 42px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,.8);
+            box-shadow: 0 3px 10px rgba(15,23,42,.18);
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+        }
+        .quick-jump-button:hover:not(:disabled) { transform: scale(1.06); box-shadow: 0 5px 14px rgba(15,23,42,.24); }
+        .quick-jump-button:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
+        .quick-jump-button:disabled { opacity: .38; cursor: not-allowed; box-shadow: none; }
+        .quick-jump-button.active { outline: 2px solid #4f46e5; outline-offset: 2px; }
+        .quick-jump-main-count {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            line-height: 1;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        .quick-jump-marker {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 17px;
+            height: 17px;
+            border-radius: 9999px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            background: #fff;
+            border: 1px solid rgba(107,114,128,.35);
+            font-size: 10px;
+            line-height: 1;
+            box-shadow: 0 1px 3px rgba(15,23,42,.12);
+        }
+        .quick-jump-total { background: #e0e7ff; color: #3730a3; }
+        .quick-jump-expired-old { background: #fee2e2; color: #991b1b; }
+        .quick-jump-expired-recent { background: #ffedd5; color: #9a3412; }
+        .quick-jump-urgent { background: #fecaca; color: #991b1b; }
+        .quick-jump-upcoming { background: #fef3c7; color: #92400e; }
+        .quick-jump-later { background: #dcfce7; color: #166534; }
+        .dark .quick-jump-total { background: #312e81; color: #c7d2fe; border-color: #4f46e5; }
+        .dark .quick-jump-expired-old { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
+        .dark .quick-jump-expired-recent { background: #7c2d12; color: #fed7aa; border-color: #9a3412; }
+        .dark .quick-jump-urgent { background: #7f1d1d; color: #fecaca; border-color: #dc2626; }
+        .dark .quick-jump-upcoming { background: #78350f; color: #fde68a; border-color: #92400e; }
+        .dark .quick-jump-later { background: #14532d; color: #bbf7d0; border-color: #166534; }
+        @media (max-width: 640px) {
+            .quick-jump-rail { right: max(3px, env(safe-area-inset-right)); gap: 5px; padding: 3px 3px 7px; }
+            .quick-jump-button { width: 36px; height: 36px; min-width: 36px; font-size: 12px; }
+            .quick-jump-main-count { font-size: 11px; }
+            .quick-jump-marker { width: 15px; height: 15px; font-size: 9px; top: -4px; right: -4px; }
+        }
         /* Bottom row for date and actions */
         .item-bottom-row {
             display: flex;
@@ -1791,6 +1872,14 @@
                     <p id="duplicateDateHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
                 </div>
                 <div>
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <label for="duplicateNotesInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes for the new item (optional)</label>
+                        <button type="button" id="useDefaultDuplicateNoteBtn" onclick="useDefaultDuplicateNote()" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex-shrink-0">Use standard note</button>
+                    </div>
+                    <textarea id="duplicateNotesInput" rows="3" maxlength="4000" placeholder="e.g. Arrived at 18:30" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm" style="font-size:16px; line-height:1.45; resize:vertical;"></textarea>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Enter a custom note here. Leave it blank for no note, or use the standard note to include the source item details.</p>
+                </div>
+                <div>
                     <label for="parentStateAction" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Parent item status will be updated to</label>
                     <div class="relative">
                         <select id="parentStateAction" class="w-full h-11 pl-3 pr-10 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border text-sm">
@@ -2090,6 +2179,9 @@
         </div>
     </div>
 
+    <!-- Floating status shortcuts: counts and first-item jumps for the current search/filter scope. -->
+    <div id="quickJumpRail" class="quick-jump-rail hidden" role="toolbar" aria-label="Quick jump to expiry status"></div>
+
     <!-- Floating scroll-to-top button -->
     <button id="floatingHomeBtn" type="button"
             class="fixed bottom-5 right-5 z-40 hidden w-11 h-11 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg border border-indigo-500/50 transition-all duration-200 opacity-0 translate-y-2"
@@ -2186,6 +2278,7 @@
         // DOM elements
         const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
+        const quickJumpRail = document.getElementById('quickJumpRail');
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const exitTestBtn = document.getElementById('exitTestBtn');
@@ -2246,6 +2339,7 @@
         const duplicateModalTitleEl = document.getElementById('duplicateModalTitle');
         const duplicateModalSubtitleEl = document.getElementById('duplicateModalSubtitle');
         const duplicateItemNameEl = document.getElementById('duplicateItemNameInput');
+        const duplicateNotesInputEl = document.getElementById('duplicateNotesInput');
         const duplicateOriginalDetailsEl = document.getElementById('duplicateOriginalDetails');
         const duplicateDateEl = document.getElementById('duplicateDate');
         const duplicateDateHintEl = document.getElementById('duplicateDateHint');
@@ -6488,6 +6582,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateModalTitleEl.textContent = 'Duplicate Item';
             duplicateModalSubtitleEl.textContent = 'Create a new item with the same reusable settings.';
             duplicateItemNameEl.value = item.name || '';
+            if (duplicateNotesInputEl) duplicateNotesInputEl.value = '';
             duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
             duplicateOriginalLabelEl.textContent = 'Original event';
             duplicateDateEl.value = getTodayDateString();
@@ -6502,6 +6597,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateModal.classList.remove('hidden');
             lockDuplicateModalScroll();
             setTimeout(() => duplicateItemNameEl.focus(), 50);
+        }
+
+        function getDefaultDuplicateNote(item, mode = duplicateMode) {
+            if (!item) return '';
+            if (mode === 'renew') {
+                return `Renewed from "${item.name}". Original expiration: ${formatDuplicateOriginalDetails(item).replace(/^Expiration: /, '')}`.slice(0, 500);
+            }
+            return buildDuplicateNotes(item);
+        }
+
+        function useDefaultDuplicateNote() {
+            const item = appData.items.find(existing => String(existing.id) === String(duplicatingItemId));
+            if (!item || !duplicateNotesInputEl) return;
+            duplicateNotesInputEl.value = getDefaultDuplicateNote(item, duplicateMode);
+            duplicateNotesInputEl.focus();
+            duplicateNotesInputEl.setSelectionRange(duplicateNotesInputEl.value.length, duplicateNotesInputEl.value.length);
         }
 
         function getItemCreationTimestamp(item) {
@@ -6869,6 +6980,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateModalTitleEl.textContent = 'Renew Item';
             duplicateModalSubtitleEl.textContent = 'Create the next independent event in this item chain.';
             duplicateItemNameEl.value = item.name || '';
+            if (duplicateNotesInputEl) duplicateNotesInputEl.value = '';
             duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
             duplicateOriginalLabelEl.textContent = 'Current event';
             duplicateDateHintEl.textContent = 'Suggested from the renewal interval. You can still change the date manually.';
@@ -6906,6 +7018,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateModal.classList.add('hidden');
             unlockDuplicateModalScroll();
             if (duplicateItemNameEl) duplicateItemNameEl.value = '';
+            if (duplicateNotesInputEl) duplicateNotesInputEl.value = '';
             if (duplicateDateEl) duplicateDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
@@ -6981,7 +7094,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         noExpiration: false,
                         time: hasTime ? item.time : '',
                         durationMinutes: hasTime ? (item.durationMinutes || 30) : 30,
-                        notes: isRenew ? `Renewed from "${item.name}". Original expiration: ${formatDuplicateOriginalDetails(item).replace(/^Expiration: /, '')}`.slice(0, 500) : buildDuplicateNotes(item),
+                        notes: String(duplicateNotesInputEl?.value || '').trim().slice(0, 4000),
                         tags: [...(item.tags || [])],
                         reminders: (item.reminders || []).map(r => ({ ...r })),
                         eventId: null,
@@ -7973,6 +8086,82 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }).join('');
         }
 
+        function getItemStatBucket(item) {
+            if (!item || !item.date || item.noExpiration) return 'noExpiry';
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const targetDate = getDateOnly(item.date);
+            const diffDays = Math.ceil((targetDate - today) / (1000 * 60 * 60 * 24));
+            if (diffDays < 0) return diffDays >= -7 ? 'expiredRecent' : 'expiredOld';
+            if (diffDays <= 7) return 'urgent';
+            if (diffDays <= 30) return 'upcoming';
+            return 'later';
+        }
+
+        function renderQuickJumpRail() {
+            if (!quickJumpRail) return;
+            const appIsVisible = appScreen && window.getComputedStyle(appScreen).display !== 'none';
+            if (!appIsVisible) {
+                quickJumpRail.classList.add('hidden');
+                return;
+            }
+            const baseItems = getBaseFilteredItems();
+            const stats = computeStats(baseItems);
+            const shortcuts = [
+                { key: 'all', label: 'Total', marker: '📦', count: stats.total, cssClass: 'quick-jump-total' },
+                { key: 'expiredOld', label: 'Expired more than 7 days ago', marker: '🔴', count: stats.expiredOld, cssClass: 'quick-jump-expired-old' },
+                { key: 'expiredRecent', label: 'Expired in the last 7 days', marker: '🟠', count: stats.expiredRecent, cssClass: 'quick-jump-expired-recent' },
+                { key: 'urgent', label: 'Expiring today through the next 7 days', marker: '🔔', count: stats.urgent, cssClass: 'quick-jump-urgent' },
+                { key: 'upcoming', label: 'Expiring in 8–30 days', marker: '🟡', count: stats.upcoming, cssClass: 'quick-jump-upcoming' },
+                { key: 'later', label: 'Expiring in more than 30 days', marker: '🟢', count: stats.later, cssClass: 'quick-jump-later' }
+            ];
+            quickJumpRail.innerHTML = shortcuts.map(shortcut => {
+                const disabled = shortcut.count === 0 ? 'disabled' : '';
+                const active = activeStatFilter === shortcut.key ? 'active' : '';
+                const title = `${shortcut.count} ${shortcut.count === 1 ? 'item' : 'items'} · ${shortcut.label} · Jump to first matching item`;
+                return `<button type="button" class="quick-jump-button ${shortcut.cssClass} ${active}" data-quick-jump="${shortcut.key}" onclick="jumpToStatFilter('${shortcut.key}')" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" ${disabled}>
+                    <span class="quick-jump-main-count" aria-hidden="true">${shortcut.count}</span>
+                    <span class="quick-jump-marker" aria-hidden="true">${shortcut.marker}</span>
+                </button>`;
+            }).join('');
+            quickJumpRail.classList.toggle('hidden', stats.total === 0);
+        }
+
+        function getItemsForStatBucket(items, key) {
+            if (key === 'all') return [...(items || [])];
+            return (items || []).filter(item => getItemStatBucket(item) === key);
+        }
+
+        function jumpToStatFilter(key) {
+            const baseItems = getBaseFilteredItems();
+            let targetItems = getItemsForStatBucket(baseItems, key);
+            if (!targetItems.length) {
+                showToast('No items in this status match your current search and filters.', 'info');
+                return;
+            }
+
+            const exactItemSearch = isExactItemIdSearch();
+            const chainMetadata = buildChainMetadata(appData.items || []);
+            if (chainViewMode === 'latest' && !exactItemSearch) {
+                targetItems = getVisibleLatestChainItems(targetItems, chainMetadata);
+            }
+            targetItems.sort((a, b) => {
+                if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                const comparison = compareItemsByDisplayDateAsc(a, b);
+                return itemSortDirection === 'desc' ? -comparison : comparison;
+            });
+            const targetItem = targetItems[0];
+            if (!targetItem) {
+                showToast('No visible item found for that status.', 'info');
+                return;
+            }
+
+            // Apply the selected status just like the filter chip, preserving all other filters.
+            activeStatFilter = key;
+            renderAll();
+            window.setTimeout(() => scrollToItemCard(targetItem.id), 80);
+        }
+
         function setStatFilter(key) {
             if (activeStatFilter === key) {
                 activeStatFilter = 'all';
@@ -8800,6 +8989,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function renderAll() { 
             renderCategoryChips(); 
             renderStatsBar();
+            renderQuickJumpRail();
             updateArchivedToggleUI();
             updateDoneToggleUI();
             updateFilterUI();
@@ -8905,6 +9095,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     localStorage.removeItem('expire_tokenExpiry');
                     landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                    if (quickJumpRail) quickJumpRail.classList.add('hidden');
                 }
             }
         }
@@ -9023,6 +9214,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const finishLogout = () => {
                 landingPage.style.display = 'flex';
                 document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
+                if (quickJumpRail) quickJumpRail.classList.add('hidden');
             };
 
             if (tokenToRevoke) {
