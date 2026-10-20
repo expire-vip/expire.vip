@@ -821,90 +821,138 @@
             opacity: 0.8;
         }
 
-        #floatingHomeBtn.is-visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        .quick-jump-rail {
+        /* A shared persistent toolbar keeps the same primary controls on desktop and mobile. */
+        #appScreen { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
+        .bottom-toolbar {
             position: fixed;
-            right: max(7px, env(safe-area-inset-right));
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 39;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 7px;
-            max-height: calc(100dvh - 1.5rem);
-            overflow-y: auto;
-            overflow-x: visible;
-            padding: 4px 4px 8px;
-            scrollbar-width: none;
+            inset-inline: 0;
+            bottom: 0;
+            z-index: 40;
+            display: none;
+            justify-content: center;
+            padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+            background: rgba(255,255,255,.94);
+            border-top: 1px solid rgba(148,163,184,.36);
+            box-shadow: 0 -5px 20px rgba(15,23,42,.08);
+            -webkit-backdrop-filter: blur(14px);
+            backdrop-filter: blur(14px);
         }
-        .quick-jump-rail::-webkit-scrollbar { display: none; }
+        .dark .bottom-toolbar {
+            background: rgba(17,24,39,.94);
+            border-top-color: rgba(75,85,99,.8);
+            box-shadow: 0 -5px 20px rgba(0,0,0,.22);
+        }
+        .bottom-toolbar-inner {
+            width: min(100%, 760px);
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .bottom-toolbar-button {
+            min-width: 0;
+            min-height: 48px;
+            padding: 6px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 13px;
+            background: #fff;
+            color: #374151;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 9px;
+            font-size: 14px;
+            font-weight: 650;
+            cursor: pointer;
+            transition: background .12s ease, border-color .12s ease, transform .12s ease;
+        }
+        .dark .bottom-toolbar-button { background: #1f2937; color: #f3f4f6; border-color: #374151; }
+        .bottom-toolbar-button:hover { background: #f3f4f6; }
+        .dark .bottom-toolbar-button:hover { background: #374151; }
+        .bottom-toolbar-button:active { transform: translateY(1px); }
+        .bottom-toolbar-button:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
+        .bottom-toolbar-button[aria-expanded="true"] { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+        .dark .bottom-toolbar-button[aria-expanded="true"] { background: #312e81; border-color: #6366f1; color: #e0e7ff; }
+        .bottom-toolbar-button:disabled { opacity: .45; cursor: not-allowed; }
+        .quick-jump-panel {
+            position: fixed;
+            left: 50%;
+            bottom: calc(76px + env(safe-area-inset-bottom));
+            transform: translateX(-50%);
+            z-index: 41;
+            width: min(calc(100vw - 20px), 760px);
+            max-height: min(56dvh, 490px);
+            overflow: auto;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 18px;
+            background: rgba(255,255,255,.98);
+            color: #111827;
+            box-shadow: 0 12px 35px rgba(15,23,42,.22);
+            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(18px);
+        }
+        .dark .quick-jump-panel { background: rgba(17,24,39,.98); color: #f9fafb; border-color: #374151; }
+        .quick-jump-panel.hidden { display: none !important; }
+        .quick-jump-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 2px 10px; }
+        .quick-jump-panel-title { font-size: 14px; font-weight: 750; letter-spacing: .01em; }
+        .quick-jump-panel-close { width: 32px; height: 32px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #6b7280; }
+        .quick-jump-panel-close:hover { background: #f3f4f6; color: #111827; }
+        .dark .quick-jump-panel-close:hover { background: #374151; color: #f9fafb; }
+        .quick-jump-rail {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
         .quick-jump-rail.hidden { display: none !important; }
         .quick-jump-button {
-            position: relative;
-            width: 42px;
-            height: 42px;
-            min-width: 42px;
-            border-radius: 9999px;
-            border: 1px solid rgba(255,255,255,.8);
-            box-shadow: 0 3px 10px rgba(15,23,42,.18);
-            display: inline-flex;
-            justify-content: center;
+            display: flex;
             align-items: center;
-            font-size: 14px;
+            gap: 10px;
+            min-width: 0;
+            min-height: 56px;
+            padding: 9px 11px;
+            text-align: left;
+            border: 1px solid rgba(107,114,128,.2);
+            border-radius: 13px;
             cursor: pointer;
             transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
         }
-        .quick-jump-button:hover:not(:disabled) { transform: scale(1.06); box-shadow: 0 5px 14px rgba(15,23,42,.24); }
+        .quick-jump-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,23,42,.12); }
         .quick-jump-button:focus-visible { outline: 3px solid #818cf8; outline-offset: 2px; }
-        .quick-jump-button:disabled { opacity: .38; cursor: not-allowed; box-shadow: none; }
-        .quick-jump-button.active { outline: 2px solid #4f46e5; outline-offset: 2px; }
-        .quick-jump-main-count {
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 12px;
-            line-height: 1;
-            font-weight: 800;
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-        }
-        .quick-jump-marker {
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            width: 17px;
-            height: 17px;
-            border-radius: 9999px;
-            display: inline-flex;
-            justify-content: center;
-            align-items: center;
-            background: #fff;
-            border: 1px solid rgba(107,114,128,.35);
-            font-size: 10px;
-            line-height: 1;
-            box-shadow: 0 1px 3px rgba(15,23,42,.12);
-        }
+        .quick-jump-button:disabled { opacity: .42; cursor: not-allowed; box-shadow: none; }
+        .quick-jump-button.active { outline: 2px solid #4f46e5; outline-offset: 1px; }
+        .quick-jump-marker { flex: 0 0 auto; font-size: 20px; line-height: 1; }
+        .quick-jump-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+        .quick-jump-label { font-size: 12px; line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
+        .quick-jump-count { font-size: 11px; line-height: 1.15; opacity: .78; font-variant-numeric: tabular-nums; }
         .quick-jump-total { background: #e0e7ff; color: #3730a3; }
         .quick-jump-expired-old { background: #fee2e2; color: #991b1b; }
         .quick-jump-expired-recent { background: #ffedd5; color: #9a3412; }
         .quick-jump-urgent { background: #fecaca; color: #991b1b; }
         .quick-jump-upcoming { background: #fef3c7; color: #92400e; }
         .quick-jump-later { background: #dcfce7; color: #166534; }
+        .quick-jump-no-expiry { background: #f3e8ff; color: #6b21a8; }
         .dark .quick-jump-total { background: #312e81; color: #c7d2fe; border-color: #4f46e5; }
         .dark .quick-jump-expired-old { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
         .dark .quick-jump-expired-recent { background: #7c2d12; color: #fed7aa; border-color: #9a3412; }
         .dark .quick-jump-urgent { background: #7f1d1d; color: #fecaca; border-color: #dc2626; }
         .dark .quick-jump-upcoming { background: #78350f; color: #fde68a; border-color: #92400e; }
         .dark .quick-jump-later { background: #14532d; color: #bbf7d0; border-color: #166534; }
-        @media (max-width: 640px) {
-            .quick-jump-rail { right: max(3px, env(safe-area-inset-right)); gap: 5px; padding: 3px 3px 7px; }
-            .quick-jump-button { width: 36px; height: 36px; min-width: 36px; font-size: 12px; }
-            .quick-jump-main-count { font-size: 11px; }
-            .quick-jump-marker { width: 15px; height: 15px; font-size: 9px; top: -4px; right: -4px; }
+        .dark .quick-jump-no-expiry { background: #581c87; color: #e9d5ff; border-color: #7e22ce; }
+        @media (min-width: 641px) {
+            .quick-jump-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .bottom-toolbar-button { min-height: 50px; }
+        }
+        @media (max-width: 400px) {
+            .bottom-toolbar { padding-inline: 7px; }
+            .bottom-toolbar-inner { gap: 6px; }
+            .bottom-toolbar-button { padding-inline: 5px; gap: 6px; font-size: 12px; }
+            .bottom-toolbar-button i { font-size: 14px; }
+            .quick-jump-panel { padding: 9px; width: calc(100vw - 14px); }
+            .quick-jump-rail { gap: 6px; }
+            .quick-jump-button { min-height: 52px; padding: 8px; gap: 7px; }
+            .quick-jump-label { font-size: 11px; }
+            .quick-jump-marker { font-size: 18px; }
         }
         /* Bottom row for date and actions */
         .item-bottom-row {
@@ -2179,15 +2227,30 @@
         </div>
     </div>
 
-    <!-- Floating status shortcuts: counts and first-item jumps for the current search/filter scope. -->
-    <div id="quickJumpRail" class="quick-jump-rail hidden" role="toolbar" aria-label="Quick jump to expiry status"></div>
+    <!-- Shared quick-jump panel and persistent toolbar (same controls on desktop and mobile). -->
+    <section id="quickJumpPanel" class="quick-jump-panel hidden" aria-label="Quick jump to items" aria-hidden="true">
+        <div class="quick-jump-panel-header">
+            <h2 class="quick-jump-panel-title">Quick jumps</h2>
+            <button id="quickJumpPanelClose" type="button" class="quick-jump-panel-close" title="Close quick jumps" aria-label="Close quick jumps">
+                <i class="fas fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+        <div id="quickJumpRail" class="quick-jump-rail" role="toolbar" aria-label="Jump to expiry status"></div>
+    </section>
 
-    <!-- Floating scroll-to-top button -->
-    <button id="floatingHomeBtn" type="button"
-            class="fixed bottom-5 right-5 z-40 hidden w-11 h-11 items-center justify-center rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg border border-indigo-500/50 transition-all duration-200 opacity-0 translate-y-2"
-            title="Go to top" aria-label="Go to top">
-        <i class="fas fa-arrow-up text-sm" aria-hidden="true"></i>
-    </button>
+    <nav id="bottomToolbar" class="bottom-toolbar" aria-label="Quick navigation">
+        <div class="bottom-toolbar-inner">
+            <button id="toolbarSearchBtn" type="button" class="bottom-toolbar-button" title="Search items" aria-label="Search items">
+                <i class="fas fa-search" aria-hidden="true"></i><span>Search</span>
+            </button>
+            <button id="toolbarQuickJumpsBtn" type="button" class="bottom-toolbar-button" title="Show quick jumps" aria-label="Show quick jumps" aria-expanded="false" aria-controls="quickJumpPanel">
+                <i class="fas fa-bolt" aria-hidden="true"></i><span>Quick jumps</span>
+            </button>
+            <button id="toolbarHomeBtn" type="button" class="bottom-toolbar-button" title="Go to top" aria-label="Go to top">
+                <i class="fas fa-arrow-up" aria-hidden="true"></i><span>Home</span>
+            </button>
+        </div>
+    </nav>
 
     <div id="loadingOverlay"
          class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-[20000] flex items-center justify-center">
@@ -2279,6 +2342,12 @@
         const landingPage = document.getElementById('landingPage');
         const appScreen = document.getElementById('appScreen');
         const quickJumpRail = document.getElementById('quickJumpRail');
+        const quickJumpPanel = document.getElementById('quickJumpPanel');
+        const bottomToolbar = document.getElementById('bottomToolbar');
+        const toolbarSearchBtn = document.getElementById('toolbarSearchBtn');
+        const toolbarQuickJumpsBtn = document.getElementById('toolbarQuickJumpsBtn');
+        const toolbarHomeBtn = document.getElementById('toolbarHomeBtn');
+        const quickJumpPanelClose = document.getElementById('quickJumpPanelClose');
         const loginBtn = document.getElementById('loginBtn');
         const logoutBtn = document.getElementById('logoutBtn');
         const exitTestBtn = document.getElementById('exitTestBtn');
@@ -8103,28 +8172,32 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             const appIsVisible = appScreen && window.getComputedStyle(appScreen).display !== 'none';
             if (!appIsVisible) {
                 quickJumpRail.classList.add('hidden');
+                closeQuickJumpPanel();
                 return;
             }
             const baseItems = getBaseFilteredItems();
             const stats = computeStats(baseItems);
             const shortcuts = [
-                { key: 'all', label: 'Total', marker: '📦', count: stats.total, cssClass: 'quick-jump-total' },
-                { key: 'expiredOld', label: 'Expired more than 7 days ago', marker: '🔴', count: stats.expiredOld, cssClass: 'quick-jump-expired-old' },
+                { key: 'all', label: 'Total items', marker: '📦', count: stats.total, cssClass: 'quick-jump-total' },
+                { key: 'expiredOld', label: 'Expired more than 7 days', marker: '🔴', count: stats.expiredOld, cssClass: 'quick-jump-expired-old' },
                 { key: 'expiredRecent', label: 'Expired in the last 7 days', marker: '🟠', count: stats.expiredRecent, cssClass: 'quick-jump-expired-recent' },
-                { key: 'urgent', label: 'Expiring today through the next 7 days', marker: '🔔', count: stats.urgent, cssClass: 'quick-jump-urgent' },
-                { key: 'upcoming', label: 'Expiring in 8–30 days', marker: '🟡', count: stats.upcoming, cssClass: 'quick-jump-upcoming' },
-                { key: 'later', label: 'Expiring in more than 30 days', marker: '🟢', count: stats.later, cssClass: 'quick-jump-later' }
+                { key: 'urgent', label: 'Urgent · today to 7 days', marker: '🔔', count: stats.urgent, cssClass: 'quick-jump-urgent' },
+                { key: 'upcoming', label: 'Upcoming · 8–30 days', marker: '🟡', count: stats.upcoming, cssClass: 'quick-jump-upcoming' },
+                { key: 'later', label: 'Later · over 30 days', marker: '🟢', count: stats.later, cssClass: 'quick-jump-later' },
+                { key: 'noExpiry', label: 'No expiration date', marker: '♾️', count: stats.noExpiry, cssClass: 'quick-jump-no-expiry' }
             ];
             quickJumpRail.innerHTML = shortcuts.map(shortcut => {
                 const disabled = shortcut.count === 0 ? 'disabled' : '';
                 const active = activeStatFilter === shortcut.key ? 'active' : '';
                 const title = `${shortcut.count} ${shortcut.count === 1 ? 'item' : 'items'} · ${shortcut.label} · Jump to first matching item`;
                 return `<button type="button" class="quick-jump-button ${shortcut.cssClass} ${active}" data-quick-jump="${shortcut.key}" onclick="jumpToStatFilter('${shortcut.key}')" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}" ${disabled}>
-                    <span class="quick-jump-main-count" aria-hidden="true">${shortcut.count}</span>
                     <span class="quick-jump-marker" aria-hidden="true">${shortcut.marker}</span>
+                    <span class="quick-jump-copy"><span class="quick-jump-label">${escapeHtml(shortcut.label)}</span><span class="quick-jump-count">${shortcut.count} ${shortcut.count === 1 ? 'item' : 'items'}</span></span>
                 </button>`;
             }).join('');
             quickJumpRail.classList.toggle('hidden', stats.total === 0);
+            if (toolbarQuickJumpsBtn) toolbarQuickJumpsBtn.disabled = stats.total === 0;
+            if (stats.total === 0) closeQuickJumpPanel();
         }
 
         function getItemsForStatBucket(items, key) {
@@ -8133,6 +8206,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function jumpToStatFilter(key) {
+            closeQuickJumpPanel();
             const baseItems = getBaseFilteredItems();
             let targetItems = getItemsForStatBucket(baseItems, key);
             if (!targetItems.length) {
@@ -9018,6 +9092,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             updateViewModeUI();
             updateSearchUI();
             renderAll();
+            updateBottomToolbarVisibility();
             // Update sync status if we have a valid token
             if (accessToken && Date.now() < tokenExpiry) {
                 syncStatus.textContent = '✅ Connected';
@@ -9096,6 +9171,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     landingPage.style.display = 'flex';
                     document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
                     if (quickJumpRail) quickJumpRail.classList.add('hidden');
+                    closeQuickJumpPanel();
+                    updateBottomToolbarVisibility();
                 }
             }
         }
@@ -9215,6 +9292,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 landingPage.style.display = 'flex';
                 document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'none');
                 if (quickJumpRail) quickJumpRail.classList.add('hidden');
+                closeQuickJumpPanel();
+                updateBottomToolbarVisibility();
             };
 
             if (tokenToRevoke) {
@@ -9422,6 +9501,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         // Close modals with Escape key
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                closeQuickJumpPanel();
                 tryCloseItemModal();
                 closeSettings();
                 if (duplicatePickerModal && !duplicatePickerModal.classList.contains('hidden')) closeDuplicatePicker();
@@ -9430,9 +9510,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         });
 
-        // ---------- PAGE NAVIGATION ----------
+        // ---------- SHARED BOTTOM TOOLBAR ----------
         const homeTitleBtn = document.getElementById('homeTitleBtn');
-        const floatingHomeBtn = document.getElementById('floatingHomeBtn');
 
         if (homeTitleBtn) {
             homeTitleBtn.addEventListener('click', () => {
@@ -9440,21 +9519,71 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             });
         }
 
-        function updateFloatingHomeButton() {
-            if (!floatingHomeBtn) return;
-            const shouldShow = window.scrollY > 450;
-            floatingHomeBtn.classList.toggle('hidden', !shouldShow);
-            floatingHomeBtn.classList.toggle('flex', shouldShow);
-            floatingHomeBtn.classList.toggle('is-visible', shouldShow);
+        function updateBottomToolbarVisibility() {
+            if (!bottomToolbar) return;
+            const appIsVisible = appScreen && window.getComputedStyle(appScreen).display !== 'none';
+            bottomToolbar.style.display = appIsVisible ? 'flex' : 'none';
+            if (!appIsVisible) closeQuickJumpPanel();
         }
 
-        if (floatingHomeBtn) {
-            floatingHomeBtn.addEventListener('click', () => {
+        function closeQuickJumpPanel() {
+            if (quickJumpPanel) {
+                quickJumpPanel.classList.add('hidden');
+                quickJumpPanel.setAttribute('aria-hidden', 'true');
+            }
+            if (toolbarQuickJumpsBtn) {
+                toolbarQuickJumpsBtn.setAttribute('aria-expanded', 'false');
+                toolbarQuickJumpsBtn.setAttribute('title', 'Show quick jumps');
+                toolbarQuickJumpsBtn.setAttribute('aria-label', 'Show quick jumps');
+            }
+        }
+
+        function setQuickJumpPanelOpen(shouldOpen) {
+            if (!quickJumpPanel || !toolbarQuickJumpsBtn) return;
+            const open = !!shouldOpen;
+            quickJumpPanel.classList.toggle('hidden', !open);
+            quickJumpPanel.setAttribute('aria-hidden', open ? 'false' : 'true');
+            toolbarQuickJumpsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            toolbarQuickJumpsBtn.setAttribute('title', open ? 'Hide quick jumps' : 'Show quick jumps');
+            toolbarQuickJumpsBtn.setAttribute('aria-label', open ? 'Hide quick jumps' : 'Show quick jumps');
+        }
+
+        if (toolbarSearchBtn) {
+            toolbarSearchBtn.addEventListener('click', () => {
+                closeQuickJumpPanel();
+                const searchInput = document.getElementById('searchInput');
+                if (!searchInput) return;
+                searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Focus synchronously inside the tap/click event so iOS Safari is more likely to open the keyboard.
+                try { searchInput.focus({ preventScroll: true }); }
+                catch (_) { searchInput.focus(); }
+            });
+        }
+
+        if (toolbarQuickJumpsBtn) {
+            toolbarQuickJumpsBtn.addEventListener('click', () => {
+                const currentlyOpen = quickJumpPanel && !quickJumpPanel.classList.contains('hidden');
+                if (currentlyOpen) closeQuickJumpPanel();
+                else {
+                    renderQuickJumpRail();
+                    if (quickJumpRail && !quickJumpRail.classList.contains('hidden')) setQuickJumpPanelOpen(true);
+                }
+            });
+        }
+
+        if (quickJumpPanelClose) quickJumpPanelClose.addEventListener('click', closeQuickJumpPanel);
+        if (toolbarHomeBtn) {
+            toolbarHomeBtn.addEventListener('click', () => {
+                closeQuickJumpPanel();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             });
-            window.addEventListener('scroll', updateFloatingHomeButton, { passive: true });
-            updateFloatingHomeButton();
         }
+
+        document.addEventListener('pointerdown', (event) => {
+            if (!quickJumpPanel || quickJumpPanel.classList.contains('hidden')) return;
+            if (quickJumpPanel.contains(event.target) || (toolbarQuickJumpsBtn && toolbarQuickJumpsBtn.contains(event.target))) return;
+            closeQuickJumpPanel();
+        });
 
         console.log('ℹ️ To test without login, call enableTestMode() in the console.');
     </script>
