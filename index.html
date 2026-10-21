@@ -823,6 +823,9 @@
 
         /* A shared persistent toolbar keeps the same primary controls on desktop and mobile. */
         #appScreen { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
+        #appScreen > .app-container > footer { padding-bottom: calc(1.25rem + 88px + env(safe-area-inset-bottom)); }
+        .header-account-status { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }
+        .header-account-status #syncStatus { margin-top:0; text-align:right; max-width:180px; }
         .bottom-toolbar {
             position: fixed;
             inset-inline: 0;
@@ -1453,7 +1456,6 @@
         <header class="bg-indigo-600 dark:bg-indigo-800 text-white p-5 shadow-md flex justify-between items-center rounded-b-xl">
             <div class="min-w-0">
                 <button id="homeTitleBtn" type="button" class="text-2xl font-bold tracking-tight cursor-pointer hover:opacity-90 transition-opacity text-left" title="Refresh Expire.vip">📅 Expire.vip</button>
-                <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs mt-1 hidden-auth">Connected</p>
                 <div id="accountEmailWrap" class="hidden-auth items-center gap-1.5 text-xs text-white/90 mt-1" title="Signed-in Google account">
                     <i class="fas fa-user-circle text-[11px] opacity-80" aria-hidden="true"></i>
                     <span id="accountEmailDisplay" class="max-w-[180px] truncate">—</span>
@@ -1469,15 +1471,13 @@
                     <i class="fab fa-github text-lg" aria-hidden="true"></i>
                     <span class="sr-only">GitHub Repo for the expire.vip page</span>
                 </a>
-                <button id="logoutBtn" class="bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded hidden-auth">Logout</button>
-                <button id="exitTestBtn" class="bg-amber-500 hover:bg-amber-600 text-xs px-3 py-1 rounded" style="display:none;">Exit Test Mode</button>
+                <div class="header-account-status">
+                    <button id="logoutBtn" class="bg-indigo-500 hover:bg-indigo-700 text-xs px-3 py-1 rounded hidden-auth">Logout</button>
+                    <button id="exitTestBtn" class="bg-amber-500 hover:bg-amber-600 text-xs px-3 py-1 rounded" style="display:none;">Exit Test Mode</button>
+                    <p id="syncStatus" class="text-indigo-200 dark:text-indigo-300 text-xs hidden-auth">Connected</p>
+                </div>
             </div>
         </header>
-
-        <!-- Reminder info banner (always visible after login / test) -->
-        <div id="reminderBanner" class="hidden-auth text-xs bg-indigo-50 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 p-3 text-center border-b border-indigo-100 dark:border-indigo-800">
-            ⏰ Default reminders: 4 weeks & 1 week before expiry (email)
-        </div>
 
         <!-- Test mode banner -->
         <div id="testBanner" class="hidden-auth bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-200 text-center p-3 text-sm font-medium border-b border-amber-200 dark:border-amber-800">
@@ -1644,10 +1644,6 @@
 
         <!-- Footer -->
         <footer class="p-5 mt-auto border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 text-center">
-            <button id="footerHomeBtn" type="button" onclick="window.scrollTo({top:0,behavior:'smooth'})" class="back-to-top inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-50 dark:hover:bg-gray-600 transition duration-200 mb-4" title="Go to top">
-                <i class="fas fa-home text-sm" aria-hidden="true"></i>
-                <span>Home</span>
-            </button>
             <div class="text-xs text-gray-400 dark:text-gray-500 flex justify-center items-center gap-2">
                 <span>&copy; 2026 Expire.vip</span>
                 <span>&bull;</span>
@@ -2353,7 +2349,6 @@
         const exitTestBtn = document.getElementById('exitTestBtn');
         const syncStatus = document.getElementById('syncStatus');
         const itemsList = document.getElementById('itemsList');
-        const reminderBanner = document.getElementById('reminderBanner');
         const testBanner = document.getElementById('testBanner');
         const addItemBtn = document.getElementById('addItemBtn');
         const duplicateItemBtn = document.getElementById('duplicateItemBtn');
@@ -9084,7 +9079,6 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             document.querySelectorAll('.hidden-auth').forEach(el => el.style.display = 'block');
             if (isTestMode) { testBanner.style.display = 'block'; exitTestBtn.style.display = 'inline-block'; logoutBtn.style.display = 'none'; settingsBtn.style.display = 'block'; }
             else { testBanner.style.display = 'none'; exitTestBtn.style.display = 'none'; logoutBtn.style.display = 'inline-block'; settingsBtn.style.display = 'block'; }
-            reminderBanner.style.display = 'block';
             updateAccountEmailUI();
             restoreSearchQuery();
             updateArchivedToggleUI();
