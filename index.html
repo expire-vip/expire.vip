@@ -823,7 +823,35 @@
 
         /* A shared persistent toolbar keeps the same primary controls on desktop and mobile. */
         #appScreen { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
-        #appScreen > .app-container > footer { padding-bottom: calc(1.25rem + 88px + env(safe-area-inset-bottom)); }
+        /* Keep the footer itself completely above the fixed toolbar. Extra space is
+           outside the footer so the copyright/privacy line can never sit behind it. */
+        .app-container > footer {
+            padding-bottom: 1.25rem !important;
+            margin-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+        }
+        #searchInput { scroll-margin-top: 8px; }
+        .search-controls-row { display:flex; align-items:flex-start; gap:0.5rem; }
+        .search-input-wrap { position:relative; flex:1; min-width:0; }
+        .search-result-count { flex:0 0 auto; min-width:3.5rem; max-width:6.5rem; padding:0.65rem 0.45rem; border:1px solid #e5e7eb; border-radius:0.75rem; color:#6b7280; background:#f9fafb; text-align:center; font-size:0.72rem; line-height:1.2; font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+        .dark .search-result-count { border-color:#374151; color:#d1d5db; background:#1f2937; }
+        .search-suggestions { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60; overflow:hidden; border:1px solid #d1d5db; border-radius:0.9rem; background:#fff; color:#111827; box-shadow:0 12px 28px rgba(15,23,42,.18); }
+        .dark .search-suggestions { border-color:#4b5563; background:#1f2937; color:#f9fafb; }
+        .search-suggestions.hidden { display:none !important; }
+        .search-suggestions-heading { padding:0.45rem 0.7rem; font-size:0.68rem; font-weight:750; color:#6b7280; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+        .dark .search-suggestions-heading { color:#9ca3af; background:#111827; border-color:#374151; }
+        .search-suggestion { display:block; width:100%; padding:0.65rem 0.75rem; text-align:left; border:0; border-bottom:1px solid #f3f4f6; background:transparent; cursor:pointer; }
+        .search-suggestion:last-child { border-bottom:0; }
+        .search-suggestion:hover, .search-suggestion:focus-visible { background:#eef2ff; outline:none; }
+        .dark .search-suggestion { border-color:#374151; }
+        .dark .search-suggestion:hover, .dark .search-suggestion:focus-visible { background:#312e81; }
+        .search-suggestion-name { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.82rem; font-weight:650; }
+        .search-suggestion-meta { display:block; margin-top:0.15rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#6b7280; font-size:0.7rem; }
+        .dark .search-suggestion-meta { color:#9ca3af; }
+        .search-suggestions-empty { padding:0.7rem; color:#6b7280; font-size:0.78rem; }
+        @media (max-width:380px) { .search-result-count { min-width:3rem; padding-inline:0.3rem; font-size:0.67rem; } }
         .header-account-status { display:flex; flex-direction:column; align-items:flex-end; gap:3px; min-width:0; }
         .header-account-status #syncStatus { margin-top:0; text-align:right; max-width:180px; }
         .bottom-toolbar {
@@ -1558,13 +1586,17 @@
             <!-- DASHBOARD APP (Hidden initially, shown after login / test) -->
             <div id="appScreen" class="hidden-auth">
                 <!-- Search -->
-                <div class="relative mb-3">
-                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
-                    <input type="text" id="searchInput" placeholder="Search items..." autocomplete="off"
-                           class="w-full pl-10 pr-11 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500">
-                    <button type="button" id="searchClearBtn" class="search-clear-btn" title="Clear search" aria-label="Clear search">
-                        <i class="fas fa-times text-sm"></i>
-                    </button>
+                <div class="search-controls-row relative mb-3">
+                    <div class="search-input-wrap">
+                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"></i>
+                        <input type="text" id="searchInput" placeholder="Search items..." autocomplete="off" aria-controls="searchSuggestions" aria-autocomplete="list"
+                               class="w-full pl-10 pr-11 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500">
+                        <button type="button" id="searchClearBtn" class="search-clear-btn" title="Clear search" aria-label="Clear search">
+                            <i class="fas fa-times text-sm"></i>
+                        </button>
+                        <div id="searchSuggestions" class="search-suggestions hidden" role="listbox" aria-label="Top matching items"></div>
+                    </div>
+                    <div id="searchResultCount" class="search-result-count" aria-live="polite" aria-atomic="true">All items</div>
                 </div>
 
                 <!-- Primary create actions -->
@@ -7938,6 +7970,45 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
+        function updateSearchSuggestions() {
+            const input = document.getElementById('searchInput');
+            const panel = document.getElementById('searchSuggestions');
+            const countEl = document.getElementById('searchResultCount');
+            if (!input || !panel || !countEl) return;
+            const queryText = input.value.trim();
+            let matches = filterItems();
+            const chainMetadata = buildChainMetadata(appData.items || []);
+            if (chainViewMode === 'latest' && !isExactItemIdSearch()) {
+                matches = getVisibleLatestChainItems(matches, chainMetadata);
+            }
+            matches = [...matches].sort((a, b) => {
+                if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+                const comparison = compareItemsByDisplayDateAsc(a, b);
+                return itemSortDirection === 'desc' ? -comparison : comparison;
+            });
+            countEl.textContent = queryText ? `${matches.length} ${matches.length === 1 ? 'match' : 'matches'}` : `${matches.length} items`;
+            countEl.title = queryText ? `${matches.length} matching items with current filters` : `${matches.length} items in the current view`;
+            if (!queryText) {
+                panel.classList.add('hidden');
+                panel.innerHTML = '';
+                input.setAttribute('aria-expanded', 'false');
+                return;
+            }
+            const topMatches = matches.slice(0, 5);
+            const header = `<div class="search-suggestions-heading">Top matches · ${matches.length} total</div>`;
+            const rows = topMatches.map(item => {
+                const detail = [item.category || 'Other', item.date && !item.noExpiration ? item.date : 'No expiry date', item.done ? 'Done' : '', item.archived ? 'Archived' : ''].filter(Boolean).join(' · ');
+                return `<button type="button" class="search-suggestion" role="option" data-search-suggestion-id="${escapeHtml(item.id)}">
+                    <span class="search-suggestion-name">${escapeHtml(item.name || 'Untitled item')}</span>
+                    <span class="search-suggestion-meta">${escapeHtml(detail)}</span>
+                </button>`;
+            }).join('');
+            const empty = `<div class="search-suggestions-empty">No matching items</div>`;
+            panel.innerHTML = header + (rows || empty);
+            panel.classList.remove('hidden');
+            input.setAttribute('aria-expanded', 'true');
+        }
+
         function persistSearchQuery(value) {
             const query = String(value || '');
             if (query.trim()) localStorage.setItem('expire_searchQuery', query);
@@ -9065,6 +9136,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             updateSearchUI();
             updateViewModeUI();
             renderItems();
+            updateSearchSuggestions();
             if (historyModalItemId && itemHistoryModal && !itemHistoryModal.classList.contains('hidden')) {
                 const historyItem = appData.items.find(i => i.id === historyModalItemId);
                 if (historyItem) {
@@ -9393,6 +9465,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             updateSearchUI();
             renderAll();
         });
+        searchInputEl.addEventListener('focus', () => updateSearchSuggestions());
+        const searchSuggestionsEl = document.getElementById('searchSuggestions');
+        if (searchSuggestionsEl) searchSuggestionsEl.addEventListener('click', (event) => {
+            const option = event.target.closest('[data-search-suggestion-id]');
+            if (!option) return;
+            const itemId = option.getAttribute('data-search-suggestion-id');
+            // Exact ID search reliably opens the selected item even if other filters are active.
+            searchInputEl.value = itemId;
+            persistSearchQuery(itemId);
+            updateSearchUI();
+            renderAll();
+            updateSearchSuggestions();
+            searchSuggestionsEl.classList.add('hidden');
+            searchInputEl.setAttribute('aria-expanded', 'false');
+            searchInputEl.blur();
+            requestAnimationFrame(() => scrollToItemCard(itemId));
+        });
         searchInputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && searchInputEl.value) {
                 e.preventDefault();
@@ -9400,6 +9489,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         });
         updateSearchUI();
+        updateSearchSuggestions();
         updateFilterUI();
         updateViewModeUI();
         updateListOrderingUI();
@@ -9547,10 +9637,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 closeQuickJumpPanel();
                 const searchInput = document.getElementById('searchInput');
                 if (!searchInput) return;
-                searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 // Focus synchronously inside the tap/click event so iOS Safari is more likely to open the keyboard.
                 try { searchInput.focus({ preventScroll: true }); }
                 catch (_) { searchInput.focus(); }
+                // Re-align after the mobile keyboard changes the visual viewport.
+                window.setTimeout(() => searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220);
             });
         }
 
