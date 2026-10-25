@@ -3542,20 +3542,35 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     return;
                 }
 
-                const doc = await downloadHistoryDocument(meta.id);
-                const check = await getHistoryFileMetadata(meta.id);
-                if (!check || check.modifiedTime !== meta.modifiedTime) {
-                    continue;
+                // Fast path: if our in-memory state already matches what Drive
+                // reports, we can skip downloading the (potentially large) history
+                // file. This turns a 4-round-trip save into a 2-round-trip save
+                // and is the main reason history saves were slow once the file
+                // grew. On failure we invalidate the cache and fall through to
+                // the full read-verify-retry cycle below.
+                let baseEntries;
+                if (historyLoaded && Array.isArray(historyEntries) && historyDriveFileId === meta.id && historyModifiedTime === meta.modifiedTime) {
+                    baseEntries = historyEntries;
+                } else {
+                    const doc = await downloadHistoryDocument(meta.id);
+                    const check = await getHistoryFileMetadata(meta.id);
+                    if (!check || check.modifiedTime !== meta.modifiedTime) {
+                        continue;
+                    }
+                    baseEntries = doc.entries;
                 }
-                const merged = mergeHistoryEntries(doc.entries, pending);
+                const merged = mergeHistoryEntries(baseEntries, pending);
                 try {
                     const saved = await uploadHistoryDocument(meta.id, { version: 1, entries: merged });
                     historyDriveFileId = meta.id;
                     historyEntries = merged;
-                    historyModifiedTime = saved.modifiedTime || check.modifiedTime || '';
+                    historyModifiedTime = saved.modifiedTime || meta.modifiedTime || '';
                     historyLoaded = true;
                     return;
                 } catch (error) {
+                    // Invalidate the cache so the next attempt re-reads from Drive.
+                    historyLoaded = false;
+                    historyDriveFileId = null;
                     if (attempt === 3) throw error;
                 }
             }
@@ -3801,6 +3816,20 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
         function getItemHistoryCount(itemId) {
             return historyEntriesForItem(itemId).length;
+        }
+
+        // Build a Map<itemId, count> in a single pass. Used by renderItems() so
+        // the per-item history badge does not re-filter the whole history array
+        // twice for every item on every render (which becomes visible on lists
+        // with many items once history has grown).
+        function getItemHistoryCounts() {
+            const counts = new Map();
+            (historyEntries || []).forEach(entry => {
+                if (entry && entry.itemId) {
+                    counts.set(entry.itemId, (counts.get(entry.itemId) || 0) + 1);
+                }
+            });
+            return counts;
         }
 
         function renderHistoryChange(key, change, entryIndex, changeIndex) {
@@ -8712,6 +8741,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 filtered = grouped;
             }
 
+            const historyCounts = getItemHistoryCounts();
             itemsList.innerHTML = filtered.map(item => {
                 const rootId = getLineageRootId(item, chainMetadata.byId);
                 const isExpandedChainMember = expandedChains.has(rootId);
@@ -8885,7 +8915,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                          class="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition relative" 
                                          title="History" aria-label="Item history">
                                     <i class="fas fa-clock-rotate-left text-base"></i>
-                                    ${getItemHistoryCount(item.id) > 0 ? `<span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[8px] leading-[14px] text-center font-bold">${Math.min(getItemHistoryCount(item.id), 99)}</span>` : ''}
+                                    ${(historyCounts.get(item.id) || 0) > 0 ? `<span class="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-indigo-600 text-white text-[8px] leading-[14px] text-center font-bold">${Math.min(historyCounts.get(item.id) || 0, 99)}</span>` : ''}
                                 </button>
                                 <details class="item-more-actions" aria-label="More item actions">
                                     <summary title="More actions" aria-label="More actions">
