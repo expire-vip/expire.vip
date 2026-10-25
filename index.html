@@ -2508,6 +2508,17 @@ function requestGoogleToken({ prompt = '', loginHint = '' } = {}) {
         return Promise.reject(new Error('Google authentication is not ready yet.'));
     }
 
+    // Reject any pending request before starting a new one. Without this, if two
+    // operations trigger a refresh at the same time, the first caller's promise
+    // is orphaned (its resolve/reject get overwritten) and it hangs forever,
+    // leaving its withLoading() spinner stuck on screen.
+    if (pendingTokenReject) {
+        const superseded = pendingTokenReject;
+        pendingTokenResolve = null;
+        pendingTokenReject = null;
+        try { superseded(new Error('Superseded by a newer token request')); } catch (_) { /* ignore */ }
+    }
+
     return new Promise((resolve, reject) => {
         pendingTokenResolve = resolve;
         pendingTokenReject = reject;
@@ -2608,10 +2619,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         accessToken = null;
         tokenExpiry = 0;
 
-        const loginHint = localStorage.getItem('expire_googleEmail') || '';
         try {
-            await requestGoogleToken({ prompt: '', loginHint });
+            // Go through ensureValidToken so concurrent silent refreshes are
+            // deduplicated via silentRefreshPromise instead of racing each
+            // other and orphaning whichever promise loses.
+            await ensureValidToken();
         } catch (silentError) {
+            const loginHint = localStorage.getItem('expire_googleEmail') || '';
             await requestGoogleToken({ prompt: 'consent', loginHint });
         }
 
@@ -3564,8 +3578,18 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     const saved = await uploadHistoryDocument(meta.id, { version: 1, entries: merged });
                     historyDriveFileId = meta.id;
                     historyEntries = merged;
-                    historyModifiedTime = saved.modifiedTime || meta.modifiedTime || '';
-                    historyLoaded = true;
+                    // Use ONLY the freshly returned modifiedTime. Falling back to
+                    // meta.modifiedTime (which is pre-upload) would cache a stale
+                    // value and force a full re-download+re-upload on the next save.
+                    // If Drive ever omits modifiedTime in the response we invalidate
+                    // the cache so the next attempt reads fresh data.
+                    historyModifiedTime = saved.modifiedTime || '';
+                    if (!historyModifiedTime) {
+                        historyLoaded = false;
+                        historyDriveFileId = null;
+                    } else {
+                        historyLoaded = true;
+                    }
                     return;
                 } catch (error) {
                     // Invalidate the cache so the next attempt re-reads from Drive.
@@ -6255,11 +6279,21 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (isTestMode || !accessToken || !driveFileId) return true;
             const checkLatest = async () => {
                 try {
-                    await loadFromCloud();
+                    // Race the metadata check against a timeout so a stalled
+                    // token refresh or network request cannot leave the spinner
+                    // stuck on screen forever. 60 s is well above a typical
+                    // metadata round-trip, so this only fires on genuine hangs.
+                    await Promise.race([
+                        loadFromCloud(),
+                        new Promise((_, reject) => setTimeout(
+                            () => reject(new Error('Timed out waiting for Google Drive. Please check your connection and try again.')),
+                            60000
+                        ))
+                    ]);
                     return true;
                 } catch (error) {
                     console.error(`Failed to get latest cloud data before ${actionLabel}:`, error);
-                    toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
+                    toastError(`Could not get the latest version before ${actionLabel}: ${error?.message || error}`);
                     return false;
                 }
             };
