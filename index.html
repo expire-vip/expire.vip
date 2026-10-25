@@ -7064,9 +7064,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
             closeDuplicatePicker();
-            // Do NOT hijack the search box. Just try to scroll to the item in the
-            // current view; if it is filtered out, tell the user.
-            window.setTimeout(() => scrollToItemCard(item.id), 80);
+            searchForItemId(item.id, false);
         }
 
         function selectDuplicatePickerItem(itemId, action = 'duplicate') {
@@ -7276,7 +7274,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                     closeDuplicateModal();
                 });
-                if (newItem?.id) window.setTimeout(() => scrollToItemCard(newItem.id), 80);
+                if (newItem?.id) searchForItemId(newItem.id);
                 toastSuccess(isRenew
                     ? (resolvedParentAction === 'done' ? 'Renewed item created; previous item marked done.' : 'Renewed item created.')
                     : (resolvedParentAction === 'done' ? 'Duplicate created; previous item marked done.' : 'Duplicate created.'));
@@ -7801,7 +7799,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             if (document.getElementById('itemModal').classList.contains('hidden')) {
                 if (!wasEditing && newlyCreatedItemId) {
-                    window.setTimeout(() => scrollToItemCard(newlyCreatedItemId), 80);
+                    searchForItemId(newlyCreatedItemId);
                 }
                 showToast(wasEditing ? 'Updated.' : 'Added.');
             }
@@ -8023,10 +8021,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     item.done ? 'Done' : '',
                     item.archived ? 'Archived' : ''
                 ].filter(Boolean).join(' · ');
-                const displayId = getDisplayItemId(item.id);
                 return `<button type="button" class="search-suggestion" role="option" data-search-suggestion-id="${escapeHtml(item.id)}">
                     <span class="search-suggestion-name">${escapeHtml(item.name || 'Untitled item')}</span>
-                    <span class="search-suggestion-meta">${escapeHtml(detail)} · ID ${escapeHtml(displayId)}</span>
+                    <span class="search-suggestion-meta">${escapeHtml(detail)}</span>
                 </button>`;
             }).join('');
             const empty = `<div class="search-suggestions-empty">No matching items</div>`;
