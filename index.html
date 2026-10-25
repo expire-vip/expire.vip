@@ -200,6 +200,14 @@
         }
         .chain-jump-highlight { animation: chainJumpHighlight 1.4s ease; }
 
+        /* Expanded chain members are grouped together in the main list. */
+        .item-card.chain-expanded-member {
+            box-shadow: inset 4px 0 0 #a5b4fc, 0 1px 3px rgba(0,0,0,.05);
+        }
+        .dark .item-card.chain-expanded-member {
+            box-shadow: inset 4px 0 0 #6366f1, 0 1px 3px rgba(0,0,0,.05);
+        }
+
         /* Featured preview / thumbnail styles */
         .featured-previews { display:flex; gap:0.45rem; flex-wrap:wrap; margin-top:0.65rem; }
         .featured-preview { position:relative; width:72px; height:58px; border-radius:0.75rem; overflow:hidden; border:1px solid #e5e7eb; background:#f3f4f6; cursor:pointer; }
@@ -821,13 +829,13 @@
             opacity: 0.8;
         }
 
-        /* A shared persistent toolbar keeps the same primary controls on desktop and mobile. */
-        #appScreen { padding-bottom: calc(98px + env(safe-area-inset-bottom)); }
-        /* Keep the footer itself completely above the fixed toolbar. Extra space is
-           outside the footer so the copyright/privacy line can never sit behind it. */
+        /* Shared persistent toolbar keeps the same primary controls on desktop and mobile. */
+        #appScreen { padding-bottom: 0; }
+        /* Keep the footer itself visible above the fixed toolbar (≈64px tall).
+           Use a modest margin so we never add more empty space than needed. */
         .app-container > footer {
-            padding-bottom: 1.25rem !important;
-            margin-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+            padding-bottom: 0.5rem !important;
+            margin-bottom: calc(72px + env(safe-area-inset-bottom)) !important;
             flex-shrink: 0;
             position: relative;
             z-index: 1;
@@ -835,12 +843,18 @@
         #searchInput { scroll-margin-top: 8px; }
         .search-controls-row { display:flex; align-items:flex-start; gap:0.5rem; }
         .search-input-wrap { position:relative; flex:1; min-width:0; }
-        .search-result-count { flex:0 0 auto; min-width:3.5rem; max-width:6.5rem; padding:0.65rem 0.45rem; border:1px solid #e5e7eb; border-radius:0.75rem; color:#6b7280; background:#f9fafb; text-align:center; font-size:0.72rem; line-height:1.2; font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+        .search-result-count { flex:0 0 auto; min-width:3.5rem; max-width:6.5rem; padding:0.65rem 0.45rem; border:1px solid #e5e7eb; border-radius:0.75rem; color:#6b7280; background:#f9fafb; text-align:center; font-size:0.72rem; line-height:1.2; font-weight:700; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; cursor:pointer; transition:background .15s, border-color .15s, color .15s; }
+        .search-result-count:hover { background:#f3f4f6; border-color:#d1d5db; color:#374151; }
+        .search-result-count:focus-visible { outline:3px solid #818cf8; outline-offset:2px; }
+        .search-result-count[aria-expanded="true"] { background:#eef2ff; border-color:#a5b4fc; color:#3730a3; }
         .dark .search-result-count { border-color:#374151; color:#d1d5db; background:#1f2937; }
-        .search-suggestions { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60; overflow:hidden; border:1px solid #d1d5db; border-radius:0.9rem; background:#fff; color:#111827; box-shadow:0 12px 28px rgba(15,23,42,.18); }
+        .dark .search-result-count:hover { background:#374151; border-color:#4b5563; color:#f3f4f6; }
+        .dark .search-result-count[aria-expanded="true"] { background:#312e81; border-color:#6366f1; color:#e0e7ff; }
+        .search-suggestions { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:60; overflow:hidden; border:1px solid #d1d5db; border-radius:0.9rem; background:#fff; color:#111827; box-shadow:0 12px 28px rgba(15,23,42,.18); display:flex; flex-direction:column; max-height:min(60dvh, 380px); }
+        .search-suggestions-scroll { overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; touch-action:pan-y; min-height:0; }
         .dark .search-suggestions { border-color:#4b5563; background:#1f2937; color:#f9fafb; }
         .search-suggestions.hidden { display:none !important; }
-        .search-suggestions-heading { padding:0.45rem 0.7rem; font-size:0.68rem; font-weight:750; color:#6b7280; background:#f9fafb; border-bottom:1px solid #e5e7eb; }
+        .search-suggestions-heading { padding:0.45rem 0.7rem; font-size:0.68rem; font-weight:750; color:#6b7280; background:#f9fafb; border-bottom:1px solid #e5e7eb; flex-shrink:0; }
         .dark .search-suggestions-heading { color:#9ca3af; background:#111827; border-color:#374151; }
         .search-suggestion { display:block; width:100%; padding:0.65rem 0.75rem; text-align:left; border:0; border-bottom:1px solid #f3f4f6; background:transparent; cursor:pointer; }
         .search-suggestion:last-child { border-bottom:0; }
@@ -1596,7 +1610,7 @@
                         </button>
                         <div id="searchSuggestions" class="search-suggestions hidden" role="listbox" aria-label="Top matching items"></div>
                     </div>
-                    <div id="searchResultCount" class="search-result-count" aria-live="polite" aria-atomic="true">All items</div>
+                    <button type="button" id="searchResultCount" class="search-result-count" aria-live="polite" aria-atomic="true" aria-expanded="false" aria-controls="searchSuggestions" title="Show/hide top matches">All items</button>
                 </div>
 
                 <!-- Primary create actions -->
@@ -2332,6 +2346,7 @@
         let itemSortDirection = localStorage.getItem('expire_itemSortDirection') === 'desc' ? 'desc' : 'asc';
         let chainViewMode = localStorage.getItem('expire_chainViewMode') === 'latest' ? 'latest' : 'all';
         const expandedCompactItems = new Set();
+        const expandedChains = new Set();
 
         // Form attachments (local list for modal)
         let formAttachments = [];
@@ -7049,11 +7064,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return;
             }
             closeDuplicatePicker();
-            searchForItemId(item.id, false);
-            setTimeout(() => {
-                const card = document.getElementById(`item-card-${item.id}`);
-                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 80);
+            // Do NOT hijack the search box. Just try to scroll to the item in the
+            // current view; if it is filtered out, tell the user.
+            window.setTimeout(() => scrollToItemCard(item.id), 80);
         }
 
         function selectDuplicatePickerItem(itemId, action = 'duplicate') {
@@ -7263,7 +7276,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     renderAll();
                     closeDuplicateModal();
                 });
-                if (newItem?.id) searchForItemId(newItem.id);
+                if (newItem?.id) window.setTimeout(() => scrollToItemCard(newItem.id), 80);
                 toastSuccess(isRenew
                     ? (resolvedParentAction === 'done' ? 'Renewed item created; previous item marked done.' : 'Renewed item created.')
                     : (resolvedParentAction === 'done' ? 'Duplicate created; previous item marked done.' : 'Duplicate created.'));
@@ -7788,7 +7801,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
             if (document.getElementById('itemModal').classList.contains('hidden')) {
                 if (!wasEditing && newlyCreatedItemId) {
-                    searchForItemId(newlyCreatedItemId);
+                    window.setTimeout(() => scrollToItemCard(newlyCreatedItemId), 80);
                 }
                 showToast(wasEditing ? 'Updated.' : 'Added.');
             }
@@ -7970,11 +7983,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         }
 
-        function updateSearchSuggestions() {
+        function updateSearchSuggestionsContent() {
             const input = document.getElementById('searchInput');
             const panel = document.getElementById('searchSuggestions');
             const countEl = document.getElementById('searchResultCount');
             if (!input || !panel || !countEl) return;
+
             const queryText = input.value.trim();
             let matches = filterItems();
             const chainMetadata = buildChainMetadata(appData.items || []);
@@ -7986,27 +8000,65 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const comparison = compareItemsByDisplayDateAsc(a, b);
                 return itemSortDirection === 'desc' ? -comparison : comparison;
             });
-            countEl.textContent = queryText ? `${matches.length} ${matches.length === 1 ? 'match' : 'matches'}` : `${matches.length} items`;
-            countEl.title = queryText ? `${matches.length} matching items with current filters` : `${matches.length} items in the current view`;
+
+            // Count badge / toggle label
+            if (queryText) {
+                countEl.textContent = `${matches.length} ${matches.length === 1 ? 'match' : 'matches'}`;
+                countEl.title = `${matches.length} matching item${matches.length === 1 ? '' : 's'} · click to toggle list`;
+            } else {
+                countEl.textContent = `${matches.length} items`;
+                countEl.title = `${matches.length} item${matches.length === 1 ? '' : 's'} in the current view`;
+            }
+
+            // Panel contents
             if (!queryText) {
-                panel.classList.add('hidden');
                 panel.innerHTML = '';
-                input.setAttribute('aria-expanded', 'false');
                 return;
             }
-            const topMatches = matches.slice(0, 5);
+            const topMatches = matches.slice(0, 25);
             const header = `<div class="search-suggestions-heading">Top matches · ${matches.length} total</div>`;
             const rows = topMatches.map(item => {
-                const detail = [item.category || 'Other', item.date && !item.noExpiration ? item.date : 'No expiry date', item.done ? 'Done' : '', item.archived ? 'Archived' : ''].filter(Boolean).join(' · ');
+                const detail = [item.category || 'Other',
+                    item.date && !item.noExpiration ? item.date : 'No expiry date',
+                    item.done ? 'Done' : '',
+                    item.archived ? 'Archived' : ''
+                ].filter(Boolean).join(' · ');
+                const displayId = getDisplayItemId(item.id);
                 return `<button type="button" class="search-suggestion" role="option" data-search-suggestion-id="${escapeHtml(item.id)}">
                     <span class="search-suggestion-name">${escapeHtml(item.name || 'Untitled item')}</span>
-                    <span class="search-suggestion-meta">${escapeHtml(detail)}</span>
+                    <span class="search-suggestion-meta">${escapeHtml(detail)} · ID ${escapeHtml(displayId)}</span>
                 </button>`;
             }).join('');
             const empty = `<div class="search-suggestions-empty">No matching items</div>`;
-            panel.innerHTML = header + (rows || empty);
+            panel.innerHTML = header + `<div class="search-suggestions-scroll">${rows || empty}</div>`;
+        }
+
+        function showSearchSuggestions() {
+            const input = document.getElementById('searchInput');
+            const panel = document.getElementById('searchSuggestions');
+            const countEl = document.getElementById('searchResultCount');
+            if (!input || !panel || !countEl) return;
+            if (!input.value.trim()) return;
+            updateSearchSuggestionsContent();
             panel.classList.remove('hidden');
             input.setAttribute('aria-expanded', 'true');
+            countEl.setAttribute('aria-expanded', 'true');
+        }
+
+        function hideSearchSuggestions() {
+            const panel = document.getElementById('searchSuggestions');
+            const input = document.getElementById('searchInput');
+            const countEl = document.getElementById('searchResultCount');
+            if (panel) panel.classList.add('hidden');
+            if (input) input.setAttribute('aria-expanded', 'false');
+            if (countEl) countEl.setAttribute('aria-expanded', 'false');
+        }
+
+        function toggleSearchSuggestions() {
+            const panel = document.getElementById('searchSuggestions');
+            if (!panel) return;
+            if (panel.classList.contains('hidden')) showSearchSuggestions();
+            else hideSearchSuggestions();
         }
 
         function persistSearchQuery(value) {
@@ -8024,10 +8076,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         function searchForItemId(itemId, focusSearch = true) {
             const input = document.getElementById('searchInput');
             if (!input || itemId === undefined || itemId === null) return;
-            // Use the compact display/search form in the search box, while
-            // getExactItemIdSearchMatch() also accepts the original raw ID.
+            // Use the compact display/search form in the search box.
             input.value = getDisplayItemId(itemId);
             persistSearchQuery(input.value);
+            hideSearchSuggestions();
             updateSearchUI();
             renderAll();
             if (focusSearch) {
@@ -8043,6 +8095,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (!input) return;
             input.value = '';
             persistSearchQuery('');
+            hideSearchSuggestions();
             updateSearchUI();
             renderAll();
             input.focus();
@@ -8572,6 +8625,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             scrollToItemCard(latest.id);
         }
 
+        function toggleChainExpanded(rootId, event) {
+            if (event) event.stopPropagation();
+            if (expandedChains.has(rootId)) expandedChains.delete(rootId);
+            else expandedChains.add(rootId);
+            renderItems();
+        }
+
         function getChainBadgeHtml(item, chainMetadata) {
             const rootId = getLineageRootId(item, chainMetadata.byId);
             const meta = chainMetadata.metadata.get(rootId);
@@ -8592,6 +8652,23 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (chainViewMode === 'latest' && !isExactItemIdSearch()) {
                 filtered = getVisibleLatestChainItems(filtered, chainMetadata);
             }
+
+            // Pull in ALL members of any chain the user has explicitly expanded,
+            // even if they are currently filtered out (e.g. "done" items hidden by
+            // the done-view toggle). This is the same list, just with extra rows.
+            if (expandedChains.size > 0) {
+                const existingIds = new Set(filtered.map(i => i.id));
+                expandedChains.forEach(rootId => {
+                    (appData.items || []).forEach(item => {
+                        if (existingIds.has(item.id)) return;
+                        if (getLineageRootId(item, chainMetadata.byId) === rootId) {
+                            filtered.push(item);
+                            existingIds.add(item.id);
+                        }
+                    });
+                });
+            }
+
             if (!filtered.length) {
                 let msg;
                 if (activeStatFilter !== 'all') {
@@ -8610,7 +8687,38 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const comparison = compareItemsByDisplayDateAsc(a, b);
                 return itemSortDirection === 'desc' ? -comparison : comparison;
             });
+
+            // Group expanded chains together so the whole chain sits in one place
+            // (at the sorted position of its first member).
+            if (expandedChains.size > 0) {
+                const chainBuckets = new Map();
+                filtered.forEach(item => {
+                    const rootId = getLineageRootId(item, chainMetadata.byId);
+                    if (!expandedChains.has(rootId)) return;
+                    if (!chainBuckets.has(rootId)) chainBuckets.set(rootId, []);
+                    chainBuckets.get(rootId).push(item);
+                });
+                const grouped = [];
+                const placedChains = new Set();
+                filtered.forEach(item => {
+                    const rootId = getLineageRootId(item, chainMetadata.byId);
+                    if (expandedChains.has(rootId)) {
+                        if (placedChains.has(rootId)) return;
+                        placedChains.add(rootId);
+                        const members = chainBuckets.get(rootId) || [];
+                        members.sort((a, b) => compareItemsByDisplayDateAsc(a, b));
+                        grouped.push(...members);
+                    } else {
+                        grouped.push(item);
+                    }
+                });
+                filtered = grouped;
+            }
+
             itemsList.innerHTML = filtered.map(item => {
+                const rootId = getLineageRootId(item, chainMetadata.byId);
+                const isExpandedChainMember = expandedChains.has(rootId);
+
                 // Determine time info (for bottom-left)
                 let timeInfo = null;
                 let showTimeLeft = false;
@@ -8715,7 +8823,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
                 const isCompactExpanded = compactView && expandedCompactItems.has(item.id);
                 const displayItemId = getDisplayItemId(item.id);
-                return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} ${item.done ? 'done-item opacity-75' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
+                return `<div id="item-card-${escapeHtml(item.id)}" class="item-card ${compactView ? 'compact-item' : ''} ${isCompactExpanded ? 'compact-expanded' : ''} ${isExpandedChainMember ? 'chain-expanded-member' : ''} ${item.done ? 'done-item opacity-75' : ''} p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm ${item.archived ? 'opacity-75' : ''}">
                     <div class="flex flex-col">
                         <div class="item-card-header flex items-start justify-between">
                             <div class="flex-1 min-w-0">
@@ -8750,6 +8858,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                                 ${dateLineHtml}
                                 ${showTimeLeft ? `<span class="time-left ${timeInfo.cssClass}">${timeInfo.text}</span>` : ''}
                                 ${lifetimeHtml}
+                                ${(() => {
+                                    const chainMeta = chainMetadata.metadata.get(rootId);
+                                    if (!chainMeta || chainMeta.count <= 1) return '';
+                                    const active = expandedChains.has(rootId);
+                                    return `<button type="button" onclick="toggleChainExpanded('${escapeHtml(rootId)}', event)" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold transition ${active ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 hover:text-indigo-700 dark:hover:text-indigo-300'}" title="${active ? 'Hide the other items in this chain' : `Show all ${chainMeta.count} items in this chain (including filtered-out ones)`}">
+                                        <i class="fas fa-layer-group text-[9px]"></i>
+                                        ${active ? 'Hide chain' : `Show chain (${chainMeta.count})`}
+                                    </button>`;
+                                })()}
                             </div>
                             <div class="actions">
                                 <button type="button" onclick="uploadAttachmentForItem('${item.id}')"
@@ -9136,7 +9253,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             updateSearchUI();
             updateViewModeUI();
             renderItems();
-            updateSearchSuggestions();
+            updateSearchSuggestionsContent();
             if (historyModalItemId && itemHistoryModal && !itemHistoryModal.classList.contains('hidden')) {
                 const historyItem = appData.items.find(i => i.id === historyModalItemId);
                 if (historyItem) {
@@ -9464,24 +9581,46 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             persistSearchQuery(searchInputEl.value);
             updateSearchUI();
             renderAll();
+            if (searchInputEl.value.trim()) showSearchSuggestions();
+            else hideSearchSuggestions();
         });
-        searchInputEl.addEventListener('focus', () => updateSearchSuggestions());
+        searchInputEl.addEventListener('focus', () => {
+            if (searchInputEl.value.trim()) showSearchSuggestions();
+        });
         const searchSuggestionsEl = document.getElementById('searchSuggestions');
         if (searchSuggestionsEl) searchSuggestionsEl.addEventListener('click', (event) => {
             const option = event.target.closest('[data-search-suggestion-id]');
             if (!option) return;
             const itemId = option.getAttribute('data-search-suggestion-id');
-            // Exact ID search reliably opens the selected item even if other filters are active.
-            searchInputEl.value = itemId;
-            persistSearchQuery(itemId);
+            // Use the human-friendly string ID form in the search box.
+            searchInputEl.value = getDisplayItemId(itemId);
+            persistSearchQuery(searchInputEl.value);
+            hideSearchSuggestions();
             updateSearchUI();
             renderAll();
-            updateSearchSuggestions();
-            searchSuggestionsEl.classList.add('hidden');
-            searchInputEl.setAttribute('aria-expanded', 'false');
             searchInputEl.blur();
             requestAnimationFrame(() => scrollToItemCard(itemId));
         });
+        // Manual toggle via the "N matches" badge.
+        const searchResultCountEl = document.getElementById('searchResultCount');
+        if (searchResultCountEl) {
+            searchResultCountEl.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (!searchInputEl.value.trim()) {
+                    searchInputEl.focus();
+                    return;
+                }
+                toggleSearchSuggestions();
+            });
+        }
+        // Hide suggestions when the user clicks anywhere outside the search row.
+        document.addEventListener('pointerdown', (event) => {
+            const panel = document.getElementById('searchSuggestions');
+            if (!panel || panel.classList.contains('hidden')) return;
+            const wrapper = document.querySelector('.search-controls-row');
+            if (wrapper && wrapper.contains(event.target)) return;
+            hideSearchSuggestions();
+        }, true);
         searchInputEl.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && searchInputEl.value) {
                 e.preventDefault();
@@ -9489,7 +9628,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
         });
         updateSearchUI();
-        updateSearchSuggestions();
+        updateSearchSuggestionsContent();
         updateFilterUI();
         updateViewModeUI();
         updateListOrderingUI();
@@ -9586,6 +9725,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 closeQuickJumpPanel();
+                hideSearchSuggestions();
                 tryCloseItemModal();
                 closeSettings();
                 if (duplicatePickerModal && !duplicatePickerModal.classList.contains('hidden')) closeDuplicatePicker();
