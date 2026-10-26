@@ -2508,17 +2508,6 @@ function requestGoogleToken({ prompt = '', loginHint = '' } = {}) {
         return Promise.reject(new Error('Google authentication is not ready yet.'));
     }
 
-    // Reject any pending request before starting a new one. Without this, if two
-    // operations trigger a refresh at the same time, the first caller's promise
-    // is orphaned (its resolve/reject get overwritten) and it hangs forever,
-    // leaving its withLoading() spinner stuck on screen.
-    if (pendingTokenReject) {
-        const superseded = pendingTokenReject;
-        pendingTokenResolve = null;
-        pendingTokenReject = null;
-        try { superseded(new Error('Superseded by a newer token request')); } catch (_) { /* ignore */ }
-    }
-
     return new Promise((resolve, reject) => {
         pendingTokenResolve = resolve;
         pendingTokenReject = reject;
@@ -2586,11 +2575,42 @@ async function ensureValidToken() {
 
     if (!silentRefreshPromise) {
         const loginHint = localStorage.getItem('expire_googleEmail') || '';
-        silentRefreshPromise = requestGoogleToken({ prompt: '', loginHint })
+        silentRefreshPromise = (async () => {
+            try {
+                // Try a silent token refresh first. On desktop browsers with an
+                // active Google session this returns a fresh token in well under
+                // a second with no UI. On mobile Chrome the silent popup
+                // sometimes shows as a blank window and its callback never
+                // fires, which would otherwise hang every caller forever
+                // (e.g. "checking latest data before..." or "Loading item
+                // history..." stuck on screen). Race against a timeout so we
+                // can fall back to an interactive prompt instead.
+                const silentPromise = requestGoogleToken({ prompt: '', loginHint });
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Silent token refresh timed out')), 10000)
+                );
+                return await Promise.race([silentPromise, timeoutPromise]);
+            } catch (silentError) {
+                console.warn('Silent token refresh failed or timed out, falling back to interactive prompt:', silentError);
+
+                // Clear any pending resolve/reject left behind by the abandoned
+                // silent attempt, so a late silent callback cannot accidentally
+                // settle the interactive request we are about to start. The
+                // abandoned silent promise is already unobserved (Promise.race
+                // gave up on it) so there is no caller waiting for it.
+                pendingTokenResolve = null;
+                pendingTokenReject = null;
+
+                // Show a real, user-interactive login popup. Using
+                // 'select_account' lets the user pick their existing account
+                // without forcing the full consent screen every time.
+                return await requestGoogleToken({ prompt: 'select_account', loginHint });
+            }
+        })()
             .catch(error => {
                 accessToken = null;
                 tokenExpiry = 0;
-                throw new Error('Silent refresh failed, consent required');
+                throw new Error('Token refresh failed: ' + (error?.message || error));
             })
             .finally(() => {
                 silentRefreshPromise = null;
@@ -2619,13 +2639,10 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         accessToken = null;
         tokenExpiry = 0;
 
+        const loginHint = localStorage.getItem('expire_googleEmail') || '';
         try {
-            // Go through ensureValidToken so concurrent silent refreshes are
-            // deduplicated via silentRefreshPromise instead of racing each
-            // other and orphaning whichever promise loses.
-            await ensureValidToken();
+            await requestGoogleToken({ prompt: '', loginHint });
         } catch (silentError) {
-            const loginHint = localStorage.getItem('expire_googleEmail') || '';
             await requestGoogleToken({ prompt: 'consent', loginHint });
         }
 
@@ -6279,21 +6296,11 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (isTestMode || !accessToken || !driveFileId) return true;
             const checkLatest = async () => {
                 try {
-                    // Race the metadata check against a timeout so a stalled
-                    // token refresh or network request cannot leave the spinner
-                    // stuck on screen forever. 60 s is well above a typical
-                    // metadata round-trip, so this only fires on genuine hangs.
-                    await Promise.race([
-                        loadFromCloud(),
-                        new Promise((_, reject) => setTimeout(
-                            () => reject(new Error('Timed out waiting for Google Drive. Please check your connection and try again.')),
-                            60000
-                        ))
-                    ]);
+                    await loadFromCloud();
                     return true;
                 } catch (error) {
                     console.error(`Failed to get latest cloud data before ${actionLabel}:`, error);
-                    toastError(`Could not get the latest version before ${actionLabel}: ${error?.message || error}`);
+                    toastError(`Could not get the latest version before ${actionLabel}. Nothing was changed.`);
                     return false;
                 }
             };
@@ -6749,7 +6756,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function openDuplicateModal(itemId) {
-            const item = appData.items.find(i => i.id === itemId);
+            const item = appData.items.find(i => String(i.id) === String(itemId));
             if (!item) return;
             duplicateMode = 'duplicate';
             duplicatingItemId = itemId;
@@ -7143,7 +7150,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
         }
 
         function openRenewModal(itemId) {
-            const item = appData.items.find(i => i.id === itemId);
+            const item = appData.items.find(i => String(i.id) === String(itemId));
             if (!item) return;
             duplicateMode = 'renew';
             duplicatingItemId = itemId;
@@ -7216,8 +7223,22 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             }
 
             const isRenew = duplicateMode === 'renew';
+
+            // Bail with a clear message BEFORE any network call if the source
+            // item cannot be resolved. Previously this path called
+            // ensureLatestCloudDataBeforeWrite first, so a stale or null
+            // `duplicatingItemId` (for example if openDuplicateModal silently
+            // failed to re-find the item) would hang the "checking latest data"
+            // spinner with no user-visible way to recover.
+            if (!sourceId || !appData.items.some(i => String(i.id) === String(sourceId))) {
+                toastError('That item is no longer available. Please reopen the Duplicate dialog.');
+                closeDuplicateModal();
+                renderAll();
+                return;
+            }
+
             if (!(await ensureLatestCloudDataBeforeWrite(isRenew ? 'renewing the item' : 'duplicating the item'))) return;
-            const item = appData.items.find(i => i.id === sourceId);
+            const item = appData.items.find(i => String(i.id) === String(sourceId));
             if (!item) {
                 toastError('That item was changed or removed on another device. Please reopen it.');
                 closeDuplicateModal();
