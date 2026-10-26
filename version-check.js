@@ -3,6 +3,11 @@
 // Compares the last commit time of index.html on GitHub with the
 // time the current page was loaded. If a newer version exists,
 // it shows a small "refresh" button.
+//
+// Note: the page-load time is read directly from performance.timeOrigin
+// (or navigationStart as a fallback) on every check — it is NOT stored
+// in sessionStorage, because sessionStorage survives reloads and would
+// make the banner show forever once a commit lands.
 // ============================================================
 
 const VERSION_CHECK = (() => {
@@ -13,7 +18,7 @@ const VERSION_CHECK = (() => {
 
   // Only flag "outdated" if the new commit landed at least this
   // many minutes AFTER the page was loaded. Prevents false positives
-  // when a commit lands while the page is loading.
+  // when a commit lands while the page is loading or racing the deploy.
   const COMMIT_DELAY_MINUTES = 3;
 
   // Check at most once every N minutes when auto-checking.
@@ -21,28 +26,31 @@ const VERSION_CHECK = (() => {
 
   // ------------------------------------------------------------
 
-  const STORAGE_KEY = 'expire_version_page_loaded_at';
   const LAST_CHECK_KEY = 'expire_version_last_check';
 
-  // Record the page load time once per tab session.
-  function recordPageLoad() {
-    if (!sessionStorage.getItem(STORAGE_KEY)) {
-      // navigationStart is the moment the navigation began, which is
-      // a more accurate "page loaded" timestamp than Date.now().
-      const loadedAt =
-        window.performance?.timing?.navigationStart ||
-        window.performance?.timeOrigin ||
-        Date.now();
-      sessionStorage.setItem(STORAGE_KEY, String(loadedAt));
-    }
-    return Number(sessionStorage.getItem(STORAGE_KEY));
+  // One-time cleanup: earlier versions of this file cached the load
+  // time in sessionStorage, which caused the banner to show forever.
+  // The key isn't read anymore, but we remove it so stale values from
+  // old sessions cannot confuse future debugging.
+  try { sessionStorage.removeItem('expire_version_page_loaded_at'); } catch (_) {}
+
+  // Read the current page's load time. These values are epoch ms,
+  // stable for the lifetime of the current page load, and reset
+  // automatically on every reload — no storage needed.
+  function getCurrentPageLoadTime() {
+    if (window.performance?.timeOrigin) return window.performance.timeOrigin;
+    const navStart = window.performance?.timing?.navigationStart;
+    if (navStart && navStart > 0) return navStart;
+    return Date.now();
   }
 
   // Fetch the most recent commit time for index.html.
   async function fetchLatestCommitTime() {
     const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits?path=${encodeURIComponent(FILE_PATH)}&per_page=1`;
     const response = await fetch(url, {
-      headers: { Accept: 'application/vnd.github.v3+json' }
+      headers: { Accept: 'application/vnd.github.v3+json' },
+      // Never serve from the browser cache — we need to see new commits.
+      cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -55,7 +63,6 @@ const VERSION_CHECK = (() => {
     }
 
     const commit = commits[0];
-    // committer.date is the time the commit was applied to the repo.
     return {
       timestamp: new Date(commit.commit.committer.date).getTime(),
       sha: commit.sha,
@@ -67,13 +74,13 @@ const VERSION_CHECK = (() => {
   // Core check.
   async function checkForUpdate() {
     try {
-      const pageLoadedAt = recordPageLoad();
+      const pageLoadedAt = getCurrentPageLoadTime();
       const latest = await fetchLatestCommitTime();
 
       const delayMs = COMMIT_DELAY_MINUTES * 60 * 1000;
       const isOutdated = latest.timestamp > (pageLoadedAt + delayMs);
 
-      sessionStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
+      try { sessionStorage.setItem(LAST_CHECK_KEY, String(Date.now())); } catch (_) {}
 
       return {
         isOutdated,
@@ -100,27 +107,23 @@ const VERSION_CHECK = (() => {
     setInterval(async () => {
       // Don't burn API quota if the tab is hidden.
       if (document.visibilityState !== 'visible') return;
-      const lastCheck = Number(sessionStorage.getItem(LAST_CHECK_KEY) || 0);
+      let lastCheck = 0;
+      try { lastCheck = Number(sessionStorage.getItem(LAST_CHECK_KEY) || 0); } catch (_) {}
       if (Date.now() - lastCheck < AUTO_CHECK_INTERVAL_MINUTES * 60 * 1000) return;
 
       const result = await checkForUpdate();
       if (result.isOutdated) onOutdated(result);
-    }, 60 * 1000); // poll every minute, but gated by the interval above
+    }, 60 * 1000); // poll every minute, gated by the interval above
   }
 
-  // Expose a manual trigger for a debug button or console use.
-  return { checkForUpdate, startAutoCheck, recordPageLoad };
+  return { checkForUpdate, startAutoCheck };
 })();
 
 // ---------- Wiring it into your UI ----------
 
-// Record load time immediately on script parse.
-VERSION_CHECK.recordPageLoad();
-
 // Show a small refresh banner when an update is detected.
 function showUpdateBanner(info) {
-  // Don't show twice.
-  if (document.getElementById('appUpdateBanner')) return;
+  if (document.getElementById('appUpdateBanner')) return; // don't show twice
 
   const banner = document.createElement('div');
   banner.id = 'appUpdateBanner';
@@ -159,7 +162,6 @@ function showUpdateBanner(info) {
   document.getElementById('appUpdateDismissBtn').onclick = () => banner.remove();
 }
 
-// Start auto-checking. Only runs when the app screen is visible.
 VERSION_CHECK.startAutoCheck((info) => {
   console.log('[VersionCheck] Outdated:', info);
   showUpdateBanner(info);
