@@ -24,6 +24,11 @@ const VERSION_CHECK = (() => {
   // Check at most once every N minutes when auto-checking.
   const AUTO_CHECK_INTERVAL_MINUTES = 10;
 
+  // NEW: never check until the tab has been open for at least this long.
+  // Prevents the banner from appearing right after a normal reload —
+  // when you just loaded the page you already have the latest version.
+  const MIN_TAB_AGE_MINUTES = 20;
+
   // ------------------------------------------------------------
 
   const LAST_CHECK_KEY = 'expire_version_last_check';
@@ -95,25 +100,47 @@ const VERSION_CHECK = (() => {
     }
   }
 
-  // Auto-check once on load, then every N minutes while the tab is open.
+  // Auto-check only once the tab has been open a while. Never on first load.
   function startAutoCheck(onOutdated) {
-    // Initial check after a short delay so we don't compete with
-    // the app's own Google Drive / Calendar calls on startup.
-    setTimeout(async () => {
-      const result = await checkForUpdate();
-      if (result.isOutdated) onOutdated(result);
-    }, 5000);
+    let lastHiddenAt = null;
 
-    setInterval(async () => {
-      // Don't burn API quota if the tab is hidden.
-      if (document.visibilityState !== 'visible') return;
+    async function maybeCheck() {
+      // Gate 1: tab must have been open long enough. Just-loaded pages
+      // are already current, so a post-reload check would only nag.
+      const pageAgeMs = Date.now() - getCurrentPageLoadTime();
+      if (pageAgeMs < MIN_TAB_AGE_MINUTES * 60 * 1000) return;
+
+      // Gate 2: don't hammer the GitHub API — at most one check per
+      // AUTO_CHECK_INTERVAL_MINUTES, shared with any manual checks.
       let lastCheck = 0;
       try { lastCheck = Number(sessionStorage.getItem(LAST_CHECK_KEY) || 0); } catch (_) {}
       if (Date.now() - lastCheck < AUTO_CHECK_INTERVAL_MINUTES * 60 * 1000) return;
 
       const result = await checkForUpdate();
       if (result.isOutdated) onOutdated(result);
-    }, 60 * 1000); // poll every minute, gated by the interval above
+    }
+
+    // Trigger 1: user comes back to the tab after having it in the background.
+    // This is the most useful signal — they may have been away for hours.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenAt = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        // Only bother if the tab was actually hidden for a meaningful time.
+        // A quick tab-switch shouldn't trigger a network call.
+        if (lastHiddenAt && (Date.now() - lastHiddenAt) >= 60 * 1000) {
+          maybeCheck();
+        }
+        lastHiddenAt = null;
+      }
+    });
+
+    // Trigger 2: long-lived session where the tab never went hidden.
+    // Polls every 5 minutes, but maybeCheck() applies both gates above.
+    setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      maybeCheck();
+    }, 5 * 60 * 1000);
   }
 
   return { checkForUpdate, startAutoCheck };
