@@ -1971,6 +1971,17 @@
                     <p id="duplicateDateHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Defaults to today. The original item remains unchanged.</p>
                 </div>
                 <div>
+                    <label for="duplicateTime" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Time (optional)</label>
+                    <div class="flex items-center gap-2">
+                        <input type="time" id="duplicateTime" class="flex-1 min-w-0 h-11 px-4 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none box-border">
+                        <button type="button" id="duplicateTimeNowBtn" onclick="setDuplicateTimeToNow()" class="flex-shrink-0 px-3 h-11 rounded-xl border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 font-medium text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition flex items-center justify-center gap-1.5" title="Set the time to the current time">
+                            <i class="fas fa-clock text-xs"></i>
+                            <span>Now</span>
+                        </button>
+                    </div>
+                    <p id="duplicateTimeHint" class="text-xs text-gray-500 dark:text-gray-400 mt-2">Leave empty for an all-day event.</p>
+                </div>
+                <div>
                     <div class="flex items-center justify-between gap-2 mb-1">
                         <label for="duplicateNotesInput" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes for the new item (optional)</label>
                         <button type="button" id="useDefaultDuplicateNoteBtn" onclick="useDefaultDuplicateNote()" class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex-shrink-0">Use standard note</button>
@@ -2463,6 +2474,8 @@
         const duplicateOriginalDetailsEl = document.getElementById('duplicateOriginalDetails');
         const duplicateDateEl = document.getElementById('duplicateDate');
         const duplicateDateHintEl = document.getElementById('duplicateDateHint');
+        const duplicateTimeEl = document.getElementById('duplicateTime');
+        const duplicateTimeHintEl = document.getElementById('duplicateTimeHint');
         const duplicateDescriptionEl = document.getElementById('duplicateDescription');
         const parentStateActionEl = document.getElementById('parentStateAction');
         const parentStateActionInfoEl = document.getElementById('parentStateActionInfo');
@@ -6800,6 +6813,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateOriginalLabelEl.textContent = 'Original event';
             duplicateDateEl.value = getTodayDateString();
             duplicateDateHintEl.textContent = 'Defaults to today. The original item remains unchanged.';
+            if (duplicateTimeEl) duplicateTimeEl.value = item.time || '';
+            if (duplicateTimeHintEl) {
+                duplicateTimeHintEl.textContent = item.time
+                    ? `Pre-filled with the source time (${item.time}). Clear it for an all-day event, or tap "Now" for the current time.`
+                    : 'Leave empty for an all-day event, or tap "Now" to use the current time.';
+            }
             duplicateDescriptionEl.textContent = item.skipCalendar === true
                 ? 'Tags, reminders, time and duration are copied. This item is set to skip Google Calendar, so no new calendar event will be created.'
                 : 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
@@ -6820,6 +6839,13 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 return `Renewed from "${item.name}". Original expiration: ${formatDuplicateOriginalDetails(item).replace(/^Expiration: /, '')}`.slice(0, 500);
             }
             return buildDuplicateNotes(item);
+        }
+
+        function setDuplicateTimeToNow() {
+            const now = new Date();
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            if (duplicateTimeEl) duplicateTimeEl.value = `${hh}:${mm}`;
         }
 
         function useDefaultDuplicateNote() {
@@ -7195,6 +7221,12 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             duplicateOriginalDetailsEl.textContent = formatDuplicateOriginalDetails(item);
             duplicateOriginalLabelEl.textContent = 'Current event';
             duplicateDateHintEl.textContent = 'Suggested from the renewal interval. You can still change the date manually.';
+            if (duplicateTimeEl) duplicateTimeEl.value = item.time || '';
+            if (duplicateTimeHintEl) {
+                duplicateTimeHintEl.textContent = item.time
+                    ? `Pre-filled with the source time (${item.time}). Clear it for an all-day event, or tap "Now" for the current time.`
+                    : 'Leave empty for an all-day event, or tap "Now" to use the current time.';
+            }
             duplicateDescriptionEl.textContent = item.skipCalendar === true
                 ? 'Tags, reminders, time and duration are copied. This item is set to skip Google Calendar, so no new calendar event will be created.'
                 : 'Tags, reminders, time and duration are copied. Notes and attachments are not copied. A new calendar event will be created.';
@@ -7233,6 +7265,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             if (duplicateItemNameEl) duplicateItemNameEl.value = '';
             if (duplicateNotesInputEl) duplicateNotesInputEl.value = '';
             if (duplicateDateEl) duplicateDateEl.value = '';
+            if (duplicateTimeEl) duplicateTimeEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.value = '';
             if (renewReferenceDateEl) renewReferenceDateEl.classList.add('hidden');
             if (renewIntervalHintEl) renewIntervalHintEl.textContent = '';
@@ -7303,7 +7336,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
 
             try {
                 await withLoading(isRenew ? 'Creating renewed item...' : 'Creating duplicate...', async () => {
-                    const hasTime = !!item.time;
+                    const newTimeValue = (duplicateTimeEl?.value || '').trim();
+                    const hasTime = !!newTimeValue;
                     const referenceDate = isRenew ? getRenewReferenceDate(item) : (item.referenceDate || '');
                     const renewalValue = isRenew ? Math.max(1, parseInt(renewIntervalValueEl.value, 10) || 1) : (item.renewal?.value || 1);
                     const renewalUnit = isRenew ? (renewIntervalUnitEl.value || 'years') : (item.renewal?.unit || 'years');
@@ -7319,7 +7353,7 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         category: item.category,
                         date: newDate,
                         noExpiration: false,
-                        time: hasTime ? item.time : '',
+                        time: hasTime ? newTimeValue : '',
                         durationMinutes: hasTime ? (item.durationMinutes || 30) : 30,
                         notes: String(duplicateNotesInputEl?.value || '').trim().slice(0, 4000),
                         tags: [...(item.tags || [])],
