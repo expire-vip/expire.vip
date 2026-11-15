@@ -2332,6 +2332,11 @@
                class="text-gray-100 font-medium">
                 Loading...
             </p>
+            <div class="mt-2 text-xs text-gray-400 tabular-nums flex items-center justify-center gap-3">
+                <span id="loadingCurrentTime"></span>
+                <span class="text-gray-600">·</span>
+                <span id="loadingTotalTime"></span>
+            </div>
     
         </div>
     
@@ -2523,15 +2528,76 @@
         let linkAttachmentContext = null;
         let linkAttachmentModalScrollY = 0;
         
+        // Elapsed-time tracking for the loading overlay.
+        //
+        //   loadingTotalStartedAt         resets when the overlay first appears
+        //   loadingCurrentMessage         the currently displayed message
+        //   loadingCurrentMessageStartedAt resets when the message text changes
+        //
+        // Both counters are shown in the overlay and updated every 100 ms.
+        let loadingTotalStartedAt = null;
+        let loadingCurrentMessage = null;
+        let loadingCurrentMessageStartedAt = null;
+        let loadingTimerInterval = null;
+
+        function updateLoadingTimerText() {
+            const totalEl = document.getElementById('loadingTotalTime');
+            const currentEl = document.getElementById('loadingCurrentTime');
+            const now = performance.now();
+            if (totalEl) {
+                totalEl.textContent = loadingTotalStartedAt !== null
+                    ? `Total: ${((now - loadingTotalStartedAt) / 1000).toFixed(1)}s`
+                    : '';
+            }
+            if (currentEl) {
+                currentEl.textContent = loadingCurrentMessageStartedAt !== null
+                    ? `This step: ${((now - loadingCurrentMessageStartedAt) / 1000).toFixed(1)}s`
+                    : '';
+            }
+        }
+
+        function startLoadingTimer() {
+            if (!loadingTimerInterval) {
+                loadingTimerInterval = setInterval(updateLoadingTimerText, 100);
+                updateLoadingTimerText();
+            }
+        }
+
+        function stopLoadingTimer() {
+            if (loadingTimerInterval) {
+                clearInterval(loadingTimerInterval);
+                loadingTimerInterval = null;
+            }
+        }
+
         function showLoading(message = "Loading...") {
             isLoading = true;
-            document.getElementById("loadingText").textContent = message;
-            document.getElementById("loadingOverlay").classList.remove("hidden");
+            const overlay = document.getElementById("loadingOverlay");
+            const wasHidden = overlay.classList.contains("hidden");
+            const textEl = document.getElementById("loadingText");
+            if (textEl) textEl.textContent = message;
+            overlay.classList.remove("hidden");
+
+            if (wasHidden || loadingTotalStartedAt === null) {
+                loadingTotalStartedAt = performance.now();
+            }
+            if (message !== loadingCurrentMessage) {
+                loadingCurrentMessage = message;
+                loadingCurrentMessageStartedAt = performance.now();
+                // Immediately refresh so the new step displays 0.0s instead
+                // of continuing to show the previous step's elapsed time.
+                updateLoadingTimerText();
+            }
+            startLoadingTimer();
         }
 
         function hideLoading() {
             isLoading = false;
             document.getElementById("loadingOverlay").classList.add("hidden");
+            stopLoadingTimer();
+            loadingTotalStartedAt = null;
+            loadingCurrentMessage = null;
+            loadingCurrentMessageStartedAt = null;
         }
 
         async function withLoading(message, callback) {
@@ -5963,19 +6029,42 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 // so a history failure cannot mask a successful JSON save — the
                 // outer try/catch still only sees the JSON upload error, exactly
                 // as before.
-                let saved = false;
-                await withLoading('Saving attachment and history...', async () => {
-                    const jsonSavePromise = autoSaveItem(true);
-                    const savedItem = (historyBefore && historyItemId !== null)
-                        ? appData.items.find(item => item.id === historyItemId)
-                        : null;
-                    const historySavePromise = savedItem
-                        ? recordItemHistory(historyItemId, 'attachment_added', 'upload', historyBefore, historySnapshot(savedItem), getAttachmentUploadHistoryDetails(successfulUploads))
-                        : Promise.resolve(null);
-                    const [jsonResult] = await Promise.all([jsonSavePromise, historySavePromise]);
-                    saved = jsonResult;
-                });
-                if (!saved) throw new Error('The attachment list could not be saved. Please keep this window open and try again.');
+                // Two explicit, user-visible stages:
+                //   1. "Saving attachment..."  (JSON upload)
+                //   2. "Saving history..."     (only if the background history
+                //                               save is still pending)
+                //
+                // History starts in the background immediately so its save
+                // overlaps with the JSON upload. suppressLoading: true keeps
+                // recordItemHistory() from flashing its own "Saving history..."
+                // message between the two stages.
+                const savedItem = (historyBefore && historyItemId !== null)
+                    ? appData.items.find(item => item.id === historyItemId)
+                    : null;
+                let historyDone = false;
+                const historySavePromise = savedItem
+                    ? recordItemHistory(
+                        historyItemId, 'attachment_added', 'upload',
+                        historyBefore, historySnapshot(savedItem),
+                        getAttachmentUploadHistoryDetails(successfulUploads),
+                        { suppressLoading: true }
+                    ).then(r => { historyDone = true; return r; })
+                    : Promise.resolve(null);
+
+                try {
+                    showLoading('Saving attachment...');
+                    const saved = await autoSaveItem(true);
+                    if (!saved) {
+                        await historySavePromise;
+                        throw new Error('The attachment list could not be saved. Please keep this window open and try again.');
+                    }
+                    if (!historyDone) {
+                        showLoading('Saving history...');
+                    }
+                    await historySavePromise;
+                } finally {
+                    hideLoading();
+                }
                 attachmentsSaved = true;
 
                 if (failedUploads.length) {
@@ -9360,26 +9449,38 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             addedDate
                         });
                     });
-                    // Save the item JSON and the history entry concurrently.
-                    // `item.attachments` was already mutated above, so both
-                    // operations can read the final state and run at the same
-                    // time. recordItemHistory() catches its own errors and
-                    // never rejects, so a history failure cannot mask a
-                    // successful JSON save.
-                    let jsonSaved = false;
-                    await withLoading('Saving attachment and history...', async () => {
-                        const jsonSavePromise = (async () => {
-                            if (isTestMode) {
-                                localStorage.setItem('expire_testData', JSON.stringify(appData));
-                                return;
-                            }
+                    // Two explicit, user-visible stages:
+                    //   1. "Saving attachment..."  (JSON upload)
+                    //   2. "Saving history..."     (only if the background
+                    //                               history save is still pending)
+                    //
+                    // `item.attachments` was already mutated above, so the
+                    // history snapshot below already reflects the new
+                    // attachment. History starts in the background so its
+                    // save overlaps with the JSON upload.
+                    let historyDoneForItem = false;
+                    const historySavePromiseForItem = recordItemHistory(
+                        itemId, 'attachment_added', 'upload',
+                        historyBefore, historySnapshot(item),
+                        getAttachmentUploadHistoryDetails(successfulUploads),
+                        { suppressLoading: true }
+                    ).then(r => { historyDoneForItem = true; return r; });
+
+                    try {
+                        showLoading('Saving attachment...');
+                        if (isTestMode) {
+                            localStorage.setItem('expire_testData', JSON.stringify(appData));
+                        } else {
                             await syncToCloud();
-                        })();
-                        const historySavePromise = recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), getAttachmentUploadHistoryDetails(successfulUploads));
-                        await Promise.all([jsonSavePromise, historySavePromise]);
-                        jsonSaved = true;
-                    });
-                    itemDataSaved = jsonSaved;
+                        }
+                        if (!historyDoneForItem) {
+                            showLoading('Saving history...');
+                        }
+                        await historySavePromiseForItem;
+                    } finally {
+                        hideLoading();
+                    }
+                    itemDataSaved = true;
 
                     renderAll();
                     if (failedUploads.length) {
