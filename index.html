@@ -5943,16 +5943,32 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 });
                 renderAttachments();
 
-                const saved = await withLoading('Saving attachment list...', async () => autoSaveItem(true));
+                // Save the item JSON and the history entry concurrently.
+                //
+                // autoSaveItem() mutates appData.items[idx].attachments
+                // synchronously before its first await, so the history snapshot
+                // below already reflects the new attachment. The two uploads
+                // target different Drive files (expire_data.json vs
+                // expire_history.json), so they can safely run in parallel.
+                //
+                // recordItemHistory() catches its own errors and never rejects,
+                // so a history failure cannot mask a successful JSON save — the
+                // outer try/catch still only sees the JSON upload error, exactly
+                // as before.
+                let saved = false;
+                await withLoading('Saving attachment and history...', async () => {
+                    const jsonSavePromise = autoSaveItem(true);
+                    const savedItem = (historyBefore && historyItemId !== null)
+                        ? appData.items.find(item => item.id === historyItemId)
+                        : null;
+                    const historySavePromise = savedItem
+                        ? recordItemHistory(historyItemId, 'attachment_added', 'upload', historyBefore, historySnapshot(savedItem), getAttachmentUploadHistoryDetails(successfulUploads))
+                        : Promise.resolve(null);
+                    const [jsonResult] = await Promise.all([jsonSavePromise, historySavePromise]);
+                    saved = jsonResult;
+                });
                 if (!saved) throw new Error('The attachment list could not be saved. Please keep this window open and try again.');
                 attachmentsSaved = true;
-
-                if (historyBefore && historyItemId !== null) {
-                    const savedItem = appData.items.find(item => item.id === historyItemId);
-                    if (savedItem) {
-                        await recordItemHistory(historyItemId, 'attachment_added', 'upload', historyBefore, historySnapshot(savedItem), getAttachmentUploadHistoryDetails(successfulUploads));
-                    }
-                }
 
                 if (failedUploads.length) {
                     const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
@@ -9336,16 +9352,27 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                             addedDate
                         });
                     });
-                    if (isTestMode) {
-                        localStorage.setItem('expire_testData', JSON.stringify(appData));
-                    } else {
-                        await withLoading('Saving attachment list...', async () => {
+                    // Save the item JSON and the history entry concurrently.
+                    // `item.attachments` was already mutated above, so both
+                    // operations can read the final state and run at the same
+                    // time. recordItemHistory() catches its own errors and
+                    // never rejects, so a history failure cannot mask a
+                    // successful JSON save.
+                    let jsonSaved = false;
+                    await withLoading('Saving attachment and history...', async () => {
+                        const jsonSavePromise = (async () => {
+                            if (isTestMode) {
+                                localStorage.setItem('expire_testData', JSON.stringify(appData));
+                                return;
+                            }
                             await syncToCloud();
-                        });
-                    }
-                    itemDataSaved = true;
+                        })();
+                        const historySavePromise = recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), getAttachmentUploadHistoryDetails(successfulUploads));
+                        await Promise.all([jsonSavePromise, historySavePromise]);
+                        jsonSaved = true;
+                    });
+                    itemDataSaved = jsonSaved;
 
-                    await recordItemHistory(itemId, 'attachment_added', 'upload', historyBefore, historySnapshot(item), getAttachmentUploadHistoryDetails(successfulUploads));
                     renderAll();
                     if (failedUploads.length) {
                         const failedNames = failedUploads.map(result => result?.file?.name).filter(Boolean).join(', ');
