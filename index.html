@@ -4231,7 +4231,15 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     if (!options.silent) toastWarning('Item saved, but its history could not be updated.');
                 }
             };
-            await withLoading('Saving history...', saveHistory);
+            if (options.suppressLoading) {
+                // Caller is managing the loading overlay itself. Do NOT push
+                // a "Saving history..." message onto the loading stack, which
+                // would otherwise flash briefly between the caller's own
+                // visible stages. Errors are still surfaced the same way.
+                await saveHistory();
+            } else {
+                await withLoading('Saving history...', saveHistory);
+            }
             return entry;
         }
 
@@ -9429,36 +9437,45 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 const historyBefore = historySnapshot(freshItem);
                 historyBefore.notes = latestOldNotes;
 
-                // Mutate the item's notes synchronously, then start the history
-                // save immediately so it runs in parallel with the calendar
-                // update and the JSON upload below.
+                // Mutate the item's notes synchronously, then kick off the
+                // history save in the background so it runs in parallel with
+                // the two visible stages below.
                 //
-                // The three writes target independent destinations — Calendar
-                // API, expire_data.json, expire_history.json — so running the
-                // history save concurrently with the JSON save is safe from a
-                // data-consistency standpoint. recordItemHistory() catches its
-                // own errors and never rejects, so a history failure cannot
-                // mask a successful JSON save.
+                // suppressLoading: true keeps recordItemHistory from pushing
+                // its own "Saving history..." message onto the loading stack
+                // (that message would otherwise flash between stage 1 and
+                // stage 2 for a frame). Stage 3 is instead shown explicitly
+                // at the end — and only when the save is still pending.
                 freshItem.notes = notes;
+                let historyDone = false;
                 const historySavePromise = recordItemHistory(
-                    itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem)
-                );
+                    itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem),
+                    {}, { suppressLoading: true }
+                ).then(result => { historyDone = true; return result; });
 
                 try {
-                    await withLoading('Saving notes...', async () => {
+                    // Stage 1: update the calendar event (only when the item has one).
+                    if (freshItem.eventId) {
+                        showLoading('Updating calendar event...');
                         await updateCalendarEventNotes(freshItem.eventId, notes, freshItem.tags || []);
-                        if (isTestMode) {
-                            localStorage.setItem('expire_testData', JSON.stringify(appData));
-                        } else {
-                            await syncToCloud();
-                        }
-                    });
-                } finally {
-                    // History is still awaited (not fire-and-forget) — it just
-                    // starts earlier so it overlaps with the calendar + JSON
-                    // round-trips instead of stacking after them. recordItemHistory
-                    // never rejects, so this cannot mask the original error.
+                    }
+
+                    // Stage 2: save the item JSON (attachments, notes, etc.).
+                    showLoading('Saving note...');
+                    if (isTestMode) {
+                        localStorage.setItem('expire_testData', JSON.stringify(appData));
+                    } else {
+                        await syncToCloud();
+                    }
+
+                    // Stage 3: wait for the background history save. Usually
+                    // instantaneous because it started before stages 1 and 2.
+                    if (!historyDone) {
+                        showLoading('Saving history...');
+                    }
                     await historySavePromise;
+                } finally {
+                    hideLoading();
                 }
                 inlineNoteEditItemId = null;
                 renderAll();
