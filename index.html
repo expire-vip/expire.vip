@@ -9428,18 +9428,38 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 }
                 const historyBefore = historySnapshot(freshItem);
                 historyBefore.notes = latestOldNotes;
-                await withLoading('Saving notes...', async () => {
-                    freshItem.notes = notes;
-                    await updateCalendarEventNotes(freshItem.eventId, notes, freshItem.tags || []);
-                    if (isTestMode) {
-                        localStorage.setItem('expire_testData', JSON.stringify(appData));
-                    } else {
-                        await syncToCloud();
-                    }
-                });
-                await withLoading('Saving note history...', async () => {
-                    await recordItemHistory(itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem));
-                });
+
+                // Mutate the item's notes synchronously, then start the history
+                // save immediately so it runs in parallel with the calendar
+                // update and the JSON upload below.
+                //
+                // The three writes target independent destinations — Calendar
+                // API, expire_data.json, expire_history.json — so running the
+                // history save concurrently with the JSON save is safe from a
+                // data-consistency standpoint. recordItemHistory() catches its
+                // own errors and never rejects, so a history failure cannot
+                // mask a successful JSON save.
+                freshItem.notes = notes;
+                const historySavePromise = recordItemHistory(
+                    itemId, 'updated', 'inline_note', historyBefore, historySnapshot(freshItem)
+                );
+
+                try {
+                    await withLoading('Saving notes...', async () => {
+                        await updateCalendarEventNotes(freshItem.eventId, notes, freshItem.tags || []);
+                        if (isTestMode) {
+                            localStorage.setItem('expire_testData', JSON.stringify(appData));
+                        } else {
+                            await syncToCloud();
+                        }
+                    });
+                } finally {
+                    // History is still awaited (not fire-and-forget) — it just
+                    // starts earlier so it overlaps with the calendar + JSON
+                    // round-trips instead of stacking after them. recordItemHistory
+                    // never rejects, so this cannot mask the original error.
+                    await historySavePromise;
+                }
                 inlineNoteEditItemId = null;
                 renderAll();
                 toastSuccess('Notes saved.');
