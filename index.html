@@ -2530,15 +2530,23 @@
         
         // Elapsed-time tracking for the loading overlay.
         //
-        //   loadingTotalStartedAt         resets when the overlay first appears
-        //   loadingCurrentMessage         the currently displayed message
+        //   loadingTotalStartedAt          resets only when an operation ends
+        //                                  (i.e. in hideLoading, unless
+        //                                  loadingPreserveTotalTimer is true)
+        //   loadingCurrentMessage          the currently displayed message
         //   loadingCurrentMessageStartedAt resets when the message text changes
         //
         // Both counters are shown in the overlay and updated every 100 ms.
+        //
+        // loadingPreserveTotalTimer lets a multi-stage operation keep a single
+        // continuous "Total" clock across several hide/show cycles. It is set
+        // by the attachment entry points at the start of the operation and
+        // cleared via finalizeLoadingPreserve() in their `finally` block.
         let loadingTotalStartedAt = null;
         let loadingCurrentMessage = null;
         let loadingCurrentMessageStartedAt = null;
         let loadingTimerInterval = null;
+        let loadingPreserveTotalTimer = false;
 
         function updateLoadingTimerText() {
             const totalEl = document.getElementById('loadingTotalTime');
@@ -2573,19 +2581,21 @@
         function showLoading(message = "Loading...") {
             isLoading = true;
             const overlay = document.getElementById("loadingOverlay");
-            const wasHidden = overlay.classList.contains("hidden");
             const textEl = document.getElementById("loadingText");
             if (textEl) textEl.textContent = message;
             overlay.classList.remove("hidden");
 
-            if (wasHidden || loadingTotalStartedAt === null) {
+            // Start the total clock only if it isn't already running. The
+            // reset of loadingTotalStartedAt is handled entirely by
+            // hideLoading (respecting loadingPreserveTotalTimer), so a new
+            // operation started while the overlay was hidden will see
+            // loadingTotalStartedAt === null here and start fresh.
+            if (loadingTotalStartedAt === null) {
                 loadingTotalStartedAt = performance.now();
             }
             if (message !== loadingCurrentMessage) {
                 loadingCurrentMessage = message;
                 loadingCurrentMessageStartedAt = performance.now();
-                // Immediately refresh so the new step displays 0.0s instead
-                // of continuing to show the previous step's elapsed time.
                 updateLoadingTimerText();
             }
             startLoadingTimer();
@@ -2595,9 +2605,27 @@
             isLoading = false;
             document.getElementById("loadingOverlay").classList.add("hidden");
             stopLoadingTimer();
-            loadingTotalStartedAt = null;
-            loadingCurrentMessage = null;
-            loadingCurrentMessageStartedAt = null;
+            if (!loadingPreserveTotalTimer) {
+                loadingTotalStartedAt = null;
+                loadingCurrentMessage = null;
+                loadingCurrentMessageStartedAt = null;
+            }
+        }
+
+        // Called in the `finally` block of a multi-stage operation to
+        // release the preserve flag and force-reset timer state (and hide
+        // the overlay) regardless of whether the operation succeeded, threw,
+        // or returned early. Safe to call unconditionally.
+        function finalizeLoadingPreserve() {
+            loadingPreserveTotalTimer = false;
+            if (!loadingStack.length) {
+                isLoading = false;
+                document.getElementById("loadingOverlay").classList.add("hidden");
+                stopLoadingTimer();
+                loadingTotalStartedAt = null;
+                loadingCurrentMessage = null;
+                loadingCurrentMessageStartedAt = null;
+            }
         }
 
         async function withLoading(message, callback) {
@@ -5966,6 +5994,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
             let uploadResults = [];
             let attachmentsSaved = false;
             let reopenPickerForRetake = false;
+            // Keep the total timer running across the "Checking latest data...",
+            // "Uploading...", and "Saving attachment..." stages of this operation.
+            loadingPreserveTotalTimer = true;
             try {
                 // Only the dedicated Take Photo control opens the review step. A regular file
                 // picker can return either a library photo or a camera photo on iOS, and the
@@ -6095,6 +6126,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                         }, 250);
                     }
                 }
+                // Release the preserve flag and force-reset timer state so the next
+                // operation starts with a fresh "Total" clock.
+                finalizeLoadingPreserve();
             }
         }
 
@@ -9410,6 +9444,9 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                 let uploadResults = [];
                 let itemDataSaved = false;
                 let reopenPickerForRetake = false;
+                // Keep the total timer running across the multi-stage
+                // save sequence inside this operation.
+                loadingPreserveTotalTimer = true;
                 try {
                     if (isCameraCapture && files.length === 1) {
                         const photoDecision = await showPhotoReview(files[0], input);
@@ -9504,6 +9541,8 @@ async function callGoogleAPI(url, options = {}, retry = true) {
                     } else {
                         input.remove();
                     }
+                    // Release the preserve flag and force-reset timer state.
+                    finalizeLoadingPreserve();
                 }
             };
             input.click();
